@@ -182,6 +182,8 @@ python3 scripts/check_swiftui_ui.py
 | App metadata and reproducible icon drawing | `packaging/` |
 | Project icon and README artwork | [Brand assets](docs/branding/README.md) |
 
+New to MomentStays? Start with the **[User Guide](docs/USER_GUIDE.md)** ([简体中文版](docs/USER_GUIDE.zh-CN.md)) — every feature explained, including auxiliary tracks, Photos library import, and the CLI.
+
 Further technical documentation is currently in Chinese: [implementation](docs/development/SwiftUI实现说明.md), [library integration](docs/design/图库识别与自动入册规范.md), [sharing](docs/design/输出位置与系统共享规范.md), [validation scope](docs/validation/图库与共享-1.0.md), and [local fixtures/privacy](docs/development/本地样片与隐私.md).
 
 iOS is not currently shipped. Complex timelines, unknown HEIF structures, and unsupported private HDR may be rejected explicitly. Actual Photos playback/import, iCloud, third-party sharing, phone-gallery HDR, and ARM/iOS hardware are not covered by the synthetic regression suite.
