@@ -12,7 +12,7 @@
 
 # MomentStays — 安卓动态照片转苹果实况照片（Live Photo）工具
 
-把安卓手机的动态照片转换成 iPhone 实况照片（Apple Live Photo），也可以把实况照片反向转回安卓动态照片。支持三星动态照片、小米动态照片、Google（Pixel）动态照片，以及华为/荣耀、OPPO、vivo 的动态照片格式，涵盖 JPEG 与 HEIC。
+把安卓手机的动态照片转换成 iPhone 实况照片（Apple Live Photo），也可以把实况照片反向转回安卓动态照片。支持三星动态照片、小米动态照片、Google（Pixel）动态照片，以及华为/荣耀、OPPO、vivo 的动态照片格式，以 JPEG 为主，另支持已验证的三星 HEIC 布局。
 
 转换时保留你选定的封面帧（封面时间）、原始视频和音频（只重新封装、不重新编码）和 Ultra HDR 增益图，转换结果可以直接导入 Mac 的「照片」图库。全部处理都在本机完成，不上传任何照片。
 
@@ -97,7 +97,7 @@
 | --- | --- |
 | 安卓 → 苹果 | Google 兼容 Motion Photo JPEG，支持的华为/荣耀、三星 SEF、OPPO、vivo V2 容器，以及已验证的三星 HEIC 布局 → JPEG/HEIC + MOV |
 | 苹果 → 安卓，JPEG | Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2 |
-| 苹果 → 安卓，HEIC | Google、小米、三星；保留已有 HEIC 编码 |
+| 苹果 → 安卓，HEIC | 仅三星；保留已有 HEIC 编码（Google 与小米的动态照片不使用 HEIC） |
 
 支持批量处理、进度、停止、校验后续转、跳过/覆盖、可选 JSON 清单与报告、独立辅助轨导出。单帧辅助轨不会被延长成虚构的动态画面。
 
@@ -200,7 +200,7 @@ python3 scripts/check_swiftui_ui.py
 
 ### iPhone 实况照片能转回安卓动态照片吗？
 
-可以。选择“苹果 → 安卓”方向，MomentStays 读取实况照片的图片 + MOV 配对和封面标记，输出 Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2 等安卓动态照片格式（JPEG），或 Google、小米、三星格式（HEIC）。
+可以。选择“苹果 → 安卓”方向，MomentStays 读取实况照片的图片 + MOV 配对和封面标记，输出 Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2 等安卓动态照片格式（JPEG），或三星格式（HEIC；Google 与小米的动态照片只有 JPEG）。
 
 ### 转换动态照片会不会掉画质、会不会重新编码？
 
