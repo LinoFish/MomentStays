@@ -34,7 +34,7 @@
   .btn-primary{background:#12836C;color:#FFFFFF}
   .btn-ghost{border-color:var(--line);color:var(--ink)}
   .langbtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:14px}
-  .hero{text-align:center;padding:84px 0 56px}
+  .hero{text-align:center;padding:36px 0 56px}
   .hero img.icon{width:132px;height:132px;border-radius:30px;box-shadow:0 18px 50px rgba(18,42,56,.22)}
   .hero h1{font-size:56px;letter-spacing:-1.5px;margin:26px 0 6px}
   .hero .slogan{font-size:26px;color:var(--amber);font-weight:600}
@@ -84,7 +84,7 @@
     .hero img.icon{box-shadow:0 18px 50px rgba(0,0,0,.45)}
     th{background:#132A36}
   }
-  @media (max-width:640px){.hero{padding:52px 0 40px}.hero h1{font-size:38px}.hero .slogan{font-size:20px}.hero .sub{font-size:16px}.hero img.icon{width:96px;height:96px;border-radius:22px}.nav a.link{display:none}.btn{padding:9px 16px;font-size:14px}section{padding:38px 0}h2{font-size:25px}.card{padding:20px}.step{padding:18px}details{padding:13px 16px}pre{font-size:12.5px}.download-box{padding:30px 16px}.stage{margin-top:24px}.stagecap{font-size:13px}table{display:block;overflow-x:auto;white-space:normal}}
+  @media (max-width:640px){html .nav a.link{display:none!important}.hero{padding:20px 0 40px}.hero h1{font-size:38px}.hero .slogan{font-size:20px}.hero .sub{font-size:16px}.hero img.icon{width:96px;height:96px;border-radius:22px}.nav a.link{display:none}.btn{padding:9px 16px;font-size:14px}section{padding:38px 0}h2{font-size:25px}.card{padding:20px}.step{padding:18px}details{padding:13px 16px}pre{font-size:12.5px}.download-box{padding:30px 16px}.stage{margin-top:24px}.stagecap{font-size:13px}table{display:block;overflow-x:auto;white-space:normal}}
 
   /* ---- Hero motion: slow, hand-drawn, streaming (Claude-like) ---- */
   :root{--i-bg0:#FFFFFF;--i-bg1:#ECEEF1;--i-ink:#1F2933;--i-core:#F0A43C;--i-edge:rgba(0,0,0,.10)}
@@ -128,7 +128,7 @@
 
 
   /* ---- Art stage: a life, a moment, two phones ---- */
-  .art{position:relative;max-width:980px;margin:40px auto 0;aspect-ratio:980/440}
+  .art{position:relative;max-width:860px;margin:-8px auto 6px;aspect-ratio:980/440}
   .art svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
   .art .ln{stroke:var(--ink);stroke-opacity:.28;stroke-width:1.2;fill:none}
   .art .dt{fill:var(--ink)}
@@ -182,33 +182,6 @@ function toggleLang(){
 </header>
 
 <div class="wrap hero">
-<div class="mark" aria-label="MomentStays">
-  <div class="glow"></div>
-  <svg viewBox="100 100 824 824" role="img" aria-label="MomentStays icon">
-    <defs>
-      <linearGradient id="msbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="bg0"/><stop offset="1" class="bg1"/></linearGradient>
-      <linearGradient id="mstail" gradientUnits="userSpaceOnUse" x1="262" y1="552" x2="472.9" y2="265.1"><stop offset="0" class="tail0"/><stop offset="1" class="tail1"/></linearGradient>
-    </defs>
-    <rect class="card" x="100" y="100" width="824" height="824" rx="185" fill="url(#msbg)"/>
-    <rect class="edge" x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke-width="1.5"/>
-    <g class="dots"><circle class="d" style="--i:0" cx="512.0" cy="262.0" r="11"/><circle class="d" style="--i:1" cx="555.4" cy="265.8" r="11"/><circle class="d" style="--i:2" cx="597.5" cy="277.1" r="11"/><circle class="d" style="--i:3" cx="637.0" cy="295.5" r="11"/><circle class="d" style="--i:4" cx="672.7" cy="320.5" r="11"/><circle class="d" style="--i:5" cx="703.5" cy="351.3" r="11"/><circle class="d" style="--i:6" cx="728.5" cy="387.0" r="11"/><circle class="d" style="--i:7" cx="746.9" cy="426.5" r="11"/><circle class="d" style="--i:8" cx="758.2" cy="468.6" r="11"/><circle class="d" style="--i:9" cx="762.0" cy="512.0" r="11"/><circle class="d" style="--i:10" cx="758.2" cy="555.4" r="11"/><circle class="d" style="--i:11" cx="746.9" cy="597.5" r="11"/><circle class="d" style="--i:12" cx="728.5" cy="637.0" r="11"/><circle class="d" style="--i:13" cx="703.5" cy="672.7" r="11"/><circle class="d" style="--i:14" cx="672.7" cy="703.5" r="11"/><circle class="d" style="--i:15" cx="637.0" cy="728.5" r="11"/><circle class="d" style="--i:16" cx="597.5" cy="746.9" r="11"/><circle class="d" style="--i:17" cx="555.4" cy="758.2" r="11"/><circle class="d" style="--i:18" cx="512.0" cy="762.0" r="11"/><circle class="d" style="--i:19" cx="468.6" cy="758.2" r="11"/><circle class="d" style="--i:20" cx="426.5" cy="746.9" r="11"/><circle class="d" style="--i:21" cx="387.0" cy="728.5" r="11"/><circle class="d" style="--i:22" cx="351.3" cy="703.5" r="11"/><circle class="d" style="--i:23" cx="320.5" cy="672.7" r="11"/><circle class="d" style="--i:24" cx="295.5" cy="637.0" r="11"/><circle class="d" style="--i:25" cx="277.1" cy="597.5" r="11"/><circle class="d" style="--i:26" cx="265.8" cy="555.4" r="11"/></g>
-    <path class="tail" pathLength="1" d="M262 512 A250 250 0 0 1 472.9 265.1" stroke="url(#mstail)" stroke-width="22" stroke-linecap="round" fill="none"/>
-    <circle class="ring" pathLength="1" cx="512" cy="512" r="150" fill="none" stroke-width="24" transform="rotate(-90 512 512)"/>
-    <circle class="core" cx="512" cy="512" r="58"/>
-  </svg>
-</div>
-  <h1 class="reveal-h">MomentStays</h1>
-  <div class="slogan en" data-type>The moment stays.</div>
-  <div class="slogan zh" data-type>留住原来的瞬间。</div>
-  <p class="sub en" data-stream>Convert Android Motion Photos to Apple Live Photos on macOS — and back. Nothing that matters is lost: not the cover frame, not the quality, not the HDR.</p>
-  <p class="sub zh" data-stream>在 Mac 上把安卓动态照片转成苹果实况照片，也能反向转回。该留的，一个不少：封面帧不换、画质不丢、HDR 不丢。</p>
-
-  <div class="cta reveal" style="--d:0">
-    <a class="btn btn-primary" href="https://github.com/LinoFish/MomentStays/releases"><span class="en">Download for macOS</span><span class="zh">下载 macOS 版</span></a>
-    <a class="btn btn-ghost" href="https://github.com/LinoFish/MomentStays"><span class="en">View source on GitHub</span><span class="zh">在 GitHub 查看源码</span></a>
-  </div>
-  <div class="meta en reveal" style="--d:1">Free &amp; open source (GPL-3.0) · macOS 12+ · Native SwiftUI · 100% local — your photos never leave your Mac</div>
-  <div class="meta zh reveal" style="--d:1">免费开源（GPL-3.0）· macOS 12+ · 原生 SwiftUI · 全部本地处理，照片不离开你的 Mac</div>
   <div class="art" id="art" aria-label="A moment from your life, carried from Android to iPhone, unchanged">
     <svg viewBox="0 0 980 440" aria-hidden="true">
       <path class="ln" id="artLine" d="M90 220 H890" pathLength="1"/>
@@ -224,6 +197,18 @@ function toggleLang(){
     <div class="tag" id="artTag"></div>
     <div class="vals" id="artVals"><span class="en">Cover frame <b>unchanged</b> · quality <b>untouched</b> · HDR <b>kept</b></span><span class="zh">封面<b>不换</b> · 画质<b>不丢</b> · HDR <b>不丢</b></span></div>
   </div>
+  <h1 class="reveal-h">MomentStays</h1>
+  <div class="slogan en" data-type>The moment stays.</div>
+  <div class="slogan zh" data-type>留住原来的瞬间。</div>
+  <p class="sub en" data-stream>Convert Android Motion Photos to Apple Live Photos on macOS — and back. Nothing that matters is lost: not the cover frame, not the quality, not the HDR.</p>
+  <p class="sub zh" data-stream>在 Mac 上把安卓动态照片转成苹果实况照片，也能反向转回。该留的，一个不少：封面帧不换、画质不丢、HDR 不丢。</p>
+
+  <div class="cta reveal" style="--d:0">
+    <a class="btn btn-primary" href="https://github.com/LinoFish/MomentStays/releases"><span class="en">Download for macOS</span><span class="zh">下载 macOS 版</span></a>
+    <a class="btn btn-ghost" href="https://github.com/LinoFish/MomentStays"><span class="en">View source on GitHub</span><span class="zh">在 GitHub 查看源码</span></a>
+  </div>
+  <div class="meta en reveal" style="--d:1">Free &amp; open source (GPL-3.0) · macOS 12+ · Native SwiftUI · 100% local — your photos never leave your Mac</div>
+  <div class="meta zh reveal" style="--d:1">免费开源（GPL-3.0）· macOS 12+ · 原生 SwiftUI · 全部本地处理，照片不离开你的 Mac</div>
 
 </div>
 
@@ -478,7 +463,7 @@ open dist/MomentStays.app</pre>
   }
   var go=false;
   function start(){ if(go) return; go=true; t0=performance.now(); requestAnimationFrame(frame); }
-  if('IntersectionObserver' in window){ new IntersectionObserver(function(e){ if(e[0].isIntersecting) setTimeout(start,1500); }).observe(art); } else start();
+  if('IntersectionObserver' in window){ new IntersectionObserver(function(e){ if(e[0].isIntersecting) setTimeout(start,250); }).observe(art); } else start();
 })();
 </script>
 </body>
