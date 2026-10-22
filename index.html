@@ -68,6 +68,8 @@
   .zh{display:none}
   html.lang-zh .en{display:none}
   html.lang-zh .zh{display:block}
+  th.zh, td.zh{display:none}
+  html.lang-zh th.zh, html.lang-zh td.zh{display:table-cell}
   span.zh, a.zh{display:none}
   html.lang-zh span.zh, html.lang-zh a.zh{display:inline}
   html.lang-zh span.en, html.lang-zh a.en{display:none}
@@ -81,7 +83,7 @@
     .hero img.icon{box-shadow:0 18px 50px rgba(0,0,0,.45)}
     th{background:#132A36}
   }
-  @media (max-width:640px){.hero h1{font-size:40px}.hero .slogan{font-size:21px}.nav a.link{display:none}}
+  @media (max-width:640px){.hero h1{font-size:40px}.hero .slogan{font-size:21px}.nav a.link{display:none}table{display:block;overflow-x:auto;white-space:normal}}
 </style>
 </head>
 <body>
