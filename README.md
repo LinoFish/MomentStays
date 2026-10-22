@@ -1,23 +1,95 @@
-# Motion-Live
+<p align="center">
+  <img src="docs/branding/github-header.svg" alt="Motion-Live — The moment stays. Cover timestamps, original audio/video streams, HDR gain maps, and Photos library integration." width="100%">
+</p>
 
-Android 动态照片 JPEG / HEIC 与 Apple Live Photo 配对文件的双向转换工具。当前版本 **1.3.0**，使用 SwiftUI 原生界面，最低支持 macOS 12 Monterey。
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-[项目文档](docs/README.md) · [格式与功能范围](docs/product/双向转换与移动布局.md) · [工程结构](docs/development/SwiftUI实现说明.md)
+<p align="center">
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.3.0</strong>
+</p>
 
-## 功能
+Move Motion Photos between Android and Apple Live Photos while keeping the moment you chose as the cover. Remux the original video and audio, preserve supported image and HDR data, and bring converted Live Photos into your Photos library.
 
-- 安卓 → 苹果：从动态照片提取静态图片与配对 MOV，保留原文件名、封面位置、图像与音视频编码。
-- 苹果 → 安卓：按图片和 MOV 的内容标识配对，支持 Google/通用、小米、三星、华为/荣耀、OPPO 和 vivo V2 目标。
-- 已有 Ultra HDR 原样保留；可解释的 Apple / ISO 增益图按明确模型处理，普通 SDR 不生成 HDR。
-- 批量扫描、进度、停止、已有结果跳过或覆盖、可选校验清单与报告。
-- 系统图库支持相册范围、原片/编辑版选择、按需 iCloud 下载及运行期间增量监测。
-- 安卓转苹果可导入系统相册；苹果转安卓可使用系统共享。最近结果支持重试交付与清理应用缓存。
+[Build & run](#build--run) · [Photos integration](#works-with-your-photos-library) · [Preservation details](#what-stays-with-your-photo) · [Documentation](docs/README.md)
 
-当前是 macOS 应用；iPhone / iPad 的 HTML 预览不代表已经提供 iOS 应用。图库写入、iCloud、第三方共享和各品牌相册的最终 HDR/动态效果仍需真实环境验收。
+**License: [GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino
 
-## 构建与运行
+## The moment stays
 
-构建者需要 Xcode Command Line Tools。默认只构建 Intel 应用：
+| | What Motion-Live preserves |
+| --- | --- |
+| **The cover you chose** | Reads the source cover timestamp, maps it to an actual video frame, and writes the Live Photo timing marker. |
+| **Original video and audio** | Remuxes compressed samples without video/audio re-encoding. Checks sample data, counts, sizes, and presentation timestamps. |
+| **Image and HDR detail** | Keeps JPEG/HEIC image payloads on supported passthrough paths. Preserves existing Ultra HDR gain maps and handles supported Apple/ISO gain data through explicit models. |
+| **Your library workflow** | Reads complete original or matching edited resources from Photos, creates new Live Photos, and adds them to your selected album. |
+
+Motion-Live changes the container and pairing metadata. Converting HEIC to JPEG, changing JPEG quality, or converting an HDR gain map can encode image or gain-map data; the original compressed video and audio remain preserved.
+
+## Works with your Photos library
+
+Choose files and folders, or work directly with the system Photos library through PhotoKit.
+
+| From | Through Motion-Live | To |
+| --- | --- | --- |
+| Android Motion Photos in files or complete Photos originals | Extract the still image and motion clip, preserve cover timing, validate the pair | A new **Live Photo in a Photos album**, or JPEG/HEIC + MOV files |
+| Apple Live Photos in Photos or complete image + MOV pairs | Read the paired resources and timed cover marker, preserve audio/video streams | An **Android Motion Photo** in a folder, or the system share menu |
+
+The library workflow includes:
+
+- **Album-scoped selection.** Scan the chosen library scope and recognize motion data from the actual resources.
+- **Originals by default.** Optionally use a complete edited pair. The still and movie always come from the same selected version.
+- **Direct Live Photo import.** Add the still and paired video in one asset-creation request, then associate the new asset with the selected album.
+- **Library metadata.** Keep original resource names, capture date, and location when available from trusted source metadata.
+- **Controlled iCloud access.** Downloads and monitoring during the current app session are opt-in.
+- **Recoverable delivery.** Persistent task records support deduplication, import/share retries, and safe cleanup of the app's own cache.
+
+Source files and library assets stay intact. Library changes happen only when you choose an import destination. The app checks the created asset and its paired resources; real-library playback, HDR rendering, iCloud behavior, and receiving-device compatibility still need end-to-end validation.
+
+## What stays with your photo
+
+### Cover timestamps, mapped to the real frame
+
+A cover timestamp identifies the selected moment **inside the motion clip**. Motion-Live reads the source timing metadata and maps it through the actual media timeline. For Live Photos, it writes the corresponding `com.apple.quicktime.still-image-time` timed marker; in the other direction, it reads that marker to restore the Android cover position.
+
+Frame alignment is checked, with a default tolerance of half a frame. Missing, ambiguous, or out-of-range timing is reported instead of silently selecting the midpoint. Optional manifests record source timing, the mapped frame, and alignment error.
+
+The Photos capture date is separate metadata and is carried into the new library asset when available.
+
+### Remuxed media, verified sample by sample
+
+Video and audio move into the destination container as their **original compressed samples**. Output verification checks sample hashes, sizes, counts, and presentation timestamps (PTS).
+
+Static-image passthrough paths keep the original JPEG/HEIC image encoding. Full resources are used throughout—no thumbnail or video-frame substitute for the original still. New results must pass validation before replacing an existing output.
+
+### HDR data with a defined meaning
+
+| Source data | Behavior |
+| --- | --- |
+| Existing Ultra HDR JPEG | Preserve the gain map and its parameters; the default JPEG-preservation path also keeps the original base-image encoding. |
+| Supported Apple Gain Map | Convert through the supported Apple luminance model to an interoperable gain map. Gain-map conversion can involve encoding. |
+| Interpretable ISO gain data | Preserve the coded images and supplement metadata only when the complete parameters can be explained. |
+| HEIC passthrough | Retain coded image items, auxiliary data, and supported properties. Rendering Apple-private HDR on Android depends on the receiving device. |
+| SDR or unknown private HDR | Keep SDR as SDR. Report unsupported HDR rather than inventing a gain map or silently claiming conversion. |
+
+Some validated private static extensions can be retained as opaque data. Retaining those bytes does not guarantee another device can render the private HDR format.
+
+## Supported workflows
+
+| Direction | Formats and targets |
+| --- | --- |
+| Android → Apple | Google-compatible Motion Photo JPEG, supported Huawei/Honor, Samsung SEF, OPPO and vivo V2 containers; validated Samsung HEIC layouts → JPEG/HEIC + MOV |
+| Apple → Android, JPEG | Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, vivo V2 |
+| Apple → Android, HEIC | Google, Xiaomi, Samsung; retains the existing HEIC encoding |
+
+Batch processing includes progress, cancellation, verified resume, skip/overwrite decisions, optional JSON manifests/reports, and separate auxiliary-track export. A single-frame auxiliary track is never stretched into fabricated motion.
+
+Vendor support applies to the layouts the parser can validate, not every device or firmware. See the [format scope](docs/product/双向转换与移动布局.md) (Chinese).
+
+## Build & run
+
+Building requires Xcode Command Line Tools. The default build produces an Intel macOS app:
 
 ```bash
 git clone https://github.com/wildgooseL/Motion-Live.git
@@ -26,56 +98,51 @@ bash scripts/build_app.sh
 open dist/Motion-Live.app
 ```
 
-使用打包后的应用无需 Python、Swift、Xcode、FFmpeg 或其他运行环境。Apple Silicon 和通用构建需显式选择：
+A built app requires no Python, FFmpeg, ExifTool, Homebrew, or additional runtime. To build for another architecture:
 
 ```bash
 bash scripts/build_app.sh --arm64
 bash scripts/build_app.sh --universal
 ```
 
-仅在需要安装包时运行以下命令，脚本按应用实际版本和架构生成 DMG、ZIP 与校验和：
+To produce a DMG, ZIP, and checksum list from the built app:
 
 ```bash
 bash scripts/make_dmg.sh
 ```
 
-构建产物位于本地 `dist/`，不随源码提交。应用采用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证；网络分发后首次打开可能需要在系统中允许。当前运行验证基于 Intel / macOS 12；ARM 实机尚待验证。
+Builds stay in local `dist/`. Current runtime validation is based on Intel/macOS 12; ARM hardware remains to be validated. The app uses ad-hoc signing without Developer ID signing or Apple notarization, so a downloaded copy may require approval in macOS security settings.
 
-## 使用
+### First conversion
 
-1. 选择转换方向，添加照片文件、文件夹，或从系统图库选择范围。
-2. 在导出设置中选择输出格式、文件夹、相册或系统共享方式。
-3. 点击开始转换，在队列与报告中查看结果；需要时停止或重试交付。
-4. 手动导入 Apple「照片」时，同时选择同名 JPEG/HEIC 与 MOV 配对。独立辅助轨 MOV 单独保存。
+1. Select the direction and add files, a folder, or a Photos-library selection.
+2. Choose the format and delivery destination: folder, Photos album, or system sharing.
+3. Start conversion and review the queue/report. Stop or retry delivery when needed.
 
-输出路径必须在原片目录之外。源文件保持只读；系统图库写入只在用户选择入册后执行。iCloud 下载和运行期间监测需要明确启用，应用退出后停止监测。详细说明见 [使用说明](packaging/使用说明.txt)。
+When importing files manually into Photos, select the matching JPEG/HEIC and MOV together. Independent auxiliary MOV files are ordinary videos. Keep the output folder outside the source folder.
 
-## 可选 Python CLI
+### Optional Python CLI
 
-CLI 是独立的 Google Motion Photo 工作流，不等同于图形版全部厂商/HEIC 和图库能力。需要 Python 3.9+ 与 Command Line Tools：
+The CLI provides a separate Google Motion Photo workflow; it does not expose every native-app, HEIC, vendor, or library feature. It requires Python 3.9+ and Command Line Tools:
 
 ```bash
-python3 -m motionlive scan "/原片"
-python3 -m motionlive convert "/原片" -o "/输出"
+python3 -m motionlive scan "/path/to/originals"
+python3 -m motionlive convert "/path/to/originals" -o "/path/to/output"
 ```
 
-也可使用 `./motion-live`。首次转换会把原生组件编译到本地 `.build/`。
+The `./motion-live` launcher is also available. Native components compile into `.build/` on first use.
 
-## 源码结构
+## Local by design
 
-| 路径 | 用途 |
-| --- | --- |
-| `gui/` | SwiftUI 工作区、状态模型、图库与系统共享服务 |
-| `native/` | 格式解析、HDR、封面时间、批量转换与输出校验 |
-| `motionlive/` | 可选 Python CLI |
-| `scripts/` | 构建、打包与回归入口 |
-| `tests/` | 构造媒体、原生驱动和状态模型测试 |
-| `packaging/` | 应用属性、图标与分发说明 |
-| `docs/` | 当前功能、设计、实现与验证边界 |
+Conversion and verification run locally. Personal sample photos, converted outputs, full reports, build products, and editor captures are excluded from this repository. The project artwork is code-drawn SVG and uses no personal media.
 
-## 验证
+Optional reports can contain source paths, EXIF, dates, and hashes—keep them local. Run the publication audit before sharing source changes:
 
-基础验证使用构造媒体，不访问真实图库或发送文件：
+```bash
+python3 scripts/check_publish.py
+```
+
+## Development
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
@@ -85,17 +152,28 @@ python3 scripts/check_reverse.py
 python3 scripts/check_workspace.py
 ```
 
-原生界面检查使用虚构数据，需要可用的 macOS 桌面环境：
+Native layout checks use fictional data and require an available macOS desktop:
 
 ```bash
 bash scripts/build_app.sh --diagnostics
 python3 scripts/check_swiftui_ui.py
 ```
 
-真实样片回归属于可选本地验证，样片、配对资源和报告不随源码分发。配置方式见 [本地样片与隐私](docs/development/本地样片与隐私.md)，当前验证范围见 [发行验证](docs/validation/图库与共享-1.3.0.md)。
+| Area | Location |
+| --- | --- |
+| SwiftUI, task state, Photos and sharing | `gui/` |
+| Parsing, HDR, timing, conversion, verification | `native/` |
+| Optional Python workflow | `motionlive/` |
+| Build scripts and regression drivers | `scripts/`, `tests/` |
+| App metadata and reproducible icon drawing | `packaging/` |
+| Project icon and README artwork | [Brand assets](docs/branding/README.md) |
 
-## 隐私与兼容边界
+Further technical documentation is currently in Chinese: [implementation](docs/development/SwiftUI实现说明.md), [library integration](docs/design/图库识别与自动入册规范.md), [sharing](docs/design/输出位置与系统共享规范.md), [validation scope](docs/validation/图库与共享-1.3.0.md), and [local fixtures/privacy](docs/development/本地样片与隐私.md).
 
-仓库只发布源码、脚本和匿名化文档。`pictures/`、`converted-*/`、`auxiliary-exports*/`、`.build/`、`dist/`、`.nimbalyst/` 与 `.local-archive/` 均不上传。输出报告可能含原片路径、EXIF、日期及哈希，应仅保存在本地。
+iOS is not currently shipped. Complex timelines, unknown HEIF structures, and unsupported private HDR may be rejected explicitly. Actual Photos playback/import, iCloud, third-party sharing, phone-gallery HDR, and ARM/iOS hardware are not covered by the synthetic regression suite.
 
-复杂时间轴、未知 HEIF 结构和不能解释的私有 HDR 会明确报告限制。已有输出的版本标识用于校验和升级，不表示仓库仍保留旧版应用。格式资料与限制见 [格式与功能范围](docs/product/双向转换与移动布局.md)。
+## License
+
+The original source code, documentation, and artwork are licensed under the **GNU General Public License, version 3 only**. Commercial use is allowed. When distributing covered derivative works, provide their corresponding source under the GPL and meet the license's redistribution requirements.
+
+See [LICENSE](LICENSE), [copyright and version choice](COPYRIGHT), and [third-party/distribution notes](THIRD_PARTY_NOTICES.md). Personal input media and separately licensed system or third-party components retain their own rights and terms.

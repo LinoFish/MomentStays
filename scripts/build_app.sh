@@ -35,6 +35,7 @@ else
 fi
 cp packaging/Info.plist "$app/Contents/Info.plist"
 cp packaging/使用说明.txt "$app/Contents/Resources/使用说明.txt"
+cp LICENSE COPYRIGHT THIRD_PARTY_NOTICES.md "$app/Contents/Resources/"
 xcrun swiftc -module-cache-path /private/tmp/motionlive-swift-cache packaging/Icon.swift -o .build/gui/make-icon
 .build/gui/make-icon .build/gui/AppIcon.iconset
 iconutil -c icns .build/gui/AppIcon.iconset -o "$app/Contents/Resources/AppIcon.icns"

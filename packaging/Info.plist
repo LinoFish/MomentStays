@@ -14,7 +14,7 @@
   <key>NSPhotoLibraryUsageDescription</key><string>读取您选择范围内的照片与配对视频以识别、转换动态照片；在您选择导入相册时，将转换结果作为新实况照片加入图库和指定相册，原片保持不变。</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSHumanReadableCopyright</key><string>Motion-Live — local photo conversion</string>
+  <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Lino. GPL-3.0-only.</string>
   <key>CFBundleDocumentTypes</key><array><dict>
     <key>CFBundleTypeName</key><string>Android Motion Photo JPEG/HEIC</string>
     <key>CFBundleTypeRole</key><string>Viewer</string>
