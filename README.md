@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.3.0</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.0</strong>
 </p>
 
 Move Motion Photos between Android and Apple Live Photos while keeping the moment you chose as the cover. Remux the original video and audio, preserve supported image and HDR data, and bring converted Live Photos into your Photos library.
@@ -168,7 +168,7 @@ python3 scripts/check_swiftui_ui.py
 | App metadata and reproducible icon drawing | `packaging/` |
 | Project icon and README artwork | [Brand assets](docs/branding/README.md) |
 
-Further technical documentation is currently in Chinese: [implementation](docs/development/SwiftUI实现说明.md), [library integration](docs/design/图库识别与自动入册规范.md), [sharing](docs/design/输出位置与系统共享规范.md), [validation scope](docs/validation/图库与共享-1.3.0.md), and [local fixtures/privacy](docs/development/本地样片与隐私.md).
+Further technical documentation is currently in Chinese: [implementation](docs/development/SwiftUI实现说明.md), [library integration](docs/design/图库识别与自动入册规范.md), [sharing](docs/design/输出位置与系统共享规范.md), [validation scope](docs/validation/图库与共享-1.0.md), and [local fixtures/privacy](docs/development/本地样片与隐私.md).
 
 iOS is not currently shipped. Complex timelines, unknown HEIF structures, and unsupported private HDR may be rejected explicitly. Actual Photos playback/import, iCloud, third-party sharing, phone-gallery HDR, and ARM/iOS hardware are not covered by the synthetic regression suite.
 
