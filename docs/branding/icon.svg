@@ -1,10 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">Motion-Live icon</title>
-  <desc id="desc">A mint motion arc surrounds a white photo frame. An amber keyframe stays fixed on its timeline.</desc>
+  <title id="title">MomentStays icon</title>
+  <desc id="desc">A mint motion arc circles a white photo frame. On the timeline inside, one amber moment stays — held, glowing, and still.</desc>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F3BE72" stop-opacity=".55"/>
+      <stop offset="55%" stop-color="#F3BE72" stop-opacity=".18"/>
+      <stop offset="100%" stop-color="#F3BE72" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
   <rect x="64" y="64" width="896" height="896" rx="208" fill="#0D1B27"/>
   <rect x="65" y="65" width="894" height="894" rx="207" fill="none" stroke="#FFFFFF" stroke-opacity=".08" stroke-width="2"/>
+  <!-- motion arc: time in motion, drawn as before for continuity -->
   <path d="M512 224 A288 288 0 1 0 800 512" fill="none" stroke="#65DCC5" stroke-width="48" stroke-linecap="round"/>
+  <!-- playhead dot where the arc begins -->
+  <circle cx="512" cy="224" r="30" fill="#65DCC5"/>
+  <!-- photo frame -->
   <rect x="336" y="368" width="352" height="288" rx="48" fill="none" stroke="#F0F6F5" stroke-width="28"/>
+  <!-- timeline through the frame -->
   <path d="M404 512 H620" fill="none" stroke="#65DCC5" stroke-opacity=".45" stroke-width="20" stroke-linecap="round"/>
-  <path d="M512 472 L552 512 L512 552 L472 512 Z" fill="#F3BE72"/>
+  <!-- the moment that stays: amber keyframe diamond, with a soft glow -->
+  <circle cx="512" cy="512" r="118" fill="url(#glow)"/>
+  <path d="M512 466 L558 512 L512 558 L466 512 Z" fill="#F3BE72"/>
 </svg>
