@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         buildMenu()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Motion-Live"; window.isReleasedWhenClosed = false
+        window.title = "MomentStays"; window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 390, height: 540)
         window.delegate = self; platform.window = window
         var root = WorkspaceView(model: model, actions: platform.actions)
@@ -50,12 +50,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         func command(_ menu: NSMenu, _ title: String, _ action: Selector, _ key: String = "") {
             menu.addItem(withTitle: title, action: action, keyEquivalent: key).target = self
         }
-        let app = section("Motion-Live")
-        command(app, "关于 Motion-Live", #selector(about))
+        let app = section("MomentStays")
+        command(app, "关于 MomentStays", #selector(about))
         app.addItem(.separator())
-        app.addItem(withTitle: "隐藏 Motion-Live", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: "隐藏 MomentStays", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(.separator())
-        app.addItem(withTitle: "退出 Motion-Live", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: "退出 MomentStays", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let file = section("文件")
         command(file, "选择照片或文件夹…", #selector(chooseSources), "o")
         command(file, "扫描系统照片图库…", #selector(importPhotos))
@@ -122,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func about() {
         guard window.attachedSheet == nil else { return }
-        let alert = NSAlert(); alert.messageText = "Motion-Live"
+        let alert = NSAlert(); alert.messageText = "MomentStays"
         alert.informativeText = "Android 动态照片 ↔ Apple Live Photo\n\n原生 SwiftUI 界面，适用于 macOS 12 或更新版本。\n转换在本机完成，原片只读。\n图库中的 iCloud 原件可能需要下载。"
         alert.addButton(withTitle: "好"); alert.beginSheetModal(for: window)
     }

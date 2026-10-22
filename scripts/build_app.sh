@@ -5,12 +5,12 @@ mkdir -p .build/gui dist
 architectures=(x86_64)
 definitions=(-D MOTIONLIVE_LIBRARY)
 optimization=(-O -whole-module-optimization)
-app="dist/Motion-Live.app"
+app="dist/MomentStays.app"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --universal) architectures=(x86_64 arm64); shift ;;
     --arm64) architectures=(arm64); shift ;;
-    --diagnostics) definitions+=(-D UI_DIAGNOSTICS); optimization=(-Onone); app=".build/gui/preview/Motion-Live.app"; shift ;;
+    --diagnostics) definitions+=(-D UI_DIAGNOSTICS); optimization=(-Onone); app=".build/gui/preview/MomentStays.app"; shift ;;
     --help) echo "Usage: $0 [--universal | --arm64] [--diagnostics] (default: Intel .app only)"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
@@ -24,14 +24,14 @@ for arch in "${architectures[@]}"; do
   echo "Building macOS 12 app: $arch"
   xcrun swiftc -parse-as-library "${definitions[@]}" "${optimization[@]}" -target "$arch-apple-macosx12.0" \
     -module-cache-path "/private/tmp/motionlive-gui-swift-cache-$arch" "${sources[@]}" \
-    -o ".build/gui/Motion-Live-$arch"
-  binaries+=(".build/gui/Motion-Live-$arch")
+    -o ".build/gui/MomentStays-$arch"
+  binaries+=(".build/gui/MomentStays-$arch")
 done
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 if [[ ${#binaries[@]} -eq 1 ]]; then
-  cp "${binaries[0]}" "$app/Contents/MacOS/Motion-Live"
+  cp "${binaries[0]}" "$app/Contents/MacOS/MomentStays"
 else
-  xcrun lipo -create "${binaries[@]}" -output "$app/Contents/MacOS/Motion-Live"
+  xcrun lipo -create "${binaries[@]}" -output "$app/Contents/MacOS/MomentStays"
 fi
 cp packaging/Info.plist "$app/Contents/Info.plist"
 cp packaging/使用说明.txt "$app/Contents/Resources/使用说明.txt"

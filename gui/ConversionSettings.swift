@@ -87,7 +87,7 @@ enum LibraryVersion: String, SettingsChoice {
 struct ConversionSettings: Equatable, Codable {
     var direction: ConversionDirection = .toApple
     var destination: OutputDestination = .folder
-    var albumTitle = "Motion-Live 转换结果"
+    var albumTitle = "MomentStays 转换结果"
     var albumID: String?
     var libraryVersion: LibraryVersion = .original
     var vendor: AndroidVendor = .google
@@ -107,7 +107,7 @@ struct ConversionSettings: Equatable, Codable {
         if direction == .toAndroid && destination.importsPhotos { destination = .folder }
         if direction == .toApple && destination.shares { destination = .folder }
         if exportMode == .auxiliaryOnly && direction == .toApple && destination.importsPhotos { destination = .folder }
-        if albumTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { albumTitle = "Motion-Live 转换结果" }
+        if albumTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { albumTitle = "MomentStays 转换结果" }
         if !vendor.supportsHEIC { container = .jpeg }
         imageQuality = min(1, max(0.01, imageQuality.isFinite ? imageQuality : 0.95))
         gainQuality = min(1, max(0.01, gainQuality.isFinite ? gainQuality : 0.95))

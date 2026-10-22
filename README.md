@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/branding/github-header.svg" alt="Motion-Live — The moment stays. Cover timestamps, original audio/video streams, HDR gain maps, and Photos library integration." width="100%">
+  <img src="docs/branding/github-header.svg" alt="MomentStays — The moment stays. Cover timestamps, original audio/video streams, HDR gain maps, and Photos library integration." width="100%">
 </p>
 
 <p align="center">
@@ -10,9 +10,9 @@
   <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.0</strong>
 </p>
 
-# Motion-Live — Android Motion Photo ↔ Apple Live Photo Converter for macOS
+# MomentStays — Android Motion Photo ↔ Apple Live Photo Converter for macOS
 
-Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. Motion-Live preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos, in JPEG and HEIC.
+Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. MomentStays preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos, in JPEG and HEIC.
 
 安卓动态照片 ↔ 苹果实况照片（Live Photo）互转工具：在 Mac 上把三星、小米、Google、华为/荣耀、OPPO、vivo 的动态照片转换成 iPhone 实况照片，保留封面帧、原始音视频与 Ultra HDR，不重新编码，全部本地处理，并可直接导入「照片」图库。
 
@@ -22,7 +22,7 @@ Convert Android Motion Photos to Apple Live Photos — and convert Live Photos b
   <img src="https://img.shields.io/badge/License-GPL--3.0--only-blue" alt="License GPL-3.0-only">
 </p>
 
-**Download:** get the latest DMG/ZIP from [Releases](https://github.com/wildgooseL/Motion-Live/releases), or build from source below.
+**Download:** get the latest DMG/ZIP from [Releases](https://github.com/LinoFish/MomentStays/releases), or build from source below.
 
 Move Motion Photos between Android and Apple Live Photos while keeping the moment you chose as the cover. Remux the original video and audio, preserve supported image and HDR data, and bring converted Live Photos into your Photos library.
 
@@ -32,20 +32,20 @@ Move Motion Photos between Android and Apple Live Photos while keeping the momen
 
 ## The moment stays
 
-| | What Motion-Live preserves |
+| | What MomentStays preserves |
 | --- | --- |
 | **The cover you chose** | Reads the source cover timestamp, maps it to an actual video frame, and writes the Live Photo timing marker. |
 | **Original video and audio** | Remuxes compressed samples without video/audio re-encoding. Checks sample data, counts, sizes, and presentation timestamps. |
 | **Image and HDR detail** | Keeps JPEG/HEIC image payloads on supported passthrough paths. Preserves existing Ultra HDR gain maps and handles supported Apple/ISO gain data through explicit models. |
 | **Your library workflow** | Reads complete original or matching edited resources from Photos, creates new Live Photos, and adds them to your selected album. |
 
-Motion-Live changes the container and pairing metadata. Converting HEIC to JPEG, changing JPEG quality, or converting an HDR gain map can encode image or gain-map data; the original compressed video and audio remain preserved.
+MomentStays changes the container and pairing metadata. Converting HEIC to JPEG, changing JPEG quality, or converting an HDR gain map can encode image or gain-map data; the original compressed video and audio remain preserved.
 
 ## Works with your Photos library
 
 Choose files and folders, or work directly with the system Photos library through PhotoKit.
 
-| From | Through Motion-Live | To |
+| From | Through MomentStays | To |
 | --- | --- | --- |
 | Android Motion Photos in files or complete Photos originals | Extract the still image and motion clip, preserve cover timing, validate the pair | A new **Live Photo in a Photos album**, or JPEG/HEIC + MOV files |
 | Apple Live Photos in Photos or complete image + MOV pairs | Read the paired resources and timed cover marker, preserve audio/video streams | An **Android Motion Photo** in a folder, or the system share menu |
@@ -65,7 +65,7 @@ Source files and library assets stay intact. Library changes happen only when yo
 
 ### Cover timestamps, mapped to the real frame
 
-A cover timestamp identifies the selected moment **inside the motion clip**. Motion-Live reads the source timing metadata and maps it through the actual media timeline. For Live Photos, it writes the corresponding `com.apple.quicktime.still-image-time` timed marker; in the other direction, it reads that marker to restore the Android cover position.
+A cover timestamp identifies the selected moment **inside the motion clip**. MomentStays reads the source timing metadata and maps it through the actual media timeline. For Live Photos, it writes the corresponding `com.apple.quicktime.still-image-time` timed marker; in the other direction, it reads that marker to restore the Android cover position.
 
 Frame alignment is checked, with a default tolerance of half a frame. Missing, ambiguous, or out-of-range timing is reported instead of silently selecting the midpoint. Optional manifests record source timing, the mapped frame, and alignment error.
 
@@ -106,10 +106,10 @@ Vendor support applies to the layouts the parser can validate, not every device 
 Building requires Xcode Command Line Tools. The default build produces an Intel macOS app:
 
 ```bash
-git clone https://github.com/wildgooseL/Motion-Live.git
-cd Motion-Live
+git clone https://github.com/LinoFish/MomentStays.git
+cd MomentStays
 bash scripts/build_app.sh
-open dist/Motion-Live.app
+open dist/MomentStays.app
 ```
 
 A built app requires no Python, FFmpeg, ExifTool, Homebrew, or additional runtime. To build for another architecture:
@@ -190,11 +190,11 @@ iOS is not currently shipped. Complex timelines, unknown HEIF structures, and un
 
 ### How do I convert a Samsung or Xiaomi Motion Photo to an Apple Live Photo?
 
-Add the Motion Photo file (or a folder, or a Photos-library selection) in Motion-Live, choose the Android → Apple direction, and deliver the result to a Photos album or as a JPEG/HEIC + MOV pair. The cover timestamp is mapped to the real frame, and the video/audio streams are remuxed without re-encoding.
+Add the Motion Photo file (or a folder, or a Photos-library selection) in MomentStays, choose the Android → Apple direction, and deliver the result to a Photos album or as a JPEG/HEIC + MOV pair. The cover timestamp is mapped to the real frame, and the video/audio streams are remuxed without re-encoding.
 
 ### Can I convert an iPhone Live Photo back to an Android Motion Photo?
 
-Yes. In the Apple → Android direction, Motion-Live reads the paired image + MOV and its still-image-time marker, and writes a Motion Photo for Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, or vivo V2 layouts (JPEG), or Google, Xiaomi, and Samsung layouts (HEIC).
+Yes. In the Apple → Android direction, MomentStays reads the paired image + MOV and its still-image-time marker, and writes a Motion Photo for Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, or vivo V2 layouts (JPEG), or Google, Xiaomi, and Samsung layouts (HEIC).
 
 ### Does converting a Motion Photo lose quality?
 
@@ -204,9 +204,9 @@ No video or audio re-encoding takes place: the original compressed samples are r
 
 Google-compatible Motion Photo JPEGs, supported Samsung (including SEF and validated HEIC layouts), Xiaomi, Huawei/Honor, OPPO, and vivo V2 containers. See the Supported workflows table above for the exact directions and formats.
 
-### Is Motion-Live free and private?
+### Is MomentStays free and private?
 
-Yes. Motion-Live is GPL-3.0-only open source, runs entirely on your Mac, and never uploads your photos.
+Yes. MomentStays is GPL-3.0-only open source, runs entirely on your Mac, and never uploads your photos.
 
 ## License
 

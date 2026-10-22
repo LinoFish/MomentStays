@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">MomentStays — The moment stays.</title>
+  <desc id="desc">Convert Android Motion Photos and Apple Live Photos both ways on macOS. Cover timestamps, original audio/video streams, HDR gain maps, and Photos library integration. 安卓动态照片与苹果实况照片互转。</desc>
+  <rect width="1280" height="640" fill="#0D1B27"/>
+  <circle cx="1210" cy="20" r="260" fill="none" stroke="#65DCC5" stroke-opacity=".05" stroke-width="90"/>
+  <circle cx="60" cy="650" r="200" fill="none" stroke="#F3BE72" stroke-opacity=".04" stroke-width="70"/>
+  <!-- icon -->
+  <g transform="translate(64 140) scale(.3516)">
+    <rect x="64" y="64" width="896" height="896" rx="208" fill="#132A36"/>
+    <path d="M512 224 A288 288 0 1 0 800 512" fill="none" stroke="#65DCC5" stroke-width="48" stroke-linecap="round"/>
+    <circle cx="512" cy="224" r="30" fill="#65DCC5"/>
+    <rect x="336" y="368" width="352" height="288" rx="48" fill="none" stroke="#F0F6F5" stroke-width="28"/>
+    <path d="M404 512 H620" fill="none" stroke="#65DCC5" stroke-opacity=".45" stroke-width="20" stroke-linecap="round"/>
+    <path d="M512 466 L558 512 L512 558 L466 512 Z" fill="#F3BE72"/>
+  </g>
+  <g font-family="'Noto Sans CJK SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+    <text x="470" y="245" font-size="96" font-weight="700" letter-spacing="-2" fill="#F0F6F5">MomentStays</text>
+    <text x="474" y="312" font-size="40" font-weight="600" fill="#F3BE72">The moment stays. <tspan fill="#B0C8CF" font-weight="400">留住原来的瞬间。</tspan></text>
+    <text x="475" y="372" font-size="27" fill="#DCEAE9">Android Motion Photos ↔ Apple Live Photos · macOS</text>
+    <text x="475" y="412" font-size="24" fill="#B0C8CF">安卓动态照片 ↔ 苹果实况照片互转 · 保留封面帧、原音视频与 Ultra HDR</text>
+    <path d="M76 512 H1204" stroke="#B0C8CF" stroke-opacity=".18"/>
+    <g font-size="19" fill="#DCEAE9">
+      <circle cx="83" cy="566" r="4" fill="#F3BE72"/>
+      <text x="100" y="572">Cover timestamps</text>
+      <circle cx="378" cy="566" r="4" fill="#65DCC5"/>
+      <text x="395" y="572">Original A/V streams</text>
+      <circle cx="708" cy="566" r="4" fill="#65DCC5"/>
+      <text x="725" y="572">HDR gain maps</text>
+      <circle cx="1005" cy="566" r="4" fill="#65DCC5"/>
+      <text x="1022" y="572">Photos library</text>
+    </g>
+  </g>
+</svg>

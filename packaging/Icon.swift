@@ -39,6 +39,10 @@ for size in [16, 32, 128, 256, 512] {
         motion.lineCapStyle = .round
         motion.stroke()
 
+        // Playhead dot where the arc begins.
+        color(0x65DCC5).setFill()
+        NSBezierPath(ovalIn: NSRect(x: 482, y: 194, width: 60, height: 60)).fill()
+
         color(0xF0F6F5).setStroke()
         let frame = NSBezierPath(roundedRect: NSRect(x: 336, y: 368, width: 352, height: 288),
                                  xRadius: 48, yRadius: 48)
@@ -53,12 +57,18 @@ for size in [16, 32, 128, 256, 512] {
         timeline.lineCapStyle = .round
         timeline.stroke()
 
+        // Soft glow behind the moment that stays (approximates the SVG radial gradient).
+        for (r, a) in [(CGFloat(118), CGFloat(0.10)), (CGFloat(84), CGFloat(0.14)), (CGFloat(56), CGFloat(0.20))] {
+            color(0xF3BE72, alpha: a).setFill()
+            NSBezierPath(ovalIn: NSRect(x: 512 - r, y: 512 - r, width: 2 * r, height: 2 * r)).fill()
+        }
+
         color(0xF3BE72).setFill()
         let moment = NSBezierPath()
-        moment.move(to: NSPoint(x: 512, y: 472))
-        moment.line(to: NSPoint(x: 552, y: 512))
-        moment.line(to: NSPoint(x: 512, y: 552))
-        moment.line(to: NSPoint(x: 472, y: 512))
+        moment.move(to: NSPoint(x: 512, y: 466))
+        moment.line(to: NSPoint(x: 558, y: 512))
+        moment.line(to: NSPoint(x: 512, y: 558))
+        moment.line(to: NSPoint(x: 466, y: 512))
         moment.close()
         moment.fill()
 

@@ -126,7 +126,7 @@ final class MacPlatformServices: NSObject {
             self.lastScope = picker?.selectedScope
             self.model.librarySummary = picker?.summary ?? ""
             if let first = urls.first { self.ownedPhotoCopies.append(first.deletingLastPathComponent().deletingLastPathComponent()) }
-            let output = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!.appendingPathComponent("Motion-Live Exports")
+            let output = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!.appendingPathComponent("MomentStays Exports")
             self.model.finishLibraryImport(id: id, urls: urls, error: error, output: output, direction: direction)
             if picker?.wantsMonitoring == true, picker?.wasCancelled == false, error == nil, let scope = self.lastScope {
                 self.startMonitoring(scope)
@@ -297,7 +297,7 @@ final class MacPlatformServices: NSObject {
                     if !token.isCancelled, !read.urls.isEmpty { self.origins = read.origins }
                     if !read.urls.isEmpty { self.ownedPhotoCopies.append(read.root) }
                     self.model.librarySummary = "自动识别 \(read.urls.count) · 静态跳过 \(read.skipped) · 待读取 \(read.deferred)"
-                    let output = self.model.output ?? FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!.appendingPathComponent("Motion-Live Exports")
+                    let output = self.model.output ?? FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!.appendingPathComponent("MomentStays Exports")
                     self.autoStartPending = !token.isCancelled && !read.urls.isEmpty
                     self.model.finishLibraryImport(id: id, urls: read.urls, error: nil, output: output, direction: scope.direction)
                     if !token.isCancelled, !read.urls.isEmpty {

@@ -183,7 +183,7 @@ def inputs(path):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Motion-Live — Google Motion Photo → Apple Live Photo (macOS 12+)")
+    parser = argparse.ArgumentParser(description="MomentStays — Google Motion Photo → Apple Live Photo (macOS 12+)")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     scan = commands.add_parser("scan", help="只读扫描：封面时间、HDR、格式错误")
