@@ -18,7 +18,7 @@ done
 sources=(native/MotionLive.swift native/PhotoFormat.swift native/PhotoHEIF.swift native/PhotoHDR.swift native/BatchEngine.swift native/HEIFMetadata.swift native/AndroidHDR.swift native/AndroidExport.swift
   gui/ConversionSettings.swift gui/ConversionService.swift gui/WorkspaceModel.swift gui/DeliveryModels.swift gui/PhotoLibraryService.swift gui/SystemSharingService.swift
   gui/InterfaceSupport.swift gui/ExportSettingsView.swift gui/PhotoQueueView.swift gui/WorkspaceView.swift gui/ReportView.swift
-  gui/PhotosLibraryPicker.swift gui/MacPlatformServices.swift gui/UISnapshotSupport.swift gui/App.swift)
+  gui/PhotosLibraryPicker.swift gui/MacPlatformServices.swift gui/UISnapshotSupport.swift gui/AppIconAppearance.swift gui/App.swift)
 binaries=()
 for arch in "${architectures[@]}"; do
   echo "Building macOS 12 app: $arch"
@@ -37,8 +37,10 @@ cp packaging/Info.plist "$app/Contents/Info.plist"
 cp packaging/使用说明.txt "$app/Contents/Resources/使用说明.txt"
 cp LICENSE COPYRIGHT THIRD_PARTY_NOTICES.md "$app/Contents/Resources/"
 xcrun swiftc -module-cache-path /private/tmp/motionlive-swift-cache packaging/Icon.swift -o .build/gui/make-icon
-.build/gui/make-icon .build/gui/AppIcon.iconset
+.build/gui/make-icon .build/gui/AppIcon.iconset light
+.build/gui/make-icon .build/gui/AppIconDark.iconset dark
 iconutil -c icns .build/gui/AppIcon.iconset -o "$app/Contents/Resources/AppIcon.icns"
+iconutil -c icns .build/gui/AppIconDark.iconset -o "$app/Contents/Resources/AppIconDark.icns"
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
 echo "Created $app (${architectures[*]}); no ZIP or DMG generated."
