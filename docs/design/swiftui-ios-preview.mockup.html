@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Motion-Live · iOS 效果预览</title>
+<title>MomentStays · iOS 效果预览</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC",sans-serif;background:#edf0f4;color:#20232a}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible{outline:3px solid #007aff;outline-offset:3px}button:disabled{cursor:default;opacity:.38}.board{max-width:1460px;margin:auto;padding:30px 32px 36px}.kicker{font-size:11px;letter-spacing:1.8px;color:#65758a;font-weight:650}.intro{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin:10px 0 24px}h1{font-size:25px;font-weight:650;letter-spacing:-.5px;margin:0 0 9px}.intro p{font-size:13px;color:#647084;margin:0;line-height:1.7}.preview-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.switcher{display:flex;background:#dfe4eb;padding:3px;border-radius:9px;gap:2px}.switcher button{border:0;background:transparent;color:#526073;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:550}.switcher button.active{background:#fff;color:#20232a;box-shadow:0 1px 3px #142b451a}.theme-button{height:34px;padding:0 12px;border:1px solid #ced5df;border-radius:9px;background:#f9fafc;color:#475569;font-size:12px}.stage{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:32px;align-items:start}.preview-area{min-width:0;display:flex;justify-content:center;overflow:hidden;padding:0 8px 22px}.device-fit{position:relative;flex:none}.device{position:absolute;top:0;left:0;transform-origin:top left;background:#141517;box-shadow:0 18px 54px #24354c20;overflow:hidden;border:7px solid #202227;border-radius:49px}.device.phone{width:407px;height:866px}.device.tablet{width:1038px;height:782px;border-radius:29px}.device iframe{width:100%;height:100%;display:block;border:0;border-radius:41px;background:#f2f2f7}.device.tablet iframe{border-radius:21px}.notes{padding-top:9px}.notes h2{font-size:16px;margin:0 0 18px;font-weight:650}.note{border-top:1px solid #d5dce6;padding:17px 0}.note .number{font-size:11px;color:#7d8ba0;letter-spacing:1px}.note strong{display:block;font-size:13px;margin:7px 0}.note p{font-size:12px;color:#657084;line-height:1.85;margin:0}.state-control{display:flex;align-items:center;gap:12px;justify-content:center;margin:0 auto 18px;font-size:12px;color:#647084}.state-control select{padding:7px 28px 7px 10px;border:1px solid #cbd3de;background:#fafbfd;border-radius:8px;color:#334155}.caption{font-size:11px;color:#68778b;text-align:center;line-height:1.7;margin:0}.board-footer{border-top:1px solid #d5dce6;margin-top:15px;padding-top:15px;display:flex;justify-content:space-between;gap:12px;color:#647084;font-size:11px;line-height:1.8}.board-footer span:last-child{white-space:nowrap}@media(max-width:1030px){.stage{grid-template-columns:1fr}.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.notes h2{display:none}.intro{align-items:flex-start;flex-direction:column}.note{padding:12px 0}.board{padding:24px 20px}}@media(max-width:560px){.board{padding:20px 10px}.notes{grid-template-columns:1fr;gap:0}.intro{padding:0 8px}h1{font-size:22px}.board-footer{flex-direction:column}.preview-area{padding:0 0 18px}}
 </style>
@@ -21,7 +21,7 @@
   <div class="stage">
     <section>
       <div class="state-control"><label for="scene">演示状态</label><select id="scene"><option value="ready">已选择照片</option><option value="empty">空队列</option><option value="running">正在转换</option><option value="done">完成与部分失败</option></select></div>
-      <div class="preview-area"><div class="device-fit"><div class="device phone"><iframe title="Motion-Live iOS 交互效果示意" id="app"></iframe></div></div></div>
+      <div class="preview-area"><div class="device-fit"><div class="device phone"><iframe title="MomentStays iOS 交互效果示意" id="app"></iframe></div></div></div>
       <p class="caption" id="device-caption">393 × 852 pt 布局示意 · 点击选择照片、方向、设置或开始转换体验</p>
     </section>
     <aside class="notes">
@@ -57,7 +57,7 @@ function icon(name){return '<svg class="icon" viewBox="0 0 24 24" aria-hidden="t
 const appHTML = `
 <div class="app">
  <div class="statusbar"><span>9:41</span><div class="island"></div><div class="signals"><svg viewBox="0 0 20 14" fill="currentColor"><rect x="1" y="9" width="3" height="4" rx=".5"/><rect x="6" y="6" width="3" height="7" rx=".5"/><rect x="11" y="3" width="3" height="10" rx=".5"/><rect x="16" y="0" width="3" height="13" rx=".5"/></svg><svg viewBox="0 0 20 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4q9-7 18 0M4 8q6-5 12 0M8 12q2-2 4 0"/></svg><span class="battery"></span></div></div>
- <nav class="navbar"><div class="app-title">Motion-Live</div><button class="icon-button" id="settings-button" aria-label="导出设置">${icon('sliders')}</button></nav>
+ <nav class="navbar"><div class="app-title">MomentStays</div><button class="icon-button" id="settings-button" aria-label="导出设置">${icon('sliders')}</button></nav>
  <div class="toolbar"><button class="import" id="import-button">${icon('plus')}选择照片</button><button class="primary" id="primary-button">开始转换</button></div>
  <div class="direction-wrap"><div class="segments" aria-label="转换方向"><button id="to-apple" class="active">安卓 → 苹果实况</button><button id="to-android">苹果实况 → 安卓</button></div></div>
  <section class="summary"><div class="summary-row">${icon('photo')}<span class="summary-key">来源</span><span class="summary-value" id="source-summary">旅行原片 · 12 张</span></div><div class="summary-row"><span id="output-icon">${icon('folder')}</span><span class="summary-key">输出</span><span class="summary-value" id="output-summary">文件夹 · Live Photos</span></div></section>
@@ -69,7 +69,7 @@ const appHTML = `
 `;
 function appRuntime(){
  const $=id=>document.getElementById(id);
- const state={direction:'apple',scene:'ready',mode:'live',track:'primary',time:'auto',destination:'folder',folder:'Live Photos',album:'Motion-Live 转换结果',source:'旅行原片',vendor:'Google / 通用',container:'JPEG · Ultra HDR',legacy:true,json:true,preserve:true,advanced:false,inspector:true,progress:0,selected:null,sourceNote:'',reportFilter:'all'};
+ const state={direction:'apple',scene:'ready',mode:'live',track:'primary',time:'auto',destination:'folder',folder:'Live Photos',album:'MomentStays 转换结果',source:'旅行原片',vendor:'Google / 通用',container:'JPEG · Ultra HDR',legacy:true,json:true,preserve:true,advanced:false,inspector:true,progress:0,selected:null,sourceNote:'',reportFilter:'all'};
  const names=['海边日落_001.jpg','城市夜景_002.heic','山间清晨_003.jpg','街角咖啡_004.jpg','一张用于检查中文长文件名显示的动态照片_005.jpg','海边日落_006.jpg','窗边光影_007.jpg','山间清晨_008.heic','沿途风景_009.jpg','雨后街道_010.jpg','周末午后_011.jpg','回家路上_012.jpg'];
  let timer,modalKind='',lastFocus,toastTimer;
  const busy=()=>state.scene==='running'||state.scene==='stopping';
@@ -134,7 +134,7 @@ function appRuntime(){
   const action=event.target.closest('[data-action]');if(!action)return;
   switch(action.dataset.action){
    case 'folder':state.folder=state.folder==='Live Photos'?'旅行转换结果':'Live Photos';render();toast('已选择示例文件夹：'+state.folder);break;
-   case 'album':state.album=state.album==='Motion-Live 转换结果'?'旅行实况':'Motion-Live 转换结果';render();toast('已选择示例相册：'+state.album);break;
+   case 'album':state.album=state.album==='MomentStays 转换结果'?'旅行实况':'MomentStays 转换结果';render();toast('已选择示例相册：'+state.album);break;
    case 'advanced':state.advanced=!state.advanced;render();break;
    case 'report':showReport();break;
    case 'share':showSheet('share','共享转换结果','<div class="report-summary">12 个示例文件 · 共享项目取决于设备已安装的扩展</div><div class="share-grid">'+[['air','AirDrop'],['message','信息'],['folder','存储到文件']].map(([i,t])=>'<button class="share-choice" data-demo-share="'+t+'"><span class="share-symbol">'+icon(i)+'</span>'+t+'</button>').join('')+'</div>');break;
