@@ -1,30 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" role="img" aria-labelledby="title desc">
   <title id="title">MomentStays — The moment stays.</title>
   <desc id="desc">Motion Photos and Live Photos, connected through cover timestamps, original audio/video streams, HDR gain maps, and the Photos library.</desc>
-  <rect width="1280" height="420" rx="28" fill="#0D1B27"/>
-  <circle cx="1180" cy="30" r="220" fill="none" stroke="#65DCC5" stroke-opacity=".05" stroke-width="80"/>
-  <g transform="translate(48 36) scale(.265)">
-    <rect x="64" y="64" width="896" height="896" rx="208" fill="#132A36"/>
-    <path d="M512 224 A288 288 0 1 0 800 512" fill="none" stroke="#65DCC5" stroke-width="48" stroke-linecap="round"/>
-    <circle cx="512" cy="224" r="30" fill="#65DCC5"/>
-    <rect x="336" y="368" width="352" height="288" rx="48" fill="none" stroke="#F0F6F5" stroke-width="28"/>
-    <path d="M404 512 H620" fill="none" stroke="#65DCC5" stroke-opacity=".45" stroke-width="20" stroke-linecap="round"/>
-    <path d="M512 472 L552 512 L512 552 L472 512 Z" fill="#F3BE72"/>
-  </g>
-  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
-    <text x="360" y="135" font-size="82" font-weight="700" letter-spacing="-3" fill="#F0F6F5">MomentStays</text>
-    <text x="364" y="196" font-size="36" font-weight="400" fill="#F3BE72">The moment stays.</text>
-    <text x="365" y="245" font-size="23" fill="#B0C8CF">Motion Photos ↔ Live Photos</text>
-    <path d="M76 326 H1204" stroke="#B0C8CF" stroke-opacity=".18"/>
-    <g font-size="17" fill="#DCEAE9">
-      <circle cx="83" cy="374" r="4" fill="#F3BE72"/>
-      <text x="100" y="380">Cover timestamps</text>
-      <circle cx="378" cy="374" r="4" fill="#65DCC5"/>
-      <text x="395" y="380">Original A/V streams</text>
-      <circle cx="708" cy="374" r="4" fill="#65DCC5"/>
-      <text x="725" y="380">HDR gain maps</text>
-      <circle cx="1005" cy="374" r="4" fill="#65DCC5"/>
-      <text x="1022" y="380">Photos library</text>
-    </g>
+  <style>.bg{fill:#F6F7F9}.ibg1{stop-color:#FFFFFF}.ibg2{stop-color:#ECEEF1}.iedge{stroke:rgba(0,0,0,.10)}.inkf{fill:#1F2933}.inks{stroke:#1F2933}.inkst{stop-color:#1F2933}.core{fill:#F0A43C}.title{fill:#111827}.sub{fill:#C7811F}.muted{fill:#5B6673}.body{fill:#2D3742}.rule{stroke:rgba(31,41,51,.12)}.deco{stroke:rgba(31,41,51,.05)}.dotc{fill:#F0A43C}.doti{fill:#1F2933}@media (prefers-color-scheme: dark){.bg{fill:#141A22}.ibg1{stop-color:#2A3442}.ibg2{stop-color:#141A22}.iedge{stroke:rgba(255,255,255,.08)}.inkf{fill:#F2F4F5}.inks{stroke:#F2F4F5}.inkst{stop-color:#F2F4F5}.core{fill:#F4B860}.title{fill:#F2F4F5}.sub{fill:#F4B860}.muted{fill:#9AA5B1}.body{fill:#D5DBE1}.rule{stroke:rgba(242,244,245,.14)}.deco{stroke:rgba(242,244,245,.04)}.dotc{fill:#F4B860}.doti{fill:#F2F4F5}}</style><defs><linearGradient id="ibg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="ibg1"/><stop offset="1" class="ibg2"/></linearGradient><linearGradient id="ibgt" gradientUnits="userSpaceOnUse" x1="262.0" y1="552.0" x2="472.9" y2="265.1"><stop offset="0" class="inkst" stop-opacity="0"/><stop offset="1" class="inkst"/></linearGradient><clipPath id="card"><rect width="1280" height="420" rx="28"/></clipPath></defs>
+  <g clip-path="url(#card)"><rect width="1280" height="420" class="bg"/><circle cx="180" cy="168" r="250" fill="none" class="deco" stroke-width="2"/><circle cx="180" cy="168" r="150" fill="none" class="deco" stroke-width="2"/></g>
+  <g transform="translate(26 14) scale(.30)"><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#ibg)"/><rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" class="iedge" stroke-width="1.5"/><path d="M262.0 512.0 A250 250 0 0 1 472.9 265.1" stroke="url(#ibgt)" stroke-width="22" stroke-linecap="round" fill="none"/><circle cx="512.0" cy="262.0" r="11" class="inkf"/><circle cx="555.4" cy="265.8" r="11" class="inkf"/><circle cx="597.5" cy="277.1" r="11" class="inkf"/><circle cx="637.0" cy="295.5" r="11" class="inkf"/><circle cx="672.7" cy="320.5" r="11" class="inkf"/><circle cx="703.5" cy="351.3" r="11" class="inkf"/><circle cx="728.5" cy="387.0" r="11" class="inkf"/><circle cx="746.9" cy="426.5" r="11" class="inkf"/><circle cx="758.2" cy="468.6" r="11" class="inkf"/><circle cx="762.0" cy="512.0" r="11" class="inkf"/><circle cx="758.2" cy="555.4" r="11" class="inkf"/><circle cx="746.9" cy="597.5" r="11" class="inkf"/><circle cx="728.5" cy="637.0" r="11" class="inkf"/><circle cx="703.5" cy="672.7" r="11" class="inkf"/><circle cx="672.7" cy="703.5" r="11" class="inkf"/><circle cx="637.0" cy="728.5" r="11" class="inkf"/><circle cx="597.5" cy="746.9" r="11" class="inkf"/><circle cx="555.4" cy="758.2" r="11" class="inkf"/><circle cx="512.0" cy="762.0" r="11" class="inkf"/><circle cx="468.6" cy="758.2" r="11" class="inkf"/><circle cx="426.5" cy="746.9" r="11" class="inkf"/><circle cx="387.0" cy="728.5" r="11" class="inkf"/><circle cx="351.3" cy="703.5" r="11" class="inkf"/><circle cx="320.5" cy="672.7" r="11" class="inkf"/><circle cx="295.5" cy="637.0" r="11" class="inkf"/><circle cx="277.1" cy="597.5" r="11" class="inkf"/><circle cx="265.8" cy="555.4" r="11" class="inkf"/><circle cx="512" cy="512" r="150" fill="none" class="inks" stroke-width="24"/><circle cx="512" cy="512" r="58" class="core"/></g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif">
+    <text x="360" y="140" font-size="80" font-weight="700" letter-spacing="-2.5" class="title">MomentStays</text>
+    <text x="363" y="198" font-size="34" font-weight="500" class="sub">The moment stays.</text>
+    <text x="364" y="244" font-size="22" class="muted">Android Motion Photos ↔ Apple Live Photos · macOS</text>
+    <path d="M76 326 H1204" class="rule" stroke-width="1.5"/>
+    <g font-size="18" class="body"><circle cx="83" cy="374" r="5" class="dotc"/><text x="100" y="380">Cover timestamps</text><circle cx="378" cy="374" r="5" class="doti"/><text x="395" y="380">Original A/V streams</text><circle cx="708" cy="374" r="5" class="doti"/><text x="725" y="380">HDR gain maps</text><circle cx="1005" cy="374" r="5" class="doti"/><text x="1022" y="380">Photos library</text></g>
   </g>
 </svg>
