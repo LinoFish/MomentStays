@@ -1,24 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">MomentStays icon</title>
-  <desc id="desc">A mint motion arc circles a white photo frame. On the timeline inside, one amber moment stays — held, glowing, and still.</desc>
-  <defs>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#F3BE72" stop-opacity=".55"/>
-      <stop offset="55%" stop-color="#F3BE72" stop-opacity=".18"/>
-      <stop offset="100%" stop-color="#F3BE72" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect x="64" y="64" width="896" height="896" rx="208" fill="#0D1B27"/>
-  <rect x="65" y="65" width="894" height="894" rx="207" fill="none" stroke="#FFFFFF" stroke-opacity=".08" stroke-width="2"/>
-  <!-- motion arc: time in motion, drawn as before for continuity -->
-  <path d="M512 224 A288 288 0 1 0 800 512" fill="none" stroke="#65DCC5" stroke-width="48" stroke-linecap="round"/>
-  <!-- playhead dot where the arc begins -->
-  <circle cx="512" cy="224" r="30" fill="#65DCC5"/>
-  <!-- photo frame -->
-  <rect x="336" y="368" width="352" height="288" rx="48" fill="none" stroke="#F0F6F5" stroke-width="28"/>
-  <!-- timeline through the frame -->
-  <path d="M404 512 H620" fill="none" stroke="#65DCC5" stroke-opacity=".45" stroke-width="20" stroke-linecap="round"/>
-  <!-- the moment that stays: amber keyframe diamond, with a soft glow -->
-  <circle cx="512" cy="512" r="118" fill="url(#glow)"/>
-  <path d="M512 466 L558 512 L512 558 L466 512 Z" fill="#F3BE72"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<style>
+.bgt{stop-color:#FFFFFF}.bgb{stop-color:#ECEEF1}.inks{stop-color:#1F2933}.inkf{fill:#1F2933}.inkr{stroke:#1F2933}.core{fill:#F0A43C}.edge{stroke:rgba(0,0,0,.10)}
+@media (prefers-color-scheme: dark){.bgt{stop-color:#2A3442}.bgb{stop-color:#141A22}.inks{stop-color:#F2F4F5}.inkf{fill:#F2F4F5}.inkr{stroke:#F2F4F5}.core{fill:#F4B860}.edge{stroke:rgba(255,255,255,.08)}}
+</style><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="bgt"/><stop offset="1" class="bgb"/></linearGradient>
+<linearGradient id="t" gradientUnits="userSpaceOnUse" x1="262.0" y1="552.0" x2="472.9" y2="265.1"><stop offset="0" class="inks" stop-opacity="0"/><stop offset="1" class="inks"/></linearGradient></defs>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/>
+<rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" class="edge" stroke-width="1.5"/>
+<path d="M262.0 512.0 A250 250 0 0 1 472.9 265.1" stroke="url(#t)" stroke-width="22" stroke-linecap="round" fill="none"/><circle cx="512.0" cy="262.0" r="11" class="inkf"/><circle cx="555.4" cy="265.8" r="11" class="inkf"/><circle cx="597.5" cy="277.1" r="11" class="inkf"/><circle cx="637.0" cy="295.5" r="11" class="inkf"/><circle cx="672.7" cy="320.5" r="11" class="inkf"/><circle cx="703.5" cy="351.3" r="11" class="inkf"/><circle cx="728.5" cy="387.0" r="11" class="inkf"/><circle cx="746.9" cy="426.5" r="11" class="inkf"/><circle cx="758.2" cy="468.6" r="11" class="inkf"/><circle cx="762.0" cy="512.0" r="11" class="inkf"/><circle cx="758.2" cy="555.4" r="11" class="inkf"/><circle cx="746.9" cy="597.5" r="11" class="inkf"/><circle cx="728.5" cy="637.0" r="11" class="inkf"/><circle cx="703.5" cy="672.7" r="11" class="inkf"/><circle cx="672.7" cy="703.5" r="11" class="inkf"/><circle cx="637.0" cy="728.5" r="11" class="inkf"/><circle cx="597.5" cy="746.9" r="11" class="inkf"/><circle cx="555.4" cy="758.2" r="11" class="inkf"/><circle cx="512.0" cy="762.0" r="11" class="inkf"/><circle cx="468.6" cy="758.2" r="11" class="inkf"/><circle cx="426.5" cy="746.9" r="11" class="inkf"/><circle cx="387.0" cy="728.5" r="11" class="inkf"/><circle cx="351.3" cy="703.5" r="11" class="inkf"/><circle cx="320.5" cy="672.7" r="11" class="inkf"/><circle cx="295.5" cy="637.0" r="11" class="inkf"/><circle cx="277.1" cy="597.5" r="11" class="inkf"/><circle cx="265.8" cy="555.4" r="11" class="inkf"/>
+<circle cx="512" cy="512" r="150" fill="none" class="inkr" stroke-width="24"/>
+<circle cx="512" cy="512" r="58" class="core"/>
 </svg>
