@@ -99,7 +99,7 @@ Stills and MOVs are matched by Apple ContentIdentifier, and the `still-image-tim
 | Target | Vendors |
 |---|---|
 | JPEG | Google/generic, Xiaomi, Samsung (writes an SEF trailer), Huawei, Honor, OPPO, vivo V2 |
-| HEIC | Google, Xiaomi, Samsung only; existing image, thumbnail, and gain-map encodings and properties are retained. JPEG is never re-encoded into HEIC for this |
+| HEIC | Samsung only; existing image, thumbnail, and gain-map encodings and properties are retained. JPEG is never re-encoded into HEIC for this. Google and Xiaomi Motion Photos do not use HEIC — choose JPEG for those targets |
 
 ## 4. How the cover frame is located
 
@@ -283,7 +283,7 @@ Open via the top-bar **Export Settings** (an inspector on windows ≥960pt wide,
 | Content (→Apple) | Video track | Primary motion track (default) / Auxiliary track |
 | HDR (→Apple) | Try compatible conversion for non-Ultra HDR | On by default |
 | Target (→Android) | Target vendor | Google/generic (default), Xiaomi, Samsung, Huawei, Honor, OPPO, vivo V2 |
-| Target (→Android) | Photo format | JPEG · Ultra HDR / HEIC · keep original encoding (HEIC only for Google, Xiaomi, Samsung; other vendors force JPEG) |
+| Target (→Android) | Photo format | JPEG · Ultra HDR / HEIC · keep original encoding (HEIC for Samsung only; all other vendors force JPEG) |
 | Image quality (→Android) | Keep original JPEG encoding | On by default (no recompression) |
 | Image quality (→Android) | Main image quality / gain map quality | Sliders 1%–100%, both default 95% |
 | Verification | Export manifest & JSON report | Off by default (see §11) |
