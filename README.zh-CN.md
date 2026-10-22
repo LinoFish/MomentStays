@@ -10,6 +10,22 @@
   <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.0</strong>
 </p>
 
+# Motion-Live — 安卓动态照片转苹果实况照片（Live Photo）工具
+
+把安卓手机的动态照片转换成 iPhone 实况照片（Apple Live Photo），也可以把实况照片反向转回安卓动态照片。支持三星动态照片、小米动态照片、Google（Pixel）动态照片，以及华为/荣耀、OPPO、vivo 的动态照片格式，涵盖 JPEG 与 HEIC。
+
+转换时保留你选定的封面帧（封面时间）、原始视频和音频（只重新封装、不重新编码）和 Ultra HDR 增益图，转换结果可以直接导入 Mac 的「照片」图库。全部处理都在本机完成，不上传任何照片。
+
+常见使用场景：换手机时把安卓动态照片导入 iPhone；把三星/小米动态照片转成实况照片存进苹果图库；在 Mac 上批量把 Motion Photo 转成 Live Photo；把 iPhone 实况照片转回安卓动态照片发给安卓手机查看。
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-12%2B-black" alt="macOS 12+">
+  <img src="https://img.shields.io/badge/SwiftUI-原生-orange" alt="原生 SwiftUI">
+  <img src="https://img.shields.io/badge/开源协议-GPL--3.0--only-blue" alt="开源协议 GPL-3.0-only">
+</p>
+
+**下载：** 在 [Releases](https://github.com/wildgooseL/Motion-Live/releases) 获取最新 DMG/ZIP，也可以按下方说明从源码构建。
+
 在 Android 动态照片与 Apple Live Photo 之间转换，留住你选定的封面瞬间。复用原始音视频，保留支持的图像与 HDR 数据，并将转换后的实况照片直接送回系统图库。
 
 [构建与运行](#构建与运行) · [与系统图库互通](#与系统图库互通) · [保留哪些信息](#保留哪些信息) · [项目文档](docs/README.md)
@@ -171,6 +187,32 @@ python3 scripts/check_swiftui_ui.py
 进一步阅读：[实现说明](docs/development/SwiftUI实现说明.md)、[图库规范](docs/design/图库识别与自动入册规范.md)、[共享规范](docs/design/输出位置与系统共享规范.md)、[验证范围](docs/validation/图库与共享-1.0.md)、[本地样片与隐私](docs/development/本地样片与隐私.md)。
 
 当前尚未提供 iOS 应用。复杂时间线、未知 HEIF 结构和不支持的私有 HDR 可能被明确拒绝。构造媒体回归不能替代真实图库入册/播放、iCloud、第三方共享、手机相册 HDR，以及 ARM/iOS 真机验证。
+
+## 常见问题（动态照片 / 实况照片转换）
+
+### 三星、小米的动态照片怎么转成 iPhone 实况照片？
+
+在 Motion-Live 里添加动态照片文件（或文件夹、或从「照片」图库选取），选择“安卓 → 苹果”方向，输出到指定相册，或导出为 JPEG/HEIC + MOV 配对文件。封面时间会被映射到真实视频帧，音视频只重新封装、不重新编码。
+
+### 安卓动态照片导入 iPhone 后为什么不动？
+
+因为安卓 Motion Photo 和苹果 Live Photo 是两种不同的封装格式，直接拷贝文件无法被 iPhone「照片」识别为实况照片。需要先用 Motion-Live 转成 Live Photo 的图文配对格式并写入封面标记，再导入图库才会动。
+
+### iPhone 实况照片能转回安卓动态照片吗？
+
+可以。选择“苹果 → 安卓”方向，Motion-Live 读取实况照片的图片 + MOV 配对和封面标记，输出 Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2 等安卓动态照片格式（JPEG），或 Google、小米、三星格式（HEIC）。
+
+### 转换动态照片会不会掉画质、会不会重新编码？
+
+不会重新编码视频和音频：原始压缩样本被重新封装，并逐个样本核对哈希、大小和时间戳。支持的图像路径保留原始 JPEG/HEIC 编码，已有的 Ultra HDR 增益图也会保留。
+
+### 支持哪些手机品牌的动态照片？
+
+Google 兼容的动态照片 JPEG、三星（包括 SEF 和已验证的 HEIC 布局）、小米、华为/荣耀、OPPO、vivo V2。具体的方向与格式见上方“支持的工作流”表格。
+
+### 这个工具收费吗？照片会上传吗？
+
+免费开源（GPL-3.0-only），所有转换都在你的 Mac 本地完成，不上传照片。
 
 ## 开源协议
 

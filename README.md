@@ -10,6 +10,20 @@
   <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.0</strong>
 </p>
 
+# Motion-Live — Android Motion Photo ↔ Apple Live Photo Converter for macOS
+
+Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. Motion-Live preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos, in JPEG and HEIC.
+
+安卓动态照片 ↔ 苹果实况照片（Live Photo）互转工具：在 Mac 上把三星、小米、Google、华为/荣耀、OPPO、vivo 的动态照片转换成 iPhone 实况照片，保留封面帧、原始音视频与 Ultra HDR，不重新编码，全部本地处理，并可直接导入「照片」图库。
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-12%2B-black" alt="macOS 12+">
+  <img src="https://img.shields.io/badge/SwiftUI-Native-orange" alt="Native SwiftUI">
+  <img src="https://img.shields.io/badge/License-GPL--3.0--only-blue" alt="License GPL-3.0-only">
+</p>
+
+**Download:** get the latest DMG/ZIP from [Releases](https://github.com/wildgooseL/Motion-Live/releases), or build from source below.
+
 Move Motion Photos between Android and Apple Live Photos while keeping the moment you chose as the cover. Remux the original video and audio, preserve supported image and HDR data, and bring converted Live Photos into your Photos library.
 
 [Build & run](#build--run) · [Photos integration](#works-with-your-photos-library) · [Preservation details](#what-stays-with-your-photo) · [Documentation](docs/README.md)
@@ -171,6 +185,28 @@ python3 scripts/check_swiftui_ui.py
 Further technical documentation is currently in Chinese: [implementation](docs/development/SwiftUI实现说明.md), [library integration](docs/design/图库识别与自动入册规范.md), [sharing](docs/design/输出位置与系统共享规范.md), [validation scope](docs/validation/图库与共享-1.0.md), and [local fixtures/privacy](docs/development/本地样片与隐私.md).
 
 iOS is not currently shipped. Complex timelines, unknown HEIF structures, and unsupported private HDR may be rejected explicitly. Actual Photos playback/import, iCloud, third-party sharing, phone-gallery HDR, and ARM/iOS hardware are not covered by the synthetic regression suite.
+
+## FAQ
+
+### How do I convert a Samsung or Xiaomi Motion Photo to an Apple Live Photo?
+
+Add the Motion Photo file (or a folder, or a Photos-library selection) in Motion-Live, choose the Android → Apple direction, and deliver the result to a Photos album or as a JPEG/HEIC + MOV pair. The cover timestamp is mapped to the real frame, and the video/audio streams are remuxed without re-encoding.
+
+### Can I convert an iPhone Live Photo back to an Android Motion Photo?
+
+Yes. In the Apple → Android direction, Motion-Live reads the paired image + MOV and its still-image-time marker, and writes a Motion Photo for Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, or vivo V2 layouts (JPEG), or Google, Xiaomi, and Samsung layouts (HEIC).
+
+### Does converting a Motion Photo lose quality?
+
+No video or audio re-encoding takes place: the original compressed samples are remuxed and verified sample by sample. Supported image paths keep the original JPEG/HEIC encoding, and existing Ultra HDR gain maps are preserved.
+
+### Which phones and formats are supported?
+
+Google-compatible Motion Photo JPEGs, supported Samsung (including SEF and validated HEIC layouts), Xiaomi, Huawei/Honor, OPPO, and vivo V2 containers. See the Supported workflows table above for the exact directions and formats.
+
+### Is Motion-Live free and private?
+
+Yes. Motion-Live is GPL-3.0-only open source, runs entirely on your Mac, and never uploads your photos.
 
 ## License
 
