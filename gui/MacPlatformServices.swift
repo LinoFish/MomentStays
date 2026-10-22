@@ -18,7 +18,9 @@ final class MacPlatformServices: NSObject {
     private let deliveryStore = DeliveryStore()
     private let sharingService = SystemSharingService()
     private var activeTask: DeliveryTask?
-    private var lastTask: DeliveryTask?
+    private var lastTask: DeliveryTask? {
+        didSet { model.recentOutput = lastTask.map { URL(fileURLWithPath: $0.output) } }
+    }
     private var origins: [String: LibraryOrigin] = [:]
     private var libraryMonitor: PhotoLibraryMonitor?
     private var lastScope: LibraryScope?
@@ -44,6 +46,7 @@ final class MacPlatformServices: NSObject {
             if let self = self, let scope = self.lastScope, scope.direction != direction { self.stopMonitoring() }
         }.store(in: &subscriptions)
         lastTask = deliveryStore.tasks().first(where: { !$0.results.isEmpty })
+        model.recentOutput = lastTask.map { URL(fileURLWithPath: $0.output) }
         model.recentTasksAvailable = lastTask != nil
         model.shareReady = lastTask?.settings.direction == .toAndroid
         model.presentExistingOutput = { [weak self] source, target, reply in
@@ -313,37 +316,40 @@ final class MacPlatformServices: NSObject {
 
     func showRecentTasks() {
         guard !model.isBusy, !model.sharing, let window = window, window.attachedSheet == nil else { return }
-        let tasks = deliveryStore.tasks().filter { !$0.results.isEmpty }
-        guard !tasks.isEmpty else { model.errorMessage = "尚无可恢复的转换结果"; return }
-        let alert = NSAlert(); alert.messageText = "最近转换结果"
-        alert.informativeText = "取消或失败后可重试交付，无须重新转换。清理只删除应用缓存，不删除用户输出文件夹或图库照片。"
-        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 330, height: 28), pullsDown: false)
-        popup.addItems(withTitles: tasks.map { "\(DateFormatter.localizedString(from: $0.created, dateStyle: .short, timeStyle: .short)) · \($0.results.count) 张 · \($0.settings.destination.title) · \($0.settings.destination.shares ? $0.shareState : $0.importSummary.components(separatedBy: "\n").first ?? "")" })
-        alert.accessoryView = popup
-        alert.addButton(withTitle: "再次交付"); alert.addButton(withTitle: "查看文件"); alert.addButton(withTitle: "清理缓存"); alert.addButton(withTitle: "取消")
-        alert.beginSheetModal(for: window) { response in
-            let task = tasks[max(0, popup.indexOfSelectedItem)]; self.lastTask = task
-            switch response {
-            case .alertFirstButtonReturn:
-                if task.settings.direction == .toAndroid { self.shareResults() } else { self.importTask(task) }
-            case .alertSecondButtonReturn:
-                let url = task.settings.destination.usesCache ? self.deliveryStore.taskFolder(task.id) : URL(fileURLWithPath: task.output)
-                NSWorkspace.shared.open(url)
-            case .alertThirdButtonReturn:
-                do { try self.deliveryStore.removeTask(task, active: [])
-                    self.lastTask = self.deliveryStore.tasks().first(where: { !$0.results.isEmpty }); self.model.shareReady = self.lastTask?.settings.direction == .toAndroid
-                    self.model.recentTasksAvailable = self.lastTask != nil
-                } catch { self.model.errorMessage = error.localizedDescription }
-            default: break
-            }
+        let panel = NSWindow(contentRect: NSRect(x: 0, y: 0,
+            width: min(660, max(380, window.contentLayoutRect.width - 24)),
+            height: min(580, max(380, window.contentLayoutRect.height - 24))),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        panel.title = "最近转换结果"
+        panel.minSize = NSSize(width: 380, height: 380)
+        panel.isReleasedWhenClosed = false
+        var retryTask: DeliveryTask?
+        panel.contentView = NSHostingView(rootView: RecentTasksView(
+            model: model, initialTasks: deliveryStore.tasks().filter { !$0.results.isEmpty },
+            close: { window.endSheet(panel) },
+            retry: { task in retryTask = task; window.endSheet(panel) },
+            remove: { [weak self] task in
+                guard let self = self, !self.model.isBusy, !self.model.sharing else { throw Failure("请先完成当前任务或共享") }
+                try self.deliveryStore.removeTask(task, active: [])
+                let tasks = self.deliveryStore.tasks().filter { !$0.results.isEmpty }
+                self.lastTask = tasks.first
+                self.model.shareReady = self.lastTask?.settings.direction == .toAndroid
+                self.model.recentTasksAvailable = !tasks.isEmpty
+                return tasks
+            }))
+        window.beginSheet(panel) { [weak self] _ in
+            panel.orderOut(nil)
+            panel.contentView = nil
+            guard let self = self, let task = retryTask, !self.model.isBusy, !self.model.sharing else { return }
+            self.lastTask = task
+            self.model.shareReady = task.settings.direction == .toAndroid
+            if task.settings.direction == .toAndroid { self.shareResults() }
+            else { self.importTask(task) }
         }
     }
 
     func openOutput() {
-        let destination = model.settings.destination.usesCache ? lastTask.map { URL(fileURLWithPath: $0.output) } ?? model.output : model.output
-        guard let output = destination, FileManager.default.fileExists(atPath: output.path) else {
-            model.errorMessage = "输出文件夹将在转换时创建。"; return
-        }
+        guard model.canOpenOutput, let output = model.outputToOpen else { return }
         NSWorkspace.shared.open(output)
     }
 
@@ -426,5 +432,121 @@ final class MacPlatformServices: NSObject {
         stopMonitoring(); readerToken?.cancel(); libraryReader?.cancel()
         for root in ownedPhotoCopies { try? FileManager.default.removeItem(at: root) }
         ownedPhotoCopies.removeAll()
+    }
+}
+
+// Presentation only: retry and cache removal keep the existing delivery/store paths.
+private struct RecentTasksView: View {
+    @ObservedObject var model: WorkspaceModel
+    @State private var tasks: [DeliveryTask]
+    @State private var selection: String?
+    @State private var cleanupPresented = false
+    @State private var cleanupError: String?
+    let close: () -> Void
+    let retry: (DeliveryTask) -> Void
+    let remove: (DeliveryTask) throws -> [DeliveryTask]
+
+    init(model: WorkspaceModel, initialTasks: [DeliveryTask], close: @escaping () -> Void,
+         retry: @escaping (DeliveryTask) -> Void, remove: @escaping (DeliveryTask) throws -> [DeliveryTask]) {
+        self.model = model
+        _tasks = State(initialValue: initialTasks)
+        _selection = State(initialValue: initialTasks.first?.id)
+        self.close = close; self.retry = retry; self.remove = remove
+    }
+
+    private var selectedTask: DeliveryTask? { tasks.first { $0.id == selection } }
+    private func existingFiles(_ task: DeliveryTask) -> [URL] {
+        task.results.flatMap(\.files).filter { FileManager.default.fileExists(atPath: $0) }
+            .map { URL(fileURLWithPath: $0) }
+    }
+    private func filesAvailable(_ task: DeliveryTask) -> Bool {
+        !task.results.isEmpty && task.results.allSatisfy { result in
+            !result.files.isEmpty && result.files.allSatisfy { FileManager.default.fileExists(atPath: $0) }
+        }
+    }
+    private func canRedeliver(_ task: DeliveryTask) -> Bool {
+        task.settings.direction == .toAndroid || task.settings.exportMode != .auxiliaryOnly
+    }
+    private func deliveryStatus(_ task: DeliveryTask) -> String {
+        if task.settings.direction == .toAndroid { return task.shareState }
+        if !task.importSummary.isEmpty { return task.importSummary }
+        return task.cancelled ? "任务已停止，已完成结果保留" : "转换结果已保存"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("最近转换结果").font(.headline)
+                Spacer()
+                Button("完成", action: close).keyboardShortcut(.defaultAction)
+            }.padding(16)
+            Divider()
+            if tasks.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "clock.arrow.circlepath").font(.title).foregroundColor(.secondary)
+                    Text("暂无转换结果").font(.headline)
+                    Text("完成转换后，可在这里查看文件或重试交付。")
+                        .foregroundColor(.secondary).multilineTextAlignment(.center)
+                }.padding().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(selection: $selection) {
+                    ForEach(tasks) { task in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(task.created, style: .date) + Text(" · ") + Text(task.created, style: .time)
+                            Text("\(task.results.count) 张 · " + task.settings.destination.title)
+                                .font(.callout).foregroundColor(.secondary)
+                        }.padding(.vertical, 4).tag(task.id)
+                    }
+                }.listStyle(.plain).frame(minHeight: 100, idealHeight: 180, maxHeight: 220)
+                Divider()
+                if let task = selectedTask {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("任务详情").font(.headline)
+                            Text("方向：" + task.settings.direction.title)
+                            Text("文件夹：" + task.output).textSelection(.enabled)
+                            if task.settings.destination.importsPhotos { Text("相册：" + task.settings.albumTitle) }
+                            Text("状态：" + deliveryStatus(task)).textSelection(.enabled)
+                            if task.cancelled { Text("任务曾停止；此处仅包含已完成结果。").foregroundColor(.secondary) }
+                            if !filesAvailable(task) { Text("结果文件已移走或缓存已清理，无法再次交付。").foregroundColor(.secondary) }
+                            HStack {
+                                if canRedeliver(task) {
+                                    Button(task.settings.direction == .toAndroid ? "再次共享…" : "再次导入系统图库…") { retry(task) }
+                                        .disabled(!filesAvailable(task) || model.isBusy || model.sharing)
+                                }
+                                Button("查看文件") {
+                                    NSWorkspace.shared.activateFileViewerSelecting(existingFiles(task))
+                                }.disabled(existingFiles(task).isEmpty)
+                            }
+                            Divider()
+                            DisclosureGroup("缓存管理") {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("仅清理此任务的应用缓存和历史记录；保留用户输出文件夹与图库照片。缓存中的结果清理后不能再次交付。")
+                                        .font(.callout).foregroundColor(.secondary)
+                                    Button("清理此任务缓存…", role: .destructive) { cleanupPresented = true }
+                                        .disabled(model.isBusy || model.sharing)
+                                    if let error = cleanupError { Text(error).foregroundColor(.red) }
+                                }.padding(.top, 8)
+                            }
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                    }.frame(maxHeight: .infinity)
+                } else {
+                    Text("选择一项结果查看详情").foregroundColor(.secondary).padding()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .background(InterfaceStyle.canvas)
+        .frame(minWidth: 350, minHeight: 340)
+        .dismissOnEscape(close)
+        .alert("清理此任务缓存？", isPresented: $cleanupPresented) {
+            Button("取消", role: .cancel) {}
+            Button("清理", role: .destructive) {
+                guard let task = selectedTask else { return }
+                do {
+                    tasks = try remove(task); selection = tasks.first?.id; cleanupError = nil
+                } catch { cleanupError = error.localizedDescription }
+            }
+        } message: { Text("应用缓存中的文件和此任务历史将被移除，用户输出文件夹与图库照片会保留。") }
     }
 }

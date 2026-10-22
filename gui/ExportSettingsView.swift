@@ -20,7 +20,7 @@ struct ExportSettingsView: View {
                     }
                     if !model.settings.destination.usesCache {
                         HStack(spacing: 8) {
-                            Text(model.output?.lastPathComponent ?? "选择原片后自动建议")
+                            Text("文件夹：" + (model.output?.lastPathComponent ?? "选择原片后自动建议"))
                                 .lineLimit(1).truncationMode(.middle)
                                 .help(model.output?.path ?? "请选择原片文件夹之外的输出位置")
                             Spacer(minLength: 0)
@@ -31,12 +31,10 @@ struct ExportSettingsView: View {
                     }
                     if model.settings.destination.importsPhotos {
                         HStack {
-                            Text(model.settings.albumTitle).lineLimit(1)
+                            Text("系统照片图库").lineLimit(1)
                             Spacer()
-                            Button("选择相册…", action: actions.chooseAlbum)
-                                .accessibilityIdentifier("choose-output-album")
                         }
-                        note("新增独立 Live Photo，不修改来源。成功后加入指定相册；失败可在最近结果中重试。")
+                        note("新增独立 Live Photo 并导入系统照片图库，不修改来源；失败可在最近结果中重试。")
                     } else if model.settings.destination.shares {
                         note("交付完整 JPG/HEIC 文件。转换结束后打开系统共享菜单，可选择 LocalSend 等已启用扩展。")
                         note("共享取消或失败时保留文件，可在最近结果中再次共享。")

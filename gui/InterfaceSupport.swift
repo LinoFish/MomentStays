@@ -45,6 +45,7 @@ enum InterfaceStyle {
 struct WorkspaceLayout {
     let size: CGSize
     var compact: Bool { size.width < 640 }
+    var stackedFooter: Bool { size.width < 800 }
     var supportsInspector: Bool { size.width >= 960 }
     var short: Bool { size.height < 560 }
     var inspectorWidth: CGFloat { min(340, max(280, size.width * 0.27)) }
@@ -96,4 +97,11 @@ extension View {
         self
         #endif
     }
+}
+
+// Width is measured inside the queue, after the inspector has taken its space.
+struct QueueLayout {
+    let width: CGFloat
+    var twoLines: Bool { width < 560 }
+    var showsCover: Bool { width >= 800 }
 }

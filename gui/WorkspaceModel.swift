@@ -102,6 +102,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var shareReady = false
     @Published var sharing = false
     @Published var recentTasksAvailable = false
+    @Published var recentOutput: URL?
     @Published var settingsPresented = false
     @Published var advancedExpanded = false
     @Published var detailExpanded = false
@@ -119,6 +120,13 @@ final class WorkspaceModel: ObservableObject {
     init(service: ConversionServing = ConversionService()) { self.service = service }
     var isBusy: Bool { phase.isBusy }
     var canStart: Bool { !isBusy && !sharing && output != nil && items.contains { $0.isMotion } }
+    var canRescan: Bool { !isBusy && !sharing && !sources.isEmpty && !isPreview }
+    var outputToOpen: URL? { settings.destination.usesCache ? recentOutput : output }
+    var canOpenOutput: Bool {
+        guard !isPreview, let url = outputToOpen else { return false }
+        return (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+    var outputOpenHelp: String { canOpenOutput ? "打开输出文件夹" : "输出文件夹尚未创建，转换后可打开" }
     var canStop: Bool { isBusy && phase != .stopping && !isPreview }
     var selectedItem: PhotoQueueItem? { items.first { $0.id == selection } }
     var motionCount: Int { items.filter { $0.isMotion }.count }
@@ -162,7 +170,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func rescan() {
-        guard !isBusy, !sources.isEmpty, !isPreview else { return }
+        guard canRescan else { return }
         let id = begin(.scanning, message: "正在扫描照片…"), currentToken = token
         report = nil
         for index in items.indices { items[index].resultState = nil; items[index].resultDetail = nil }

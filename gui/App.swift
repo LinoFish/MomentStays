@@ -92,14 +92,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         switch item.action {
         case #selector(start): return model.canStart && !model.sharing && window?.attachedSheet == nil
         case #selector(stop): return model.canStop
-        case #selector(rescan): return !model.isBusy && !model.sharing && !model.sources.isEmpty && !model.isPreview
+        case #selector(rescan): return model.canRescan
         case #selector(chooseSources), #selector(importPhotos): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
         case #selector(chooseOutput): return !model.isBusy && !model.sharing && !model.sources.isEmpty && !model.isPreview && window?.attachedSheet == nil
         case #selector(shareResults): return model.shareReady && !model.isBusy && !model.sharing
-        case #selector(recentResults): return model.recentTasksAvailable && !model.isBusy && !model.sharing
+        case #selector(recentResults): return !model.isBusy && !model.sharing
         case #selector(stopMonitoring): return model.libraryMonitoring
         case #selector(showReport): return model.report != nil
-        case #selector(openOutput): return model.output != nil && !model.isPreview
+        case #selector(openOutput): return model.canOpenOutput
         case #selector(showSettings): return window?.attachedSheet == nil
         default: return true
         }

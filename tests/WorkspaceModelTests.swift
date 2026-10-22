@@ -127,7 +127,9 @@ struct WorkspaceModelTests {
         let service = ControlledService(), model = WorkspaceModel(service: ControlledService())
         check(!model.canStart, "empty workspace cannot convert")
         let workspace = WorkspaceModel(service: service)
-        check(workspace.settings.options.json as NSDictionary == ConversionOptions().json as NSDictionary, "forward defaults remain compatible")
+        var expectedGUIOptions = ConversionOptions()
+        expectedGUIOptions.exportDataFiles = false
+        check(workspace.settings.options.json as NSDictionary == expectedGUIOptions.json as NSDictionary, "GUI defaults omit optional data files and preserve conversion settings")
         check(workspace.settings.options.android.json as NSDictionary == AndroidOptions().json as NSDictionary, "reverse defaults remain compatible")
         workspace.updateSettings { $0.vendor = .samsung; $0.container = .heic }
         check(workspace.settings.container == .heic, "supported vendors retain HEIC")

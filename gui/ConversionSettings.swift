@@ -68,8 +68,8 @@ enum OutputDestination: String, SettingsChoice {
     var title: String {
         switch self {
         case .folder: return "保存到文件夹"
-        case .photos: return "转换后导入相册"
-        case .folderAndPhotos: return "文件夹并导入相册"
+        case .photos: return "转换后导入系统图库"
+        case .folderAndPhotos: return "文件夹并导入系统图库"
         case .share: return "转换后直接共享"
         case .folderAndShare: return "文件夹并共享"
         }
@@ -96,7 +96,7 @@ struct ConversionSettings: Equatable, Codable {
     var gainQuality = 0.95
     var preserveJPEG = true
     var legacyHDR = true
-    var exportDataFiles = true
+    var exportDataFiles = false
     var track: VideoTrack = .primary
     var exportMode: ExportMode = .livePhoto
     var missingTime: MissingTimePolicy = .error
@@ -132,7 +132,7 @@ struct ConversionSettings: Equatable, Codable {
         direction == .toAndroid ? [.folder, .share, .folderAndShare] : exportMode == .auxiliaryOnly ? [.folder] : [.folder, .photos, .folderAndPhotos]
     }
     var actionTitle: String {
-        if destination.importsPhotos { return "转换并入相册" }
+        if destination.importsPhotos { return "转换并导入图库" }
         if destination.shares { return "转换并共享" }
         return direction == .toAndroid ? "导出到安卓" : exportMode == .auxiliaryOnly ? "导出辅助轨" : "开始转换"
     }

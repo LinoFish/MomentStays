@@ -16,10 +16,10 @@ struct WorkspaceView: View {
             VStack(spacing: 0) {
                 commandBar(layout)
                 Divider()
-                sourceSummary(layout)
+                sourceSummary(layout, showInspector: showInspector)
                 Divider()
                 HStack(spacing: 0) {
-                    PhotoQueueView(model: model, actions: actions, compact: layout.compact, short: layout.short)
+                    PhotoQueueView(model: model, actions: actions, short: layout.short)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     if showInspector {
                         Divider()
@@ -96,7 +96,7 @@ struct WorkspaceView: View {
         .recordLayout("command-bar")
     }
 
-    private func sourceSummary(_ layout: WorkspaceLayout) -> some View {
+    private func sourceSummary(_ layout: WorkspaceLayout, showInspector: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if layout.compact {
                 HStack {
@@ -106,14 +106,14 @@ struct WorkspaceView: View {
                     Spacer(minLength: 0)
                 }
                 sourceLine
-                outputLine
+                if !showInspector { outputLine }
             } else {
                 HStack(spacing: 24) {
                     sourceLine.frame(maxWidth: .infinity, alignment: .leading)
-                    outputLine.frame(maxWidth: .infinity, alignment: .leading)
+                    if !showInspector { outputLine.frame(maxWidth: .infinity, alignment: .leading) }
                 }
             }
-            if !layout.short && !layout.supportsInspector {
+            if !layout.short && !showInspector {
                 Text(model.settings.summary).font(.callout).foregroundColor(.secondary)
                     .lineLimit(1).truncationMode(.middle)
             }
@@ -133,32 +133,57 @@ struct WorkspaceView: View {
     }
 
     private var outputLine: some View {
-        HStack(spacing: 8) {
-            Image(systemName: model.settings.destination.importsPhotos ? "photo.on.rectangle" : model.settings.destination.shares ? "square.and.arrow.up" : "folder")
-                .foregroundColor(.secondary).accessibilityHidden(true)
-            Text("输出").foregroundColor(.secondary)
-            Text(outputSummary)
-                .lineLimit(1).truncationMode(.middle)
-                .help(model.settings.destination.title + "\n" + (model.output?.path ?? ""))
-                .accessibilityIdentifier("output-summary")
-            Spacer(minLength: 0)
+        Button { model.settingsPresented = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: model.settings.destination.importsPhotos ? "photo.on.rectangle" : model.settings.destination.shares ? "square.and.arrow.up" : "folder")
+                    .foregroundColor(.secondary).accessibilityHidden(true)
+                Text("输出").foregroundColor(.secondary)
+                Text(outputSummary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .help(outputSummary + "\n" + (model.output?.path ?? "") + "\n点击打开导出设置")
+                    .accessibilityIdentifier("output-summary")
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("输出：" + outputSummary + "，打开导出设置")
         .font(.callout).padding(2)
         .background(outputDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
         .onDrop(of: [.fileURL], isTargeted: $outputDropTargeted) { providers in
-            guard !model.isBusy, !model.sources.isEmpty, !model.settings.destination.usesCache else { return false }
+            guard !model.isBusy, !model.sharing, !model.sources.isEmpty, !model.settings.destination.usesCache else { return false }
             return actions.acceptDrop(providers, true)
         }
     }
 
     private var outputSummary: String {
         switch model.settings.destination {
-        case .photos: return "相册 · " + model.settings.albumTitle
-        case .folderAndPhotos: return "文件夹＋相册 · " + model.settings.albumTitle
+        case .photos: return "系统照片图库"
+        case .folderAndPhotos: return "文件夹：" + (model.output?.lastPathComponent ?? "待选择") + " · 系统照片图库"
         case .share: return "转换后共享"
         case .folderAndShare: return "文件夹＋共享 · " + (model.output?.lastPathComponent ?? "待选择")
         case .folder: return model.output?.lastPathComponent ?? "选择原片后自动建议"
         }
+    }
+
+    private var statusLine: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(model.status, systemImage: model.phase == .failed ? "exclamationmark.circle" : model.phase == .completed ? "checkmark.circle" : "info.circle")
+                .foregroundColor(model.phase == .failed ? .red : .secondary)
+                .lineLimit(1).help(model.status)
+            if let error = model.errorMessage, !error.isEmpty {
+                Label((model.phase == .failed ? "任务错误：" : "操作未完成：") + error, systemImage: "exclamationmark.circle")
+                    .foregroundColor(.red).lineLimit(1).help(error)
+            }
+        }.font(.callout)
+    }
+
+    @ViewBuilder private var secondaryActions: some View {
+        if !model.isBusy {
+            Button("最近结果…", action: actions.recentResults).disabled(model.sharing)
+        }
+        Button("打开输出文件夹", action: actions.openOutput)
+            .disabled(!model.canOpenOutput).help(model.outputOpenHelp)
     }
 
     private func taskStatus(_ layout: WorkspaceLayout) -> some View {
@@ -167,28 +192,28 @@ struct WorkspaceView: View {
                 if let progress = model.progress { ProgressView(value: progress).progressViewStyle(.linear) }
                 else { ProgressView().progressViewStyle(.linear) }
             }
-            HStack(spacing: 8) {
-                Image(systemName: model.errorMessage != nil ? "exclamationmark.circle" : model.phase == .completed ? "checkmark.circle" : "info.circle")
-                    .foregroundColor(model.errorMessage != nil ? .red : .secondary).accessibilityHidden(true)
-                Text(model.status).font(.callout).lineLimit(1).truncationMode(.middle)
-                    .help(model.errorMessage ?? model.report?.summary ?? model.status)
-                Spacer(minLength: 0)
-                if model.shareReady && !model.isBusy {
-                    Button(action: actions.shareResults) { Image(systemName: "square.and.arrow.up") }
-                        .disabled(model.sharing).help("共享完整输出文件").accessibilityLabel("共享完整输出文件")
+            if layout.stackedFooter {
+                statusLine
+                HStack(spacing: 8) {
+                    if model.errorMessage != nil { Button("查看原因") { showingError = true } }
+                    if model.report != nil { Button("报告", action: actions.showReport) }
+                    if model.shareReady && !model.isBusy {
+                        Button("共享结果", action: actions.shareResults).disabled(model.sharing)
+                    }
+                    Spacer(minLength: 0)
+                    Menu("更多") { secondaryActions }
                 }
-                if !model.isBusy {
-                    Button(action: actions.recentResults) { Image(systemName: "clock.arrow.circlepath") }
-                        .disabled(model.sharing).help("最近结果、重试交付与缓存").accessibilityLabel("最近结果与交付")
-                }
-                if model.errorMessage != nil {
-                    Button("查看原因") { showingError = true }
-                } else if model.report != nil {
-                    Button("报告", action: actions.showReport)
-                }
-                if model.output != nil && !model.isPreview {
-                    Button(action: actions.openOutput) { Image(systemName: "folder") }
-                        .help("打开输出文件夹").accessibilityLabel("打开输出文件夹")
+            } else {
+                HStack(spacing: 8) {
+                    statusLine
+                    Spacer(minLength: 0)
+                    if model.errorMessage != nil { Button("查看原因") { showingError = true } }
+                    if model.report != nil { Button("报告", action: actions.showReport) }
+                    if model.shareReady && !model.isBusy {
+                        Button(action: actions.shareResults) { Image(systemName: "square.and.arrow.up") }
+                            .disabled(model.sharing).help("共享完整输出文件").accessibilityLabel("共享完整输出文件")
+                    }
+                    secondaryActions
                 }
             }
             if model.libraryMonitoring {
@@ -197,9 +222,9 @@ struct WorkspaceView: View {
                     Button("停止监测", action: actions.toggleLibraryMonitoring).font(.caption)
                 }
             }
-            if !model.deliverySummary.isEmpty {
+            if !layout.short && !model.deliverySummary.isEmpty {
                 Text(model.deliverySummary).font(.caption).foregroundColor(.secondary).lineLimit(2).help(model.deliverySummary)
-            } else if !model.librarySummary.isEmpty && !model.isBusy {
+            } else if !layout.short && !model.librarySummary.isEmpty && !model.isBusy {
                 Text(model.librarySummary).font(.caption).foregroundColor(.secondary).lineLimit(1).help(model.librarySummary)
             }
             if !model.currentFile.isEmpty {
