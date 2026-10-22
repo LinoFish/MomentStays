@@ -483,7 +483,7 @@ open dist/MomentStays.app</pre>
     if(!still) requestAnimationFrame(frame);
   }
   var still=false, done=false, slot=document.getElementById('heroSlot'), mk=document.getElementById('heroMark');
-  function fit(){ if(!slot||slot.classList.contains('done')) return; slot.style.height=art.getBoundingClientRect().height+'px'; }
+  function fit(){ if(!slot||slot.classList.contains('done')) return; slot.style.height=art.offsetHeight+'px'; }
   function finish(){ if(done) return; done=true; head.classList.add('out'); setTag(null);
     slot.style.height=(mk.offsetHeight+14)+'px';
     slot.classList.add('done'); }
