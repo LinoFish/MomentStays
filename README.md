@@ -12,7 +12,7 @@
 
 # MomentStays — Android Motion Photo ↔ Apple Live Photo Converter for macOS
 
-Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. MomentStays preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos, in JPEG and HEIC.
+Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. MomentStays preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos — JPEG, plus validated Samsung HEIC layouts.
 
 安卓动态照片 ↔ 苹果实况照片（Live Photo）互转工具：在 Mac 上把三星、小米、Google、华为/荣耀、OPPO、vivo 的动态照片转换成 iPhone 实况照片，保留封面帧、原始音视频与 Ultra HDR，不重新编码，全部本地处理，并可直接导入「照片」图库。
 
@@ -95,7 +95,7 @@ Some validated private static extensions can be retained as opaque data. Retaini
 | --- | --- |
 | Android → Apple | Google-compatible Motion Photo JPEG, supported Huawei/Honor, Samsung SEF, OPPO and vivo V2 containers; validated Samsung HEIC layouts → JPEG/HEIC + MOV |
 | Apple → Android, JPEG | Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, vivo V2 |
-| Apple → Android, HEIC | Google, Xiaomi, Samsung; retains the existing HEIC encoding |
+| Apple → Android, HEIC | Samsung; retains the existing HEIC encoding (Google and Xiaomi Motion Photos do not use HEIC) |
 
 Batch processing includes progress, cancellation, verified resume, skip/overwrite decisions, optional JSON manifests/reports, and separate auxiliary-track export. A single-frame auxiliary track is never stretched into fabricated motion.
 
@@ -196,7 +196,7 @@ Add the Motion Photo file (or a folder, or a Photos-library selection) in Moment
 
 ### Can I convert an iPhone Live Photo back to an Android Motion Photo?
 
-Yes. In the Apple → Android direction, MomentStays reads the paired image + MOV and its still-image-time marker, and writes a Motion Photo for Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, or vivo V2 layouts (JPEG), or Google, Xiaomi, and Samsung layouts (HEIC).
+Yes. In the Apple → Android direction, MomentStays reads the paired image + MOV and its still-image-time marker, and writes a Motion Photo for Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, or vivo V2 layouts (JPEG), or the Samsung layout (HEIC; Google and Xiaomi Motion Photos are JPEG-only).
 
 ### Does converting a Motion Photo lose quality?
 
