@@ -23,7 +23,7 @@ enum AndroidVendor: String, SettingsChoice {
         case .vivo: return "vivo V2"
         }
     }
-    var supportsHEIC: Bool { [.google, .xiaomi, .samsung].contains(self) }
+    var supportsHEIC: Bool { self == .samsung }
 }
 
 enum PhotoContainer: String, SettingsChoice {
