@@ -14,7 +14,7 @@
 
 Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. MomentStays preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos — JPEG, plus validated Samsung HEIC layouts.
 
-安卓动态照片 ↔ 苹果实况照片（Live Photo）互转工具：在 Mac 上把三星、小米、Google、华为/荣耀、OPPO、vivo 的动态照片转换成 iPhone 实况照片，保留封面帧、原始音视频与 Ultra HDR，不重新编码，全部本地处理，并可直接导入「照片」图库。
+安卓动态照片 ↔ 苹果实况照片（Live Photo）互转工具：在 Mac 上把三星、小米、Google、华为/荣耀、OPPO、vivo 的动态照片转换成 iPhone 实况照片，保留封面帧、原始音视频与 Ultra HDR，音视频不重新编码，全部本地处理，并可直接导入「照片」图库。
 
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-12%2B-black" alt="macOS 12+">
@@ -200,7 +200,7 @@ Yes. In the Apple → Android direction, MomentStays reads the paired image + MO
 
 ### Does converting a Motion Photo lose quality?
 
-No video or audio re-encoding takes place: the original compressed samples are remuxed and verified sample by sample. Supported image paths keep the original JPEG/HEIC encoding, and existing Ultra HDR gain maps are preserved.
+No video or audio re-encoding takes place: the original compressed samples are remuxed and verified sample by sample. Supported image paths keep the original JPEG/HEIC encoding, and existing Ultra HDR gain maps are preserved. One exception: Apple HEIC → Android JPEG cannot be lossless. The still image must be re-encoded because the format changes and HEIC support on Android is limited, and an Apple HDR gain map converted for Android may not be bit-exact. Choose the Samsung HEIC target to keep the original HEIC encoding.
 
 ### Which phones and formats are supported?
 
