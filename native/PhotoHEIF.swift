@@ -152,8 +152,12 @@ enum PhotoHEIF {
         guard let boundary = mpvdStart, mpvdEnd == data.count,
               vendor == nil || (vendor!.format == "samsung-sef" && vendor!.start == boundary + 8 && vendor!.end <= mpvdEnd) else { throw Failure("三星 HEIC 的 mpvd/SEF 视频边界不一致") }
         let still = Array(data[..<boundary]); let value = try layout(still)
-        let xmps = value.items.filter { $0.type == "mime" }
-        guard xmps.count == 1 else { throw Failure("三星 HEIC 缺少唯一 XMP 项目") }
+        let xmps = try value.items.filter { item in
+            guard item.type == "mime" else { return false }
+            let wrapper = [UInt8]([255,216]) + (try MLJPEG.app(225,MLXMP.header + bytes(still,item))) + [255,217]
+            return try MLXMP.integer(MLXMP.packets(wrapper),"MotionPhoto") == 1
+        }
+        guard xmps.count == 1 else { throw Failure("HEIC 缺少唯一动态照片 XMP 项目") }
         let wrapped = [UInt8]([255,216]) + (try MLJPEG.app(225,MLXMP.header + bytes(still,xmps[0]))) + [255,217]
         let packets = try MLXMP.packets(wrapped)
         guard try MLXMP.integer(packets,"MotionPhoto") == 1 else { throw Failure(PhotoFormat.notMotion) }

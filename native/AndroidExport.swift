@@ -134,12 +134,53 @@ enum AndroidExport {
         }
         return ["tracks":report,"video_reencoded":false,"audio_reencoded":false]
     }
-    static func xmp(vendor:String, length:Int, time:Int, heic:Bool) -> String {
+    static func xmp(vendor:String, length:Int, time:Int, heic:Bool, gainLength:Int = 0) -> String {
         let extra: String
         if vendor == "oppo" { extra = "xmlns:OpCamera=\"\(VendorMotion.oppo)\" OpCamera:MotionPhotoPrimaryPresentationTimestampUs=\"\(time)\" OpCamera:VideoLength=\"\(length)\"" }
         else if vendor == "vivo" { extra = "xmlns:Vivo=\"\(VendorMotion.vivo)\" Vivo:VMotionPhotoVersion=\"2\" Vivo:VMotionPhotoSource=\"1\"" }
         else { extra = "" }
-        return "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"\(MLXMP.rdf)\"><rdf:Description xmlns:GCamera=\"\(MLXMP.camera)\" xmlns:Container=\"\(MLXMP.container)\" xmlns:Item=\"\(MLXMP.item)\" \(extra) GCamera:MotionPhoto=\"1\" GCamera:MotionPhotoVersion=\"1\" GCamera:MotionPhotoPresentationTimestampUs=\"\(time)\"><Container:Directory><rdf:Seq><rdf:li rdf:parseType=\"Resource\"><Container:Item Item:Semantic=\"Primary\" Item:Mime=\"image/\(heic ? "heic" : "jpeg")\" Item:Length=\"0\" Item:Padding=\"\(heic ? 8 : 0)\"/></rdf:li><rdf:li rdf:parseType=\"Resource\"><Container:Item Item:Semantic=\"MotionPhoto\" Item:Mime=\"video/mp4\" Item:Length=\"\(length)\"/></rdf:li></rdf:Seq></Container:Directory></rdf:Description></rdf:RDF></x:xmpmeta>"
+        let hdr = gainLength > 0 ? "xmlns:hdrgm=\"\(MLXMP.hdr)\" hdrgm:Version=\"1.0\"" : ""
+        let gain = gainLength > 0 ? "<rdf:li rdf:parseType=\"Resource\"><Container:Item Item:Semantic=\"GainMap\" Item:Mime=\"image/jpeg\" Item:Length=\"\(gainLength)\"/></rdf:li>" : ""
+        return "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"\(MLXMP.rdf)\"><rdf:Description xmlns:GCamera=\"\(MLXMP.camera)\" xmlns:Container=\"\(MLXMP.container)\" xmlns:Item=\"\(MLXMP.item)\" \(extra) \(hdr) GCamera:MotionPhoto=\"1\" GCamera:MotionPhotoVersion=\"1\" GCamera:MotionPhotoPresentationTimestampUs=\"\(time)\"><Container:Directory><rdf:Seq><rdf:li rdf:parseType=\"Resource\"><Container:Item Item:Semantic=\"Primary\" Item:Mime=\"image/\(heic ? "heic" : "jpeg")\" Item:Length=\"0\" Item:Padding=\"\(heic ? 8 : 0)\"/></rdf:li>\(gain)<rdf:li rdf:parseType=\"Resource\"><Container:Item Item:Semantic=\"MotionPhoto\" Item:Mime=\"video/mp4\" Item:Length=\"\(length)\"/></rdf:li></rdf:Seq></Container:Directory></rdf:Description></rdf:RDF></x:xmpmeta>"
+    }
+    // JPEG readers commonly use a single standard XMP packet. HDR and motion
+    // must share one directory: Primary, optional GainMap, MotionPhoto.
+    static func unifiedJPEG(_ still:[UInt8], motion:String) throws -> [UInt8] {
+        let packets = try MLXMP.packets(still)
+        let output = try XMLDocument(xmlString:motion,options:[.nodeLoadExternalEntitiesNever])
+        guard let rdf = MLXMP.all(output).first(where: { MLXMP.uri($0) == MLXMP.rdf && $0.localName == "RDF" }) else { throw Failure("动态照片 XMP 缺少 RDF") }
+        var changed: Set<Int> = []
+        let standard = packets.indices.filter { packets[$0].guid == nil }
+        for (i,packet) in packets.enumerated() {
+            for element in MLXMP.all(packet.document).reversed() {
+                for attr in element.attributes ?? [] where MLXMP.uri(attr) == MLXMP.hdr && attr.localName == "Version" { attr.detach(); changed.insert(i) }
+                if (MLXMP.uri(element) == MLXMP.container && element.localName == "Directory") || (MLXMP.uri(element) == MLXMP.hdr && element.localName == "Version") { element.detach(); changed.insert(i) }
+            }
+            if packet.guid == nil {
+                for description in MLXMP.all(packet.document).filter({ MLXMP.uri($0) == MLXMP.rdf && $0.localName == "Description" && MLXMP.uri($0.parent ?? $0) == MLXMP.rdf && $0.parent?.localName == "RDF" }) {
+                    let copy = description.copy() as! XMLElement
+                    var scope: [String:XMLNode] = [:], ancestors: [XMLElement] = []
+                    var ancestor: XMLNode? = description
+                    while let value = ancestor { if let element = value as? XMLElement { ancestors.append(element) }; ancestor = value.parent }
+                    for element in ancestors.reversed() { for namespace in element.namespaces ?? [] { scope[namespace.name ?? ""] = namespace } }
+                    for namespace in scope.values where copy.namespaces?.contains(where: { $0.name == namespace.name }) != true { copy.addNamespace(namespace.copy() as! XMLNode) }
+                    rdf.addChild(copy)
+                }
+            }
+        }
+        let result: [UInt8]
+        if let first = standard.first {
+            packets[first].document.setRootElement(output.rootElement()!.copy() as! XMLElement)
+            changed.insert(first)
+            var replacements = try MLXMP.rewrites(packets,changed:changed)
+            for i in standard.dropFirst() { replacements[packets[i].segment.start] = [] }
+            result = try MLJPEG.edit(still,replacements:replacements)
+        } else { result = try MLJPEG.edit(still,replacements:[:],insert:MLXMP.segment(output)) }
+        let after = try MLXMP.packets(result)
+        guard after.filter({ $0.guid == nil }).count == 1,
+              after.flatMap({ MLXMP.all($0.document) }).filter({ MLXMP.uri($0) == MLXMP.container && $0.localName == "Directory" }).count == 1,
+              try MLJPEG.auxiliary(still).dropFirst().map({ sha(Data($0)) }) == MLJPEG.auxiliary(result).dropFirst().map({ sha(Data($0)) }) else { throw Failure("HDR/动态照片合并元数据校验失败") }
+        return result
     }
     static func samsungSEF(videoStart:Int, length:Int) throws -> [UInt8] {
         guard videoStart <= Int(UInt32.max), length <= Int(UInt32.max) else { throw Failure("三星 SEF 4 GiB 范围超限") }
@@ -154,8 +195,11 @@ enum AndroidExport {
         let image: [UInt8]
         if heic { image = try HEIFMetadata.write(still,xmp:Binary.string(xml)) }
         else {
-            let cleaned = try PhotoFormat.liveStill(still,uuid:"ANDROID-EXPORT-" + UUID().uuidString)
-            image = try MLJPEG.edit(cleaned,replacements:[:],insert:MLJPEG.app(225,MLXMP.header + Binary.string(xml)))
+            let cleaned = try PhotoFormat.liveStill(still,uuid:"",updateIdentifier:false)
+            let maps = try MLJPEG.auxiliary(cleaned)
+            guard maps.count <= 2 else { throw Failure("动态照片含多个辅助 JPEG，无法安全建立目录") }
+            let document = xmp(vendor:options.vendor,length:video.count,time:time,heic:false,gainLength:maps.count == 2 ? maps[1].count : 0)
+            image = try unifiedJPEG(cleaned,motion:document)
         }
         let start = image.count + (heic ? 8 : 0)
         let tail = options.vendor == "samsung" ? try samsungSEF(videoStart:start,length:video.count) : []
@@ -176,6 +220,7 @@ extension AndroidExport {
         let sourceHash = try NativeBatch.hashFile(source)
         if !overwrite && fm.fileExists(atPath:target.path) {
             let previous = try NativeBatch.verify(target)
+            guard previous["implementation"] as? String == "reverse-native-1.2.1" else { throw Failure("已有输出使用旧版 HDR 封装，请选择覆盖以修复") }
             guard previous["source_sha256"] as? String == sourceHash, let previousOptions = previous["options"] as? [String:Any], (previousOptions as NSDictionary).isEqual(to:options.json),
                   let oldMovie = previous["paired_video_source"] as? String, let oldHash = previous["paired_video_sha256"] as? String, try NativeBatch.hashFile(URL(fileURLWithPath:oldMovie)) == oldHash else { throw Failure("已有输出的输入或设置不同，请选择覆盖或跳过") }
             return ["status":"resumed","source":source.path,"output":target.path,"detail":"已验证安卓动态照片，跳过重复转换"]
@@ -201,7 +246,7 @@ extension AndroidExport {
         if let date = try source.resourceValues(forKeys:[.contentModificationDateKey]).contentModificationDate { try fm.setAttributes([.modificationDate:date],ofItemAtPath:file.path) }
         timing["source_still_image_time_seconds"] = seconds(paired.cover); timing["cover_timestamp_us"] = time; timing["cover_frame_index"] = paired.frame
         let warnings = config.container == "heic" ? ["HEIC 原始 HDR 编码已保留；目标安卓厂商对 Apple 私有 HDR 的显示兼容性需真机验证"] : ["厂商封装已通过本地解析校验；不同手机固件识别与 HDR 显示仍需真机验证"]
-        let manifest: [String:Any] = ["version":"1.2.0","implementation":"reverse-native-1.2.0","source":source.path,"source_sha256":sourceHash,
+        let manifest: [String:Any] = ["version":"1.2.1","implementation":"reverse-native-1.2.1","source":source.path,"source_sha256":sourceHash,
             "paired_video_source":paired.movie.path,"paired_video_sha256":videoHash,"options":options.json,"identifier":paired.identifier,
             "output_files":["motionphoto":name],"output_sha256":[name:sha(Data(result))],"timing":timing,"hdr":hdr,"warnings":warnings]
         try NativeBatch.json(manifest,to:stage.appendingPathComponent("manifest.json"))

@@ -788,14 +788,16 @@ enum PhotoFormat {
             "repaired_duration_seconds":Double(auxTicks) / Double(auxScale),"sample_pts_unchanged":true,
             "original_sample_sha256":sha(Data(data[offset..<offset + size]))])
     }
-    static func liveStill(_ original: [UInt8], uuid: String) throws -> [UInt8] {
+    static func liveStill(_ original: [UInt8], uuid: String, updateIdentifier: Bool = true) throws -> [UInt8] {
         if PhotoHEIF.matches(original) { return try PhotoHEIF.liveStill(original,uuid:uuid) }
         let data = try MLJPEG.staticOnly(original)
         var replacements: [Int:[UInt8]] = [:], insertion: [UInt8] = []
         let exifs = try MLJPEG.segments(data).filter { $0.marker == 225 && $0.payload.starts(with: MLJPEG.exif) }
         guard exifs.count <= 1 else { throw Failure("JPEG 包含多个 EXIF 数据段") }
-        if let s = exifs.first { replacements[s.start] = try MLJPEG.app(225, MLJPEG.exifIdentifier(s.payload, uuid: uuid)) }
-        else { insertion = try MLJPEG.app(225, MLJPEG.exifIdentifier(nil, uuid: uuid)) }
+        if updateIdentifier {
+            if let s = exifs.first { replacements[s.start] = try MLJPEG.app(225, MLJPEG.exifIdentifier(s.payload, uuid: uuid)) }
+            else { insertion = try MLJPEG.app(225, MLJPEG.exifIdentifier(nil, uuid: uuid)) }
+        }
         let keys: Set<String> = ["MotionPhoto", "MotionPhotoVersion", "MotionPhotoPresentationTimestampUs", "MicroVideo", "MicroVideoVersion", "MicroVideoOffset", "MicroVideoPresentationTimestampUs", "MediaDataOffset"]
         let vendorKeys: Set<String> = ["MotionPhotoPrimaryPresentationTimestampUs","MotionPhotoOwner","OLivePhotoVersion","VideoLength","MediaDataOffset","VMotionPhotoVersion","VMotionPhotoSource","VMediaKitVersion"]
         func isMotion(_ node: XMLNode) -> Bool {

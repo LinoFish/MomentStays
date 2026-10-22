@@ -1,136 +1,140 @@
 import AppKit
 import Photos
 
-// PHPicker needs macOS 13. This macOS 12 picker reads only selected asset
-// resources, never writes to the user's library or substitutes a preview JPEG.
+// macOS 12 picker. Original bytes are read only on user action; cloud downloads opt in.
 final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var sheet: NSWindow!
     private let table = NSTableView()
-    private let message = NSTextField(labelWithString:"选择实况照片；iCloud 原件可能需要下载。图库不会被修改。")
-    private let importButton = NSButton(title:"导入选中实况",target:nil,action:nil)
-    private let cancelButton = NSButton(title:"取消",target:nil,action:nil)
+    private let message = NSTextField(labelWithString: "仅访问系统图库；选择范围后扫描。原片不会被修改。")
+    private let importButton = NSButton(title: "读取所选", target: nil, action: nil)
+    private let cancelButton = NSButton(title: "取消", target: nil, action: nil)
+    private let allButton = NSButton(title: "扫描范围内全部", target: nil, action: nil)
+    private let albumPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let versionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let network = NSButton(checkboxWithTitle: "允许下载 iCloud 原件", target: nil, action: nil)
+    private let monitor = NSButton(checkboxWithTitle: "监测此范围新增/编辑照片并自动转换（运行期间）", target: nil, action: nil)
+    private var albums: [PHAssetCollection] = []
     private var assets: PHFetchResult<PHAsset>!
     private let images = PHCachingImageManager()
+    private let service = PhotoLibraryService()
     private let token = StopToken()
-    private var importing = false
-    private let lock = NSLock()
-    private var requests: [PHAssetResourceDataRequestID] = []
-    private let completion: ([URL],Error?)->Void
+    private let store: DeliveryStore
+    private let direction: ConversionDirection
+    private var importing = false, finished = false
+    var onProgress: (String) -> Void = { _ in }
+    private(set) var origins: [String: LibraryOrigin] = [:]
+    private(set) var selectedScope: LibraryScope
+    private(set) var wantsMonitoring = false
+    var wasCancelled: Bool { token.isCancelled }
+    private(set) var summary = ""
+    private let completion: ([URL], Error?) -> Void
     private weak var parent: NSWindow?
-    init(completion:@escaping ([URL],Error?)->Void) { self.completion = completion }
-    func present(_ parent:NSWindow) {
+    init(direction: ConversionDirection = .toAndroid, version: LibraryVersion = .original, store: DeliveryStore = DeliveryStore(), completion: @escaping ([URL], Error?) -> Void) {
+        self.direction = direction; self.store = store; self.completion = completion
+        selectedScope = LibraryScope(direction: direction, version: version, networkAllowed: false)
+    }
+    func present(_ parent: NSWindow) {
         self.parent = parent
-        func proceed(_ status:PHAuthorizationStatus) {
-            DispatchQueue.main.async {
-                guard status == .authorized || status == .limited else {
-                    self.completion([],Failure("没有照片图库读取权限。可在系统设置授权，或使用导出的完整 HEIC/JPEG + MOV 配对文件。")); return
-                }
-                self.build(parent)
+        PhotoLibraryService.authorize { [weak self] result in
+            guard let self = self, !self.finished else { return }
+            switch result {
+            case .success: self.build(parent)
+            case .failure(let error): self.finish([], error)
             }
         }
-        let status = PHPhotoLibrary.authorizationStatus(for:.readWrite)
-        if status == .notDetermined { PHPhotoLibrary.requestAuthorization(for:.readWrite,handler:proceed) }
-        else { proceed(status) }
     }
-    private func build(_ parent:NSWindow) {
-        let options = PHFetchOptions()
-        options.predicate = NSPredicate(format:"(mediaSubtypes & %d) != 0",PHAssetMediaSubtype.photoLive.rawValue)
-        options.sortDescriptors = [NSSortDescriptor(key:"creationDate",ascending:false)]
-        assets = PHAsset.fetchAssets(with:.image,options:options)
-        sheet = NSWindow(contentRect:NSRect(x:0,y:0,width:680,height:480),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
-        sheet.title = "从「照片」选择实况"; sheet.minSize = NSSize(width:480,height:360)
+    private func build(_ parent: NSWindow) {
+        let width = min(720, max(366, (parent.contentView?.bounds.width ?? 720) - 24))
+        let height = min(580, max(430, (parent.contentView?.bounds.height ?? 600) - 40))
+        sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        sheet.title = direction == .toAndroid ? "系统图库 · Apple 实况" : "系统图库 · 识别安卓动态照片"
+        sheet.minSize = NSSize(width: 366, height: 430)
+        albums = PhotoLibraryService.albums(); albumPopup.addItem(withTitle: "整个系统照片图库")
+        albumPopup.addItems(withTitles: albums.map { $0.localizedTitle ?? "未命名相册" })
+        albumPopup.target = self; albumPopup.action = #selector(changeScope)
+        versionPopup.addItems(withTitles: LibraryVersion.allCases.map(\.title)); versionPopup.selectItem(at: selectedScope.version == .original ? 0 : 1)
+        versionPopup.target = self; versionPopup.action = #selector(changeScope)
         table.delegate = self; table.dataSource = self; table.rowHeight = 54; table.allowsMultipleSelection = true; table.style = .fullWidth
-        for (id,title,width) in [("image","照片",70.0),("name","文件 / 拍摄时间",440.0),("size","尺寸",120.0)] {
-            let column = NSTableColumn(identifier:NSUserInterfaceItemIdentifier(id)); column.title = title; column.width = width; table.addTableColumn(column)
+        for (id, title, size) in [("image", "照片", 60.0), ("name", "文件 / 拍摄时间", width - 100)] {
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(id)); column.title = title; column.width = size
+            column.minWidth = id == "image" ? 60 : 180; if id == "image" { column.maxWidth = 60 }; table.addTableColumn(column)
         }
+        table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.documentView = table
-        importButton.target = self; importButton.action = #selector(importSelected); importButton.bezelStyle = .rounded; importButton.keyEquivalent = "\r"; importButton.isEnabled = false
-        cancelButton.target = self; cancelButton.action = #selector(cancel); cancelButton.bezelStyle = .rounded; cancelButton.keyEquivalent = "\u{1b}"
-        let gap = NSView(); gap.setContentHuggingPriority(.init(1),for:.horizontal)
-        let buttons = NSStackView(views:[cancelButton,gap,importButton]); buttons.orientation = .horizontal
-        message.font = .systemFont(ofSize:12); message.lineBreakMode = .byTruncatingMiddle
-        let content = NSStackView(views:[message,scroll,buttons]); content.orientation = .vertical; content.spacing = 12; content.alignment = .leading
-        content.translatesAutoresizingMaskIntoConstraints = false; sheet.contentView!.addSubview(content)
-        NSLayoutConstraint.activate([content.topAnchor.constraint(equalTo:sheet.contentView!.topAnchor,constant:14),content.bottomAnchor.constraint(equalTo:sheet.contentView!.bottomAnchor,constant:-14),content.leadingAnchor.constraint(equalTo:sheet.contentView!.leadingAnchor,constant:14),content.trailingAnchor.constraint(equalTo:sheet.contentView!.trailingAnchor,constant:-14)])
-        for child in content.arrangedSubviews { child.translatesAutoresizingMaskIntoConstraints = false; child.widthAnchor.constraint(equalTo:content.widthAnchor).isActive = true }
-        scroll.setContentHuggingPriority(.init(1),for:.vertical)
-        if assets.count == 0 { message.stringValue = "图库中未找到可读取的实况照片。可取消后选择导出的完整原片配对。" }
-        parent.beginSheet(sheet)
+        for (button, action) in [(importButton, #selector(importSelected)), (allButton, #selector(readAll)), (cancelButton, #selector(cancel))] {
+            button.target = self; button.action = action; button.bezelStyle = .rounded
+        }
+        importButton.keyEquivalent = "\r"; importButton.isEnabled = false; cancelButton.keyEquivalent = "\u{1b}"
+        network.font = .systemFont(ofSize: 11); monitor.font = .systemFont(ofSize: 11)
+        monitor.toolTip = "仅监测当前相册/方向。应用退出后停止，不在后台常驻。"
+        let gap = NSView(); gap.setContentHuggingPriority(.init(1), for: .horizontal)
+        let buttons = NSStackView(views: [cancelButton, gap, allButton, importButton]); buttons.orientation = .horizontal
+        message.font = .systemFont(ofSize: 11); message.maximumNumberOfLines = 2; message.lineBreakMode = .byTruncatingMiddle
+        let content = NSStackView(views: [albumPopup, versionPopup, message, scroll, network, monitor, buttons])
+        content.orientation = .vertical; content.spacing = 8; content.alignment = .leading; content.translatesAutoresizingMaskIntoConstraints = false
+        sheet.contentView!.addSubview(content)
+        NSLayoutConstraint.activate([content.topAnchor.constraint(equalTo: sheet.contentView!.topAnchor, constant: 12), content.bottomAnchor.constraint(equalTo: sheet.contentView!.bottomAnchor, constant: -12), content.leadingAnchor.constraint(equalTo: sheet.contentView!.leadingAnchor, constant: 12), content.trailingAnchor.constraint(equalTo: sheet.contentView!.trailingAnchor, constant: -12)])
+        for view in [albumPopup, versionPopup, message, scroll, buttons] { view.translatesAutoresizingMaskIntoConstraints = false; view.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true }
+        scroll.setContentHuggingPriority(.init(1), for: .vertical)
+        changeScope(); parent.beginSheet(sheet)
     }
-    func numberOfRows(in tableView:NSTableView) -> Int { assets?.count ?? 0 }
-    func tableView(_ tableView:NSTableView, viewFor column:NSTableColumn?, row:Int) -> NSView? {
-        guard row < assets.count, let column = column else { return nil }; let asset = assets.object(at:row)
+    @objc private func changeScope() {
+        guard !importing else { return }
+        selectedScope.albumID = albumPopup.indexOfSelectedItem > 0 ? albums[albumPopup.indexOfSelectedItem - 1].localIdentifier : nil
+        selectedScope.version = versionPopup.indexOfSelectedItem == 1 ? .edited : .original
+        assets = PhotoLibraryService.fetch(selectedScope); table.reloadData(); importButton.isEnabled = false
+        allButton.isEnabled = assets.count > 0
+        message.stringValue = "\(assets.count) 张候选 · 安卓动态需读取原始文件识别；云端文件仅在允许后下载。"
+    }
+    func numberOfRows(in tableView: NSTableView) -> Int { assets?.count ?? 0 }
+    func tableView(_ tableView: NSTableView, viewFor column: NSTableColumn?, row: Int) -> NSView? {
+        guard row < assets.count, let column = column else { return nil }; let asset = assets.object(at: row)
         if column.identifier.rawValue == "image" {
             let view = NSImageView(); view.imageScaling = .scaleProportionallyUpOrDown
-            images.requestImage(for:asset,targetSize:NSSize(width:88,height:88),contentMode:.aspectFit,options:nil) { [weak view] image,_ in DispatchQueue.main.async { view?.image = image } }
+            let options = PHImageRequestOptions(); options.isNetworkAccessAllowed = false
+            images.requestImage(for: asset, targetSize: NSSize(width: 88, height: 88), contentMode: .aspectFit, options: options) { [weak view] image, _ in DispatchQueue.main.async { view?.image = image } }
             return view
         }
-        let field = NSTextField(labelWithString:""); field.font = .systemFont(ofSize:12); field.lineBreakMode = .byTruncatingMiddle
-        if column.identifier.rawValue == "size" { field.stringValue = "\(asset.pixelWidth) × \(asset.pixelHeight)" }
-        else {
-            let resource = PHAssetResource.assetResources(for:asset).first { $0.type == .photo }
-            let date = asset.creationDate.map { DateFormatter.localizedString(from:$0,dateStyle:.medium,timeStyle:.short) } ?? "未知时间"
-            field.stringValue = (resource?.originalFilename ?? "实况照片") + "\n" + date
-            field.maximumNumberOfLines = 2
-        }
+        let resources = PHAssetResource.assetResources(for: asset)
+        let name = resources.first(where: { $0.type == .photo })?.originalFilename ?? "照片"
+        let date = asset.creationDate.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short) } ?? "未知时间"
+        let field = NSTextField(labelWithString: name + "\n" + date + " · \(asset.pixelWidth) × \(asset.pixelHeight)")
+        field.maximumNumberOfLines = 2; field.font = .systemFont(ofSize: 12); field.lineBreakMode = .byTruncatingMiddle; field.toolTip = field.stringValue
         return field
     }
-    func tableViewSelectionDidChange(_ notification:Notification) {
-        guard !importing else { return }; let count = table.selectedRowIndexes.count
-        importButton.isEnabled = count > 0; importButton.title = count > 0 ? "导入 \(count) 张实况" : "导入选中实况"
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        if !importing { importButton.isEnabled = !table.selectedRowIndexes.isEmpty }
     }
-    @objc private func cancel() {
-        if importing {
-            token.cancel(); lock.lock(); let pending = requests; lock.unlock()
-            for request in pending { PHAssetResourceManager.default().cancelDataRequest(request) }
-            message.stringValue = "正在停止资源读取…"; cancelButton.isEnabled = false
-        } else { finish([],nil) }
+    @objc private func readAll() { table.selectAll(nil); importSelected() }
+    @objc func cancel() {
+        guard !finished else { return }; token.cancel(); service.cancel()
+        if importing { message.stringValue = "正在停止原件读取…"; cancelButton.isEnabled = false }
+        else { finish([], nil) }
     }
-    private func finish(_ urls:[URL],_ error:Error?) { parent?.endSheet(sheet); sheet?.orderOut(nil); completion(urls,error) }
-    private func resource(_ resource:PHAssetResource,to url:URL) throws {
-        guard !token.isCancelled else { throw Failure("已取消图库导入") }
-        FileManager.default.createFile(atPath:url.path,contents:nil)
-        let handle = try FileHandle(forWritingTo:url); defer { try? handle.close() }
-        let done = DispatchSemaphore(value:0), writeLock = NSLock(); var failure: Error?
-        let options = PHAssetResourceRequestOptions(); options.isNetworkAccessAllowed = true
-        let request = PHAssetResourceManager.default().requestData(for:resource,options:options,dataReceivedHandler: { data in
-            writeLock.lock(); defer { writeLock.unlock() }
-            if failure == nil { do { try handle.write(contentsOf:data) } catch { failure = error } }
-        },completionHandler: { error in writeLock.lock(); if let error = error { failure = error }; writeLock.unlock(); done.signal() })
-        lock.lock(); requests.append(request); lock.unlock()
-        if token.isCancelled { PHAssetResourceManager.default().cancelDataRequest(request) }
-        done.wait()
-        lock.lock(); requests.removeAll { $0 == request }; lock.unlock()
-        if let error = failure { throw error }
-        guard !token.isCancelled else { throw Failure("已取消图库导入") }
+    private func finish(_ urls: [URL], _ error: Error?) {
+        guard !finished else { return }; finished = true
+        if let sheet = sheet { parent?.endSheet(sheet); sheet.orderOut(nil) }
+        completion(urls, error)
     }
     @objc private func importSelected() {
-        guard !importing else { return }; importing = true; importButton.isEnabled = false; table.isEnabled = false
-        let selected = table.selectedRowIndexes.map { assets.object(at:$0) }
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("motionlive-photos-" + UUID().uuidString)
-        DispatchQueue.global(qos:.userInitiated).async {
+        guard !importing, !table.selectedRowIndexes.isEmpty else { return }
+        importing = true; importButton.isEnabled = false; allButton.isEnabled = false; table.isEnabled = false
+        albumPopup.isEnabled = false; versionPopup.isEnabled = false; network.isEnabled = false; monitor.isEnabled = false
+        selectedScope.networkAllowed = network.state == .on; wantsMonitoring = monitor.state == .on
+        let selected = table.selectedRowIndexes.map { assets.object(at: $0) }, scope = selectedScope
+        DispatchQueue.global(qos: .userInitiated).async {
             do {
-                var urls: [URL] = []
-                for (i,asset) in selected.enumerated() {
-                    DispatchQueue.main.async { self.message.stringValue = "读取实况资源 \(i + 1) / \(selected.count)…（可能下载 iCloud 原件）" }
-                    let resources = PHAssetResource.assetResources(for:asset)
-                    let editedPhoto = resources.first { $0.type == .fullSizePhoto }, editedVideo = resources.first { $0.type == .fullSizePairedVideo }
-                    let photo = (editedPhoto != nil && editedVideo != nil) ? editedPhoto : resources.first { $0.type == .photo }
-                    let video = (editedPhoto != nil && editedVideo != nil) ? editedVideo : resources.first { $0.type == .pairedVideo }
-                    guard let photo = photo, let video = video else { throw Failure("选中资源缺少完整实况配对，未用缩略图替代") }
-                    let folder = root.appendingPathComponent(String(i)); try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
-                    let imageURL = folder.appendingPathComponent(URL(fileURLWithPath:photo.originalFilename).lastPathComponent)
-                    var videoURL = folder.appendingPathComponent(URL(fileURLWithPath:video.originalFilename).lastPathComponent)
-                    if videoURL == imageURL { videoURL = folder.appendingPathComponent("paired.mov") }
-                    try self.resource(photo,to:imageURL); try self.resource(video,to:videoURL)
-                    if let date = asset.creationDate { for url in [imageURL,videoURL] { try FileManager.default.setAttributes([.modificationDate:date],ofItemAtPath:url.path) } }
-                    _ = try AndroidExport.pair(imageURL); urls.append(imageURL)
+                let result = try self.service.export(selected, scope: scope, store: self.store, token: self.token) { _, _, text in
+                    DispatchQueue.main.async { self.message.stringValue = text; self.onProgress(text) }
                 }
-                DispatchQueue.main.async { self.finish(urls,nil) }
-            } catch {
-                try? FileManager.default.removeItem(at:root)
-                DispatchQueue.main.async { self.finish([],error) }
-            }
+                DispatchQueue.main.async {
+                    self.origins = result.origins
+                    self.summary = "动态候选 \(result.urls.count) · 静态跳过 \(result.skipped) · 待读取 \(result.deferred)"
+                    if !result.warnings.isEmpty { self.summary += "\n" + result.warnings.prefix(5).joined(separator: "\n") }
+                    self.onProgress(self.summary)
+                    self.finish(result.urls, self.token.isCancelled ? nil : result.urls.isEmpty && result.deferred > 0 ? Failure(self.summary) : nil)
+                }
+            } catch { DispatchQueue.main.async { self.finish([], error) } }
         }
     }
 }

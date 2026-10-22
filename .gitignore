@@ -7,3 +7,26 @@ pictures/
 converted-*/
 auxiliary-exports-*/
 auxiliary-exports/
+.local-archive/
+.nimbalyst/
+.local-fixtures.json
+.env
+.env.*
+!.env.example
+local-data/
+artifacts/
+*.pem
+*.key
+
+# Personal media and generated packages must stay local, even outside data folders.
+*.[jJ][pP][gG]
+*.[jJ][pP][eE][gG]
+*.[hH][eE][iI][cC]
+*.[hH][eE][iI][fF]
+*.[pP][nN][gG]
+*.[gG][iI][fF]
+*.[wW][eE][bB][pP]
+*.[mM][oO][vV]
+*.[mM][pP]4
+*.zip
+*.dmg

@@ -96,7 +96,7 @@ func timedSamples(_ asset: AVAsset) throws -> [(CMTime, CMTime)] {
         while let group = adaptor.nextTimedMetadataGroup() {
             let markers = group.items.filter { ($0.key as? String) == "com.apple.quicktime.still-image-time" }
             if !markers.isEmpty {
-                guard markers.count == 1, markers[0].numberValue?.intValue == 0 else { throw Failure("Invalid still-image-time marker") }
+                guard markers.count == 1, let value = markers[0].numberValue?.intValue, [-1,0,255].contains(value) else { throw Failure("Invalid still-image-time marker") }
                 times.append((group.timeRange.start, group.timeRange.duration))
             }
         }
