@@ -10,6 +10,8 @@
 <meta property="og:description" content="Android Motion Photos ↔ Apple Live Photos, keeping the cover frame, the quality, and the HDR. Free & open source for macOS.">
 <meta property="og:image" content="https://opengraph.githubassets.com/1/LinoFish/MomentStays">
 <meta property="og:type" content="website">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D1B27">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F0F6F5">
 <link rel="icon" href="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" type="image/svg+xml">
 <style>
   :root{
@@ -63,15 +65,41 @@
   .download-box{text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:44px 24px}
   footer{border-top:1px solid var(--line);padding:34px 0 46px;color:var(--muted);font-size:14px;text-align:center}
   .zh{display:none}
-  body.show-zh .en{display:none}
-  body.show-zh .zh{display:block}
+  html.lang-zh .en{display:none}
+  html.lang-zh .zh{display:block}
   span.zh, a.zh{display:none}
-  body.show-zh span.zh, body.show-zh a.zh{display:inline}
-  body.show-zh span.en, body.show-zh a.en{display:none}
+  html.lang-zh span.zh, html.lang-zh a.zh{display:inline}
+  html.lang-zh span.en, html.lang-zh a.en{display:none}
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#F0F6F5; --surface:#FFFFFF; --surface2:#E7F0EE;
+      --teal:#0E7A66; --amber:#A96F14; --ink:#122A38; --muted:#47636E; --line:rgba(18,42,56,.14);
+    }
+    header{background:rgba(240,246,245,.88)}
+    .btn-primary{background:#12836C;color:#FFFFFF}
+    .card .k{color:#0E7A66}
+    .hero img.icon{box-shadow:0 18px 50px rgba(18,42,56,.22)}
+    pre{color:#122A38}
+    th{background:#E7F0EE}
+  }
   @media (max-width:640px){.hero h1{font-size:40px}.hero .slogan{font-size:21px}.nav a.link{display:none}}
 </style>
 </head>
 <body>
+<script>
+(function(){
+  var saved = null;
+  try { saved = localStorage.getItem('ms-lang'); } catch(e){}
+  var lang = saved || ((navigator.language || 'en').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en');
+  if (lang === 'zh') document.documentElement.classList.add('lang-zh');
+  document.documentElement.lang = (lang === 'zh') ? 'zh-CN' : 'en';
+})();
+function toggleLang(){
+  var zh = document.documentElement.classList.toggle('lang-zh');
+  document.documentElement.lang = zh ? 'zh-CN' : 'en';
+  try { localStorage.setItem('ms-lang', zh ? 'zh' : 'en'); } catch(e){}
+}
+</script>
 <header>
   <div class="wrap nav">
     <img src="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" alt="MomentStays icon">
@@ -80,7 +108,7 @@
     <a class="link en" href="#keeps">What it keeps</a><a class="link zh" href="#keeps">保留什么</a>
     <a class="link en" href="#support">Support</a><a class="link zh" href="#support">格式支持</a>
     <a class="link en" href="#faq">FAQ</a><a class="link zh" href="#faq">常见问题</a>
-    <button class="langbtn" onclick="document.body.classList.toggle('show-zh')">中文 / EN</button>
+    <button class="langbtn" onclick="toggleLang()">中文 / EN</button>
     <a class="btn btn-ghost" href="https://github.com/LinoFish/MomentStays">GitHub</a>
   </div>
 </header>
