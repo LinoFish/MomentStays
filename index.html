@@ -160,6 +160,43 @@
   .heroslot.done .art .head,.heroslot.done .art .tag,.heroslot.done .art .vals{opacity:0}
   .heroslot.done .mark{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
   .heroslot.instant,.heroslot.instant *{transition:none!important}
+
+  /* ---- Polish (2026-10-22) ---- */
+  header .wrap{padding-left:clamp(20px,4vw,48px);padding-right:clamp(20px,4vw,48px);max-width:1180px}
+  .nav .home{display:flex;align-items:center;gap:11px;color:var(--ink)}
+  .nav .navicon{width:32px;height:32px;filter:drop-shadow(0 2px 6px rgba(18,42,56,.14))}
+  .nav a.link{position:relative;margin:0 8px;transition:color .2s}
+  .nav a.link::after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:1.5px;background:var(--amber);transform:scaleX(0);transition:transform .25s ease}
+  .nav a.link:hover::after{transform:scaleX(1)}
+  .langbtn{transition:border-color .2s,color .2s}.langbtn:hover{color:var(--ink);border-color:var(--muted)}
+  .btn{transition:transform .2s ease,box-shadow .2s ease,background .2s}
+  .btn:hover{transform:translateY(-1px)} .btn-primary:hover{box-shadow:0 8px 22px rgba(18,131,108,.28)}
+  section{scroll-margin-top:64px} #top{scroll-margin-top:80px}
+  .card,.step{transition:transform .3s ease,box-shadow .3s ease,border-color .3s}
+  .card:hover,.step:hover{transform:translateY(-3px);box-shadow:0 14px 34px rgba(18,42,56,.10);border-color:color-mix(in srgb,var(--amber) 35%,var(--line))}
+  .step{position:relative}
+  .step .n{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--amber);color:var(--amber);font-size:14px;margin-right:10px;vertical-align:middle}
+  .step .k{font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:700;color:var(--muted);vertical-align:middle}
+  html.lang-zh .step span.k.zh{display:inline}
+  .step h3{margin-top:14px}
+  .tablewrap{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)}
+  .tablewrap table{border-style:hidden}
+  td.dir{white-space:nowrap;color:var(--ink);font-weight:600}
+  summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"";width:9px;height:9px;border-right:1.8px solid var(--muted);border-bottom:1.8px solid var(--muted);transform:rotate(45deg) translate(-2px,-2px);transition:transform .3s ease;flex:none}
+  details[open] summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+  details{transition:border-color .2s} details:hover{border-color:color-mix(in srgb,var(--amber) 35%,var(--line))}
+  details[open] p{animation:faq-in .35s ease}
+  @keyframes faq-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .fslogan{margin-top:8px;color:var(--amber);font-weight:600}
+  .sr{opacity:0;transform:translateY(18px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
+  .sr.in{opacity:1;transform:none}
+  @media (prefers-color-scheme: dark){.card:hover,.step:hover{box-shadow:0 14px 34px rgba(0,0,0,.35)}.btn-primary:hover{box-shadow:0 8px 22px rgba(101,220,197,.25)}}
+  .langbtn{white-space:nowrap}
+  .wrap.hero{padding-left:24px;padding-right:24px}
+  @media (max-width:640px){td.dir{white-space:normal}.nav .brand{font-size:17px}.nav{gap:10px}.langbtn{padding:6px 9px}.wrap.hero{padding-left:20px;padding-right:20px}}
+  @media (prefers-reduced-motion: reduce){.sr{opacity:1;transform:none;transition:none}.card:hover,.step:hover,.btn:hover{transform:none}}
 </style>
 </head>
 <body>
@@ -179,10 +216,10 @@ function toggleLang(){
 </script>
 <header>
   <div class="wrap nav">
-    <img src="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" alt="MomentStays icon">
-    <span class="brand">MomentStays</span>
+    <a class="home" href="#top" aria-label="MomentStays"><svg class="navicon" viewBox="100 100 824 824" aria-hidden="true"><defs><linearGradient id="nvbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--i-bg0)"/><stop offset="1" style="stop-color:var(--i-bg1)"/></linearGradient></defs><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#nvbg)"/><rect x="101" y="101" width="822" height="822" rx="184" fill="none" style="stroke:var(--i-edge)" stroke-width="3"/><circle cx="512" cy="512" r="250" fill="none" style="stroke:var(--i-ink)" stroke-width="22" stroke-dasharray="0 43.6" stroke-linecap="round" opacity=".9"/><circle cx="512" cy="512" r="150" fill="none" style="stroke:var(--i-ink)" stroke-width="28"/><circle cx="512" cy="512" r="62" style="fill:var(--i-core)"/></svg><span class="brand">MomentStays</span></a>
     <span class="spacer"></span>
     <a class="link en" href="#keeps">What it keeps</a><a class="link zh" href="#keeps">保留什么</a>
+    <a class="link en" href="#how">How it works</a><a class="link zh" href="#how">怎么用</a>
     <a class="link en" href="#support">Support</a><a class="link zh" href="#support">格式支持</a>
     <a class="link en" href="#faq">FAQ</a><a class="link zh" href="#faq">常见问题</a>
     <a class="link en" href="guide.html">Guide</a><a class="link zh" href="guide.html">使用手册</a>
@@ -191,7 +228,7 @@ function toggleLang(){
   </div>
 </header>
 
-<div class="wrap hero">
+<div class="wrap hero" id="top">
   <div class="heroslot" id="heroSlot">
   <div class="art" id="art" aria-label="A moment from your life, carried from Android to iPhone, unchanged">
     <svg viewBox="0 0 980 440" aria-hidden="true">
@@ -255,8 +292,8 @@ function toggleLang(){
       </div>
       <div class="card">
         <div class="k en">02 · No re-encoding</div><div class="k zh">02 · 不重新编码</div>
-        <h3 class="en">Original streams, <span class="amber">zero quality loss</span></h3>
-        <h3 class="zh">原始音视频，<span class="amber">画质零损失</span></h3>
+        <h3 class="en">Original streams, zero quality loss</h3>
+        <h3 class="zh">原始音视频，画质零损失</h3>
         <p class="en">Video and audio move as their original compressed samples — remuxed, never re-encoded — and verified sample by sample: hashes, sizes, counts, and presentation timestamps. Supported image paths keep the original JPEG/HEIC encoding.</p>
         <p class="zh">视频和音频以原始压缩样本直接重新封装，绝不重新编码，并逐个样本校验哈希、大小、数量和时间戳。支持的图像路径保留原始 JPEG/HEIC 编码。</p>
       </div>
@@ -275,19 +312,21 @@ function toggleLang(){
   <div class="wrap">
     <h2 class="en">How it works</h2>
     <h2 class="zh">怎么用</h2>
+    <p class="lead en">Drop photos in, click once. Everything else — matching, checking, importing — happens for you.</p>
+    <p class="lead zh">把照片放进来，点一下。对齐、校验、导入相册，剩下的都交给它。</p>
     <div class="steps">
-      <div class="step"><b>STEP 1</b>
+      <div class="step"><b class="n">1</b><span class="k en">Step 1</span><span class="k zh">第 1 步</span>
         <h3 class="en">Add photos</h3><h3 class="zh">添加照片</h3>
         <p class="en">Choose files or a folder, or pick directly from your Photos library via PhotoKit — originals by default.</p>
         <p class="zh">选择文件、文件夹，或通过 PhotoKit 直接从「照片」图库选取，默认使用原片。</p>
       </div>
-      <div class="step"><b>STEP 2</b>
+      <div class="step"><b class="n">2</b><span class="k en">Step 2</span><span class="k zh">第 2 步</span>
         <h3 class="en">Convert</h3><h3 class="zh">转换</h3>
         <p class="en">Pick the direction and format. Batch conversion with progress, cancellation, and verified results.</p>
-        <p class="zh">选方向和格式即可。支持批量转换、进度与取消，结果逐个校验后才交付。</p>
+        <p class="zh">选方向和格式即可。支持批量转换、进度与取消，每一张都校验通过才输出。</p>
       </div>
-      <div class="step"><b>STEP 3</b>
-        <h3 class="en">Deliver</h3><h3 class="zh">交付</h3>
+      <div class="step"><b class="n">3</b><span class="k en">Step 3</span><span class="k zh">第 3 步</span>
+        <h3 class="en">Keep</h3><h3 class="zh">收好</h3>
         <p class="en">Send Live Photos straight into a Photos album, save JPEG/HEIC + MOV pairs, or share Motion Photos via the system share menu.</p>
         <p class="zh">实况照片直接导入指定相册，或导出 JPEG/HEIC + MOV 配对文件；安卓动态照片可经系统共享发送。</p>
       </div>
@@ -299,24 +338,24 @@ function toggleLang(){
   <div class="wrap">
     <h2 class="en">Supported formats</h2>
     <h2 class="zh">格式支持</h2>
-    <table>
+    <div class="tablewrap"><table>
       <tr><th class="en">Direction</th><th class="zh">方向</th><th class="en">Formats</th><th class="zh">格式</th></tr>
       <tr>
-        <td>Android → Apple</td>
+        <td class="dir">Android → Apple</td>
         <td class="en">Google-compatible Motion Photo JPEG; supported Huawei/Honor, Samsung (incl. SEF), OPPO, vivo V2 containers; validated Samsung HEIC layouts → JPEG/HEIC + MOV</td>
         <td class="zh">Google 兼容动态照片 JPEG；华为/荣耀、三星（含 SEF）、OPPO、vivo V2 容器；已验证的三星 HEIC 布局 → JPEG/HEIC + MOV</td>
       </tr>
       <tr>
-        <td>Apple → Android (JPEG)</td>
+        <td class="dir">Apple → Android (JPEG)</td>
         <td class="en">Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, vivo V2</td>
         <td class="zh">Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2</td>
       </tr>
       <tr>
-        <td>Apple → Android (HEIC)</td>
+        <td class="dir">Apple → Android (HEIC)</td>
         <td class="en">Samsung — existing HEIC encoding retained (Google / Xiaomi Motion Photos are JPEG only)</td>
         <td class="zh">三星——保留原有 HEIC 编码（Google / 小米动态照片仅 JPEG）</td>
       </tr>
-    </table>
+    </table></div>
   </div>
 </section>
 
@@ -339,9 +378,14 @@ function toggleLang(){
       <p class="zh">不会。转换与校验全部在你的 Mac 本地完成；iCloud 下载也仅在你主动开启的会话内进行。</p>
     </details>
     <details>
+      <summary><span class="en">Can I turn Live Photos back into Motion Photos?</span><span class="zh">能把实况照片转回安卓动态照片吗？</span></summary>
+      <p class="en">Yes. Pick Apple → Android and choose the phone brand you're sending to — Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO or vivo — so the photo moves on their phone too.</p>
+      <p class="zh">可以。选择「Apple → Android」，再选对方手机的品牌（Google/通用、小米、三星、华为/荣耀、OPPO、vivo），发过去在对方相册里也能动起来。</p>
+    </details>
+    <details>
       <summary><span class="en">Is it free?</span><span class="zh">收费吗？</span></summary>
       <p class="en">Yes — free and open source under GPL-3.0. If it saved your photos, you can support development via the Sponsor button on GitHub. Entirely optional.</p>
-      <p class="zh">免费开源（GPL-3.0)。如果它帮你留住了照片，可以通过 GitHub 的 Sponsor 按钮支持开发，完全自愿。</p>
+      <p class="zh">免费开源（GPL-3.0）。如果它帮你留住了照片，可以通过 GitHub 的 Sponsor 按钮支持开发，完全自愿。</p>
     </details>
   </div>
 </section>
@@ -361,21 +405,21 @@ cd MomentStays
 bash scripts/build_app.sh        # Intel
 bash scripts/build_app.sh --universal
 open dist/MomentStays.app</pre>
-      <p class="en" style="color:var(--muted);font-size:14px;margin-top:16px">Current validation is on Intel / macOS 12; Apple Silicon validation is in progress. The app is ad-hoc signed (not notarized), so macOS may ask you to approve it once in Privacy &amp; Security settings.</p>
-      <p class="zh" style="color:var(--muted);font-size:14px;margin-top:16px">目前主要在 Intel / macOS 12 上验证，Apple Silicon 正在验证中。应用为自签名（未做 Apple 公证），首次打开可能需要在系统设置中放行一次。</p>
+      <p class="en" style="color:var(--muted);font-size:14px;margin-top:16px">Current validation is on Intel / macOS 12; Apple Silicon validation is in progress. The app is ad-hoc signed (not notarized), so the first launch may be blocked — click “Open Anyway” in System Settings → Privacy &amp; Security.</p>
+      <p class="zh" style="color:var(--muted);font-size:14px;margin-top:16px">目前主要在 Intel / macOS 12 上验证，Apple Silicon 正在验证中。应用为自签名（未做 Apple 公证），首次打开若被拦截，到「系统设置 → 隐私与安全性」点一下「仍要打开」即可。</p>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <p>© 2026 Lino · MomentStays is GPL-3.0-only open source ·
+    <p>© 2026 Lino · <span class="en">Open source under GPL-3.0</span><span class="zh">以 GPL-3.0 协议开源</span> ·
       <a href="https://github.com/LinoFish/MomentStays">GitHub</a> ·
-      <a href="https://github.com/LinoFish/MomentStays/issues">Issues</a> ·
+      <a href="https://github.com/LinoFish/MomentStays/issues"><span class="en">Report an issue</span><span class="zh">反馈问题</span></a> ·
       <a class="en" href="guide.html">User Guide</a><a class="zh" href="guide.html">使用手册</a> ·
-      <a href="https://github.com/LinoFish/MomentStays/blob/main/README.zh-CN.md">中文说明</a>
+      <a class="en" href="https://github.com/LinoFish/MomentStays#readme">README</a><a class="zh" href="https://github.com/LinoFish/MomentStays/blob/main/README.zh-CN.md">中文说明</a>
     </p>
-    <p style="margin-top:6px">The moment stays. 留住原来的瞬间。</p>
+    <p class="fslogan"><span class="en">The moment stays.</span><span class="zh">留住原来的瞬间。</span></p>
   </div>
 </footer>
 <script>
@@ -498,6 +542,16 @@ open dist/MomentStays.app</pre>
   var go=false;
   function start(){ if(go) return; go=true; t0=performance.now(); requestAnimationFrame(frame); }
   setTimeout(start,250);
+})();
+</script>
+<script>
+(function(){
+  if(!('IntersectionObserver' in window) || (window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  var els=[].slice.call(document.querySelectorAll('section h2, section .lead, .card, .step, .tablewrap, details, .download-box'));
+  els.forEach(function(e){ var r=e.getBoundingClientRect(); if(r.top>innerHeight) e.classList.add('sr'); });
+  var io=new IntersectionObserver(function(es){ es.forEach(function(x){ if(x.isIntersecting){ var e=x.target, sib=e.parentNode.children, i=[].indexOf.call(sib,e);
+    e.style.transitionDelay=(e.matches('.card,.step')? (i%3)*0.09 : 0)+'s'; e.classList.add('in'); io.unobserve(e); setTimeout(function(){e.style.transitionDelay='';},1400);} }); },{rootMargin:'0px 0px -8% 0px'});
+  els.forEach(function(e){ if(e.classList.contains('sr')) io.observe(e); });
 })();
 </script>
 </body>
