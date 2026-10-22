@@ -3,15 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MomentStays — Android Motion Photos ↔ Apple Live Photos Converter for macOS | 安卓动态照片转苹果实况照片</title>
-<meta name="description" content="MomentStays converts Android Motion Photos to Apple Live Photos on macOS — and back. The cover frame stays the moment you picked, video and audio are never re-encoded, and Ultra HDR is preserved. 安卓动态照片转苹果实况照片：封面帧不换、画质不丢、HDR 不丢。">
+<title>MomentStays — Motion Photo to Live Photo Converter for Mac (Android ⇄ iPhone)</title>
+<meta name="description" content="Free Mac app to convert Android Motion Photos (Samsung, Pixel, Xiaomi, Huawei, OPPO, vivo) to iPhone Live Photos and back. Keeps the cover frame, quality and HDR.">
 <meta name="keywords" content="Motion Photo, Live Photo, convert, macOS, Android, iPhone, Samsung, Xiaomi, HEIC, Ultra HDR, 动态照片, 实况照片, 安卓动态照片转实况照片">
 <meta property="og:title" content="MomentStays — The moment stays.">
-<meta property="og:description" content="Android Motion Photos ↔ Apple Live Photos, keeping the cover frame, the quality, and the HDR. Free & open source for macOS.">
-<meta property="og:image" content="https://opengraph.githubassets.com/1/LinoFish/MomentStays">
+<meta property="og:description" content="Free Mac app to convert Android Motion Photos (Samsung, Pixel, Xiaomi, Huawei, OPPO, vivo) to iPhone Live Photos and back. Keeps the cover frame, quality and HDR.">
+<meta property="og:image" content="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/social-preview.png">
 <meta property="og:type" content="website">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D1B27">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F0F6F5">
+<link rel="canonical" href="https://linofish.github.io/MomentStays/">
+<link rel="alternate" hreflang="en" href="https://linofish.github.io/MomentStays/">
+<link rel="alternate" hreflang="zh-CN" href="https://linofish.github.io/MomentStays/zh/">
+<link rel="alternate" hreflang="x-default" href="https://linofish.github.io/MomentStays/">
+<meta property="og:url" content="https://linofish.github.io/MomentStays/">
+<meta property="og:locale" content="en_US">
+<meta property="og:site_name" content="MomentStays">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "MomentStays", "alternateName": ["MomentStays Motion Photo to Live Photo converter", "MomentStays 动态照片转实况照片"], "applicationCategory": "MultimediaApplication", "operatingSystem": "macOS 12 or later", "description": "Free Mac app to convert Android Motion Photos (Samsung, Pixel, Xiaomi, Huawei, OPPO, vivo) to iPhone Live Photos and back. Keeps the cover frame, quality and HDR.", "inLanguage": "en", "url": "https://linofish.github.io/MomentStays/", "downloadUrl": "https://github.com/LinoFish/MomentStays/releases", "softwareHelp": "https://linofish.github.io/MomentStays/guide.html", "license": "https://www.gnu.org/licenses/gpl-3.0.html", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "author": {"@type": "Person", "name": "Lino", "url": "https://github.com/LinoFish"}, "sameAs": ["https://github.com/LinoFish/MomentStays"], "image": "https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/social-preview.png"}</script>
 <link rel="icon" href="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" type="image/svg+xml">
 <style>
   :root{
@@ -213,6 +222,7 @@
   .notes li::before{content:"";position:absolute;left:0;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--muted)}
   .download-box details.build{max-width:620px;margin:0 auto;text-align:left;background:var(--surface2)}
   .download-box details.build pre{margin-top:12px;background:var(--bg)}
+  .more{margin-top:18px;font-size:15px}
 </style>
 </head>
 <body>
@@ -228,6 +238,7 @@ function toggleLang(){
   var zh = document.documentElement.classList.toggle('lang-zh');
   document.documentElement.lang = zh ? 'zh-CN' : 'en';
   try { localStorage.setItem('ms-lang', zh ? 'zh' : 'en'); } catch(e){}
+  if (zh) location.href='zh/';
 }
 </script>
 <header>
@@ -372,6 +383,7 @@ function toggleLang(){
       <summary><span class="en">Is it free?</span><span class="zh">收费吗？</span></summary>
       <p><span class="en">Yes, free and open source (GPL-3.0). Sponsoring on GitHub is welcome, never required.</span><span class="zh">免费开源（GPL-3.0）。觉得好用，欢迎在 GitHub 赞助。</span></p>
     </details>
+    <p class="more"><a class="en" href="guides/index.html#en">More how-to guides →</a><a class="zh" href="guides/index.html#zh">更多教程：三星、小米、华为动态照片怎么转 →</a></p>
   </div>
 </section>
 
@@ -403,6 +415,7 @@ open dist/MomentStays.app</pre>
       <a href="https://github.com/LinoFish/MomentStays">GitHub</a> ·
       <a href="https://github.com/LinoFish/MomentStays/issues"><span class="en">Report an issue</span><span class="zh">反馈问题</span></a> ·
       <a class="en" href="guide.html">User Guide</a><a class="zh" href="guide.html">使用手册</a> ·
+      <a class="en" href="guides/index.html#en">How-to guides</a><a class="zh" href="guides/index.html#zh">教程</a> ·
       <a class="en" href="https://github.com/LinoFish/MomentStays#readme">README</a><a class="zh" href="https://github.com/LinoFish/MomentStays/blob/main/README.zh-CN.md">中文说明</a>
     </p>
     <p class="fslogan"><span class="en">The moment stays.</span><span class="zh">留住原来的瞬间。</span></p>
