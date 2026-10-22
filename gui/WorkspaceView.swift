@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct WorkspaceView: View {
+    @Environment(\.locale) private var locale
     @ObservedObject var model: WorkspaceModel
     let actions: WorkspaceActions
     var layoutObserver: ([String: CGRect]) -> Void = { _ in }
@@ -74,6 +75,12 @@ struct WorkspaceView: View {
                     .disabled(model.isBusy || model.sharing).accessibilityIdentifier("conversion-direction")
             }
             Spacer(minLength: 0)
+            Link(destination: UserGuide.url(for: locale)) {
+                Image(systemName: "questionmark.circle")
+            }
+            .help(UserGuide.title(for: locale))
+            .accessibilityLabel(UserGuide.title(for: locale))
+            .accessibilityIdentifier("user-guide-button")
             Button {
                 if layout.supportsInspector { model.inspectorVisible.toggle() }
                 else { model.settingsPresented = true }

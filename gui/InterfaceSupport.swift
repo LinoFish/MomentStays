@@ -1,5 +1,16 @@
 import SwiftUI
 
+enum UserGuide {
+    static func title(for locale: Locale) -> String {
+        locale.languageCode == "zh" ? "使用手册" : "User Guide"
+    }
+
+    static func url(for locale: Locale) -> URL {
+        let page = locale.languageCode == "zh" ? "guide-zh.html" : "guide.html"
+        return URL(string: "https://linofish.github.io/MomentStays/" + page)!
+    }
+}
+
 // Platform integrations are injected by the host; shared views never open NSWindow
 // or access PhotoKit/file permissions directly. An iOS host supplies equivalent actions.
 struct WorkspaceActions {

@@ -85,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         windowMenu.addItem(withTitle: "缩放", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         NSApp.windowsMenu = windowMenu
         let help = section("帮助")
-        command(help, "使用说明", #selector(showHelp), "?")
+        command(help, UserGuide.title(for: .current), #selector(showHelp), "?")
         NSApp.mainMenu = menu
     }
 
@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func showReport() { platform.showReport() }
     @objc private func showSettings() { model.settingsPresented = true }
     @objc private func showHelp() {
-        if let url = Bundle.main.url(forResource: "使用说明", withExtension: "txt") { NSWorkspace.shared.open(url) }
+        NSWorkspace.shared.open(UserGuide.url(for: .current))
     }
     @objc private func about() {
         guard window.attachedSheet == nil else { return }
