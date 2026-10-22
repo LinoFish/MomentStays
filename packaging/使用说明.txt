@@ -1,4 +1,4 @@
-Motion-Live 1.0 — Android 动态照片 ↔ Apple Live Photo
+MomentStays 1.0 — Android 动态照片 ↔ Apple Live Photo
 
 系统要求
 macOS 12 Monterey 或更新系统。默认构建为 Intel；Apple Silicon 与通用版需显式构建。
