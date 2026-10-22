@@ -83,6 +83,6 @@ bash scripts/build_gui_tests.sh
 python3 scripts/check_gui_engine.py
 ```
 
-诊断包写入 `.build/gui/preview/Motion-Live.app`，正式包写入 `dist/Motion-Live.app`。诊断截图与几何数据位于 `.build/gui/ui-checks/`；正式包不编入示例注入和截图入口。系统图标打包、媒体编码和窗口服务需要正常 macOS 桌面访问权限。
+诊断包写入 `.build/gui/preview/MomentStays.app`，正式包写入 `dist/MomentStays.app`。诊断截图与几何数据位于 `.build/gui/ui-checks/`；正式包不编入示例注入和截图入口。系统图标打包、媒体编码和窗口服务需要正常 macOS 桌面访问权限。
 
 界面检查覆盖宽、中、窄、低高度、深色反向设置、设置 sheet、进度、空队列、千行队列和连续跨断点缩放。几何检查证明主要操作与列表处于可见范围，不能替代 VoiceOver、真实键盘操作、实际图库权限或 ARM/iOS 真机验收。
