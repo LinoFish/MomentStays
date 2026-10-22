@@ -197,6 +197,22 @@
   .wrap.hero{padding-left:24px;padding-right:24px}
   @media (max-width:640px){td.dir{white-space:normal}.nav .brand{font-size:17px}.nav{gap:10px}.langbtn{padding:6px 9px}.wrap.hero{padding-left:20px;padding-right:20px}}
   @media (prefers-reduced-motion: reduce){.sr{opacity:1;transform:none;transition:none}.card:hover,.step:hover,.btn:hover{transform:none}}
+
+  /* ---- Concise copy layout ---- */
+  h2 span.zh,h3 span.zh,.k span.zh,.lead span.zh,li span.zh,td span.zh,th span.zh,summary span.zh,details p span.zh,.step p span.zh{display:none}
+  html.lang-zh h2 span.zh,html.lang-zh h3 span.zh,html.lang-zh .k span.zh,html.lang-zh .lead span.zh,html.lang-zh li span.zh,html.lang-zh td span.zh,html.lang-zh th span.zh,html.lang-zh summary span.zh,html.lang-zh details p span.zh,html.lang-zh .step p span.zh{display:inline}
+  .card ul{list-style:none;margin-top:4px}
+  .card li{position:relative;padding-left:16px;color:var(--muted);font-size:15px;margin-top:8px;line-height:1.5}
+  .card li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--amber)}
+  .card h3{margin-bottom:6px}
+  .step h3{margin:14px 0 4px}
+  .ghicon{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:10px;color:var(--ink);border:1px solid var(--line);transition:background .2s,border-color .2s,transform .2s}
+  .ghicon:hover{background:var(--surface);border-color:var(--muted);transform:translateY(-1px)}
+  .notes{list-style:none;max-width:620px;margin:0 auto 18px;color:var(--muted);font-size:14px;text-align:left}
+  .notes li{position:relative;padding-left:16px;margin-top:6px}
+  .notes li::before{content:"";position:absolute;left:0;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--muted)}
+  .download-box details.build{max-width:620px;margin:0 auto;text-align:left;background:var(--surface2)}
+  .download-box details.build pre{margin-top:12px;background:var(--bg)}
 </style>
 </head>
 <body>
@@ -224,7 +240,7 @@ function toggleLang(){
     <a class="link en" href="#faq">FAQ</a><a class="link zh" href="#faq">常见问题</a>
     <a class="link en" href="guide.html">Guide</a><a class="link zh" href="guide.html">使用手册</a>
     <button class="langbtn" onclick="toggleLang()">中文 / EN</button>
-    <a class="btn btn-ghost" href="https://github.com/LinoFish/MomentStays">GitHub</a>
+    <a class="ghicon" href="https://github.com/LinoFish/MomentStays" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
   </div>
 </header>
 
@@ -264,45 +280,37 @@ function toggleLang(){
   <h1 class="reveal-h">MomentStays</h1>
   <div class="slogan en" data-type>The moment stays.</div>
   <div class="slogan zh" data-type>留住原来的瞬间。</div>
-  <p class="sub en" data-stream>Convert Android Motion Photos to Apple Live Photos on macOS — and back. Nothing that matters is lost: not the cover frame, not the quality, not the HDR.</p>
-  <p class="sub zh" data-stream>在 Mac 上把安卓动态照片转成苹果实况照片，也能反向转回。该留的，一个不少：封面帧不换、画质不丢、HDR 不丢。</p>
+  <p class="sub en" data-stream>Android Motion Photos ⇄ Apple Live Photos, on your Mac. Cover frame, quality and HDR — all kept.</p>
+  <p class="sub zh" data-stream>在 Mac 上互转安卓动态照片与苹果实况照片。封面、画质、HDR，原样保留。</p>
 
   <div class="cta reveal" style="--d:0">
     <a class="btn btn-primary" href="https://github.com/LinoFish/MomentStays/releases"><span class="en">Download for macOS</span><span class="zh">下载 macOS 版</span></a>
     <a class="btn btn-ghost" href="https://github.com/LinoFish/MomentStays"><span class="en">View source on GitHub</span><span class="zh">在 GitHub 查看源码</span></a>
   </div>
-  <div class="meta en reveal" style="--d:1">Free &amp; open source (GPL-3.0) · macOS 12+ · Native SwiftUI · 100% local — your photos never leave your Mac</div>
-  <div class="meta zh reveal" style="--d:1">免费开源（GPL-3.0）· macOS 12+ · 原生 SwiftUI · 全部本地处理，照片不离开你的 Mac</div>
+  <div class="meta en reveal" style="--d:1">Free &amp; open source · macOS 12+ · Runs entirely on your Mac</div>
+  <div class="meta zh reveal" style="--d:1">免费开源 · macOS 12+ · 全程本地处理</div>
 
 </div>
 
 <section id="keeps">
   <div class="wrap">
-    <h2 class="en">Three things it refuses to lose</h2>
-    <h2 class="zh">三件绝不妥协的事</h2>
-    <p class="lead en">Most converters quietly sacrifice one of these. MomentStays is built around keeping all three.</p>
-    <p class="lead zh">多数转换工具会悄悄牺牲其中之一。MomentStays 从设计上就是为了把三样都留住。</p>
+    <h2><span class="en">Three things it keeps</span><span class="zh">三样都留住</span></h2>
+    <p class="lead"><span class="en">Most converters give up at least one.</span><span class="zh">别的工具往往至少丢掉一样。</span></p>
     <div class="cards">
       <div class="card">
-        <div class="k en">01 · Cover frame</div><div class="k zh">01 · 封面帧</div>
-        <h3 class="en">The cover frame stays yours</h3>
-        <h3 class="zh">封面帧，还是你选的那一帧</h3>
-        <p class="en">The source cover timestamp is read and mapped through the real media timeline to the Live Photo timing marker, frame-aligned to within half a frame. Missing or ambiguous timing is reported — never silently replaced by the middle frame.</p>
-        <p class="zh">读取源文件的封面时间戳，映射到真实视频帧（对齐误差半帧以内）并写入实况照片标记。时间信息缺失或不明确时会明确报告，绝不偷偷用中间帧顶替。</p>
+        <div class="k">01 · <span class="en">Cover frame</span><span class="zh">封面帧</span></div>
+        <h3><span class="en">The frame you chose</span><span class="zh">还是你选的那一帧</span></h3>
+        <ul><li><span class="en">Aligned on the real video timeline, within half a frame</span><span class="zh">按真实视频时间轴对齐，误差不到半帧</span></li><li><span class="en">Missing timing is reported, never guessed</span><span class="zh">时间信息缺失会直接提示，不拿中间帧凑数</span></li></ul>
       </div>
       <div class="card">
-        <div class="k en">02 · No re-encoding</div><div class="k zh">02 · 不重新编码</div>
-        <h3 class="en">Original streams, zero quality loss</h3>
-        <h3 class="zh">原始音视频，画质零损失</h3>
-        <p class="en">Video and audio move as their original compressed samples — remuxed, never re-encoded — and verified sample by sample: hashes, sizes, counts, and presentation timestamps. Supported image paths keep the original JPEG/HEIC encoding.</p>
-        <p class="zh">视频和音频以原始压缩样本直接重新封装，绝不重新编码，并逐个样本校验哈希、大小、数量和时间戳。支持的图像路径保留原始 JPEG/HEIC 编码。</p>
+        <div class="k">02 · <span class="en">Quality</span><span class="zh">画质</span></div>
+        <h3><span class="en">Nothing re-encoded</span><span class="zh">不重新编码</span></h3>
+        <ul><li><span class="en">Original audio and video samples, just rewrapped</span><span class="zh">原始音视频数据直接重新封装</span></li><li><span class="en">Checked sample by sample before output</span><span class="zh">输出前逐个样本校验</span></li></ul>
       </div>
       <div class="card">
-        <div class="k en">03 · HDR</div><div class="k zh">03 · HDR</div>
-        <h3 class="en">HDR preserved, honestly</h3>
-        <h3 class="zh">HDR 保留，而且如实</h3>
-        <p class="en">Existing Ultra HDR gain maps are preserved with their parameters. Supported Apple/ISO gain data is converted through explicit models. Unsupported private HDR is reported as unsupported — never faked.</p>
-        <p class="zh">已有的 Ultra HDR 增益图连同参数原样保留；支持的 Apple/ISO 增益数据按明确模型转换；处理不了的私有 HDR 会如实报告，不装作转好了。</p>
+        <div class="k">03 · <span class="en">HDR</span><span class="zh">HDR</span></div>
+        <h3><span class="en">Kept, or clearly flagged</span><span class="zh">能留的都留，留不了就说明</span></h3>
+        <ul><li><span class="en">Ultra HDR gain maps kept with their parameters</span><span class="zh">Ultra HDR 增益图连同参数保留</span></li><li><span class="en">Unsupported HDR is flagged, never faked</span><span class="zh">不支持的 HDR 会标出，不假装转好</span></li></ul>
       </div>
     </div>
   </div>
@@ -310,25 +318,20 @@ function toggleLang(){
 
 <section id="how">
   <div class="wrap">
-    <h2 class="en">How it works</h2>
-    <h2 class="zh">怎么用</h2>
-    <p class="lead en">Drop photos in, click once. Everything else — matching, checking, importing — happens for you.</p>
-    <p class="lead zh">把照片放进来，点一下。对齐、校验、导入相册，剩下的都交给它。</p>
+    <h2><span class="en">How it works</span><span class="zh">怎么用</span></h2>
+    <p class="lead"><span class="en">Three steps. That’s it.</span><span class="zh">三步就好。</span></p>
     <div class="steps">
-      <div class="step"><b class="n">1</b><span class="k en">Step 1</span><span class="k zh">第 1 步</span>
-        <h3 class="en">Add photos</h3><h3 class="zh">添加照片</h3>
-        <p class="en">Choose files or a folder, or pick directly from your Photos library via PhotoKit — originals by default.</p>
-        <p class="zh">选择文件、文件夹，或通过 PhotoKit 直接从「照片」图库选取，默认使用原片。</p>
+      <div class="step"><b class="n">1</b>
+        <h3><span class="en">Add</span><span class="zh">添加</span></h3>
+        <p><span class="en">Files, folders, or your Photos library</span><span class="zh">文件、文件夹，或「照片」图库</span></p>
       </div>
-      <div class="step"><b class="n">2</b><span class="k en">Step 2</span><span class="k zh">第 2 步</span>
-        <h3 class="en">Convert</h3><h3 class="zh">转换</h3>
-        <p class="en">Pick the direction and format. Batch conversion with progress, cancellation, and verified results.</p>
-        <p class="zh">选方向和格式即可。支持批量转换、进度与取消，每一张都校验通过才输出。</p>
+      <div class="step"><b class="n">2</b>
+        <h3><span class="en">Convert</span><span class="zh">转换</span></h3>
+        <p><span class="en">Pick a direction and format — batches welcome</span><span class="zh">选方向和格式，支持批量</span></p>
       </div>
-      <div class="step"><b class="n">3</b><span class="k en">Step 3</span><span class="k zh">第 3 步</span>
-        <h3 class="en">Keep</h3><h3 class="zh">收好</h3>
-        <p class="en">Send Live Photos straight into a Photos album, save JPEG/HEIC + MOV pairs, or share Motion Photos via the system share menu.</p>
-        <p class="zh">实况照片直接导入指定相册，或导出 JPEG/HEIC + MOV 配对文件；安卓动态照片可经系统共享发送。</p>
+      <div class="step"><b class="n">3</b>
+        <h3><span class="en">Keep</span><span class="zh">收好</span></h3>
+        <p><span class="en">Straight into a Photos album, or save as files</span><span class="zh">直接导入相册，或导出为文件</span></p>
       </div>
     </div>
   </div>
@@ -336,77 +339,60 @@ function toggleLang(){
 
 <section id="support">
   <div class="wrap">
-    <h2 class="en">Supported formats</h2>
-    <h2 class="zh">格式支持</h2>
+    <h2><span class="en">Supported formats</span><span class="zh">格式支持</span></h2>
     <div class="tablewrap"><table>
-      <tr><th class="en">Direction</th><th class="zh">方向</th><th class="en">Formats</th><th class="zh">格式</th></tr>
-      <tr>
-        <td class="dir">Android → Apple</td>
-        <td class="en">Google-compatible Motion Photo JPEG; supported Huawei/Honor, Samsung (incl. SEF), OPPO, vivo V2 containers; validated Samsung HEIC layouts → JPEG/HEIC + MOV</td>
-        <td class="zh">Google 兼容动态照片 JPEG；华为/荣耀、三星（含 SEF）、OPPO、vivo V2 容器；已验证的三星 HEIC 布局 → JPEG/HEIC + MOV</td>
-      </tr>
-      <tr>
-        <td class="dir">Apple → Android (JPEG)</td>
-        <td class="en">Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, vivo V2</td>
-        <td class="zh">Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2</td>
-      </tr>
-      <tr>
-        <td class="dir">Apple → Android (HEIC)</td>
-        <td class="en">Samsung — existing HEIC encoding retained (Google / Xiaomi Motion Photos are JPEG only)</td>
-        <td class="zh">三星——保留原有 HEIC 编码（Google / 小米动态照片仅 JPEG）</td>
-      </tr>
+      <tr><th><span class="en">Direction</span><span class="zh">方向</span></th><th><span class="en">From</span><span class="zh">支持来源</span></th><th><span class="en">Output</span><span class="zh">输出</span></th></tr>
+      <tr><td class="dir">Android → Apple</td><td><span class="en">Google-compatible, Huawei/Honor, Samsung (incl. some HEIC), OPPO, vivo</span><span class="zh">Google 兼容格式、华为/荣耀、三星（含部分 HEIC）、OPPO、vivo</span></td><td><span class="en">Live Photo (JPEG/HEIC + MOV)</span><span class="zh">实况照片（JPEG/HEIC + MOV）</span></td></tr>
+      <tr><td class="dir">Apple → Android</td><td><span class="en">Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, vivo</span><span class="zh">Google/通用、小米、三星、华为/荣耀、OPPO、vivo</span></td><td><span class="en">Motion Photo (JPEG)</span><span class="zh">动态照片（JPEG）</span></td></tr>
+      <tr><td class="dir">Apple → Android</td><td><span class="en">Samsung</span><span class="zh">三星</span></td><td><span class="en">Motion Photo (HEIC, original encoding)</span><span class="zh">动态照片（HEIC，保留原编码）</span></td></tr>
     </table></div>
   </div>
 </section>
 
 <section id="faq">
   <div class="wrap">
-    <h2>FAQ</h2>
+    <h2><span class="en">FAQ</span><span class="zh">常见问题</span></h2>
     <details>
-      <summary><span class="en">Why not just copy the files to my iPhone?</span><span class="zh">为什么不能把文件直接拷到 iPhone？</span></summary>
-      <p class="en">Android Motion Photos and Apple Live Photos are different container formats. A copied Motion Photo shows up as a still image. MomentStays converts the pairing metadata and cover timing so Photos recognizes it as a real Live Photo.</p>
-      <p class="zh">安卓动态照片和苹果实况照片是两种不同的封装格式，直接拷过去只会被识别成静态图。MomentStays 会转换配对元数据和封面时间，让「照片」把它认成真正的实况照片。</p>
+      <summary><span class="en">Can’t I just copy the file to my iPhone?</span><span class="zh">直接拷到 iPhone 不行吗？</span></summary>
+      <p><span class="en">No — the formats differ, so it shows up as a still photo.</span><span class="zh">不行。格式不同，拷过去只是一张静态图。</span></p>
     </details>
     <details>
-      <summary><span class="en">Does conversion reduce quality?</span><span class="zh">转换会掉画质吗？</span></summary>
-      <p class="en">No. Video and audio are never re-encoded, and supported still-image paths keep their original encoding. Verification checks every sample before an output replaces anything.</p>
-      <p class="zh">不会。音视频从不重新编码，支持的静态图路径保留原始编码；输出在交付前逐个样本校验。</p>
+      <summary><span class="en">Will I lose quality?</span><span class="zh">会掉画质吗？</span></summary>
+      <p><span class="en">No. Nothing is re-encoded, and every output is verified.</span><span class="zh">不会。不重新编码，每个输出都经过校验。</span></p>
     </details>
     <details>
-      <summary><span class="en">Are my photos uploaded anywhere?</span><span class="zh">照片会被上传吗？</span></summary>
-      <p class="en">No. Conversion and verification run entirely on your Mac. iCloud downloads during a session are opt-in.</p>
-      <p class="zh">不会。转换与校验全部在你的 Mac 本地完成；iCloud 下载也仅在你主动开启的会话内进行。</p>
+      <summary><span class="en">Are my photos uploaded?</span><span class="zh">照片会上传吗？</span></summary>
+      <p><span class="en">No. Everything happens on your Mac.</span><span class="zh">不会。全程在你的 Mac 本地完成。</span></p>
     </details>
     <details>
-      <summary><span class="en">Can I turn Live Photos back into Motion Photos?</span><span class="zh">能把实况照片转回安卓动态照片吗？</span></summary>
-      <p class="en">Yes. Pick Apple → Android and choose the phone brand you're sending to — Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO or vivo — so the photo moves on their phone too.</p>
-      <p class="zh">可以。选择「Apple → Android」，再选对方手机的品牌（Google/通用、小米、三星、华为/荣耀、OPPO、vivo），发过去在对方相册里也能动起来。</p>
+      <summary><span class="en">Can I convert back to Android?</span><span class="zh">能转回安卓吗？</span></summary>
+      <p><span class="en">Yes. Choose Apple → Android and the recipient’s phone brand.</span><span class="zh">可以。选择「Apple → Android」和对方手机品牌即可。</span></p>
     </details>
     <details>
       <summary><span class="en">Is it free?</span><span class="zh">收费吗？</span></summary>
-      <p class="en">Yes — free and open source under GPL-3.0. If it saved your photos, you can support development via the Sponsor button on GitHub. Entirely optional.</p>
-      <p class="zh">免费开源（GPL-3.0）。如果它帮你留住了照片，可以通过 GitHub 的 Sponsor 按钮支持开发，完全自愿。</p>
+      <p><span class="en">Yes, free and open source (GPL-3.0). Sponsoring on GitHub is welcome, never required.</span><span class="zh">免费开源（GPL-3.0）。觉得好用，欢迎在 GitHub 赞助。</span></p>
     </details>
   </div>
 </section>
 
-
-
 <section id="download">
   <div class="wrap">
     <div class="download-box">
-      <h2 class="en">Get MomentStays</h2>
-      <h2 class="zh">获取 MomentStays</h2>
-      <p class="lead en" style="margin-left:auto;margin-right:auto">Download the latest DMG from GitHub Releases — no Python, FFmpeg or Homebrew needed. Or build from source:</p>
-      <p class="lead zh" style="margin-left:auto;margin-right:auto">从 GitHub Releases 下载最新 DMG 即可使用，无需 Python、FFmpeg 或 Homebrew。也可以从源码构建：</p>
-      <p style="margin-bottom:22px"><a class="btn btn-primary" href="https://github.com/LinoFish/MomentStays/releases"><span class="en">Download from Releases</span><span class="zh">去 Releases 下载</span></a></p>
-      <pre style="text-align:left">git clone https://github.com/LinoFish/MomentStays.git
+      <h2><span class="en">Get MomentStays</span><span class="zh">下载 MomentStays</span></h2>
+      <p class="lead" style="margin-left:auto;margin-right:auto"><span class="en">One DMG. Nothing else to install.</span><span class="zh">下载 DMG 即可使用，无需安装其他依赖。</span></p>
+      <p style="margin-bottom:22px"><a class="btn btn-primary" href="https://github.com/LinoFish/MomentStays/releases"><span class="en">Download for macOS</span><span class="zh">下载 macOS 版</span></a></p>
+      <ul class="notes">
+        <li><span class="en">Tested on Intel / macOS 12; Apple Silicon testing in progress.</span><span class="zh">已在 Intel / macOS 12 验证，Apple Silicon 验证中。</span></li>
+        <li><span class="en">Not notarized: if macOS blocks the first launch, go to System Settings → Privacy &amp; Security → Open Anyway.</span><span class="zh">未经 Apple 公证：首次打开被拦截时，到「系统设置 → 隐私与安全性」点「仍要打开」。</span></li>
+      </ul>
+      <details class="build">
+        <summary><span class="en">Build from source</span><span class="zh">从源码构建</span></summary>
+        <pre>git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
-bash scripts/build_app.sh        # Intel
-bash scripts/build_app.sh --universal
+bash scripts/build_app.sh               # Intel
+bash scripts/build_app.sh --universal   # Universal
 open dist/MomentStays.app</pre>
-      <p class="en" style="color:var(--muted);font-size:14px;margin-top:16px">Current validation is on Intel / macOS 12; Apple Silicon validation is in progress. The app is ad-hoc signed (not notarized), so the first launch may be blocked — click “Open Anyway” in System Settings → Privacy &amp; Security.</p>
-      <p class="zh" style="color:var(--muted);font-size:14px;margin-top:16px">目前主要在 Intel / macOS 12 上验证，Apple Silicon 正在验证中。应用为自签名（未做 Apple 公证），首次打开若被拦截，到「系统设置 → 隐私与安全性」点一下「仍要打开」即可。</p>
+      </details>
     </div>
   </div>
 </section>
