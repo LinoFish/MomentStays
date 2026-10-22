@@ -223,6 +223,7 @@
   .download-box details.build{max-width:620px;margin:0 auto;text-align:left;background:var(--surface2)}
   .download-box details.build pre{margin-top:12px;background:var(--bg)}
   .more{margin-top:18px;font-size:15px}
+  .card li.note{color:var(--muted);font-size:.92em}
 </style>
 </head>
 <body>
@@ -307,13 +308,13 @@ function toggleLang(){
       </div>
       <div class="card">
         <div class="k">02 · <span class="en">Quality</span><span class="zh">画质</span></div>
-        <h3><span class="en">Nothing re-encoded</span><span class="zh">不重新编码</span></h3>
-        <ul><li><span class="en">Original audio and video samples, just rewrapped</span><span class="zh">原始音视频数据直接重新封装</span></li><li><span class="en">Checked sample by sample before output</span><span class="zh">输出前逐个样本校验</span></li></ul>
+        <h3><span class="en">Video never re-encoded</span><span class="zh">视频不重新编码</span></h3>
+        <ul><li><span class="en">Original audio and video samples, just rewrapped</span><span class="zh">原始音视频数据直接重新封装</span></li><li><span class="en">Checked sample by sample before output</span><span class="zh">输出前逐个样本校验</span></li><li class="note"><span class="en">Apple HEIC → Android JPEG re-encodes the still: different format, and Android’s HEIC support is limited</span><span class="zh">苹果 HEIC 转安卓 JPEG 时，静态图需重新编码：格式不同，且安卓对 HEIC 支持有限</span></li></ul>
       </div>
       <div class="card">
         <div class="k">03 · <span class="en">HDR</span><span class="zh">HDR</span></div>
         <h3><span class="en">Kept, or clearly flagged</span><span class="zh">能留的都留，留不了就说明</span></h3>
-        <ul><li><span class="en">Ultra HDR gain maps kept with their parameters</span><span class="zh">Ultra HDR 增益图连同参数保留</span></li><li><span class="en">Unsupported HDR is flagged, never faked</span><span class="zh">不支持的 HDR 会标出，不假装转好</span></li></ul>
+        <ul><li><span class="en">Ultra HDR gain maps kept with their parameters</span><span class="zh">Ultra HDR 增益图连同参数保留</span></li><li><span class="en">Unsupported HDR is flagged, never faked</span><span class="zh">不支持的 HDR 会标出，不假装转好</span></li><li class="note"><span class="en">Apple gain maps converted for Android may not be bit-exact</span><span class="zh">苹果增益图转成安卓格式时，可能无法完全无损</span></li></ul>
       </div>
     </div>
   </div>
@@ -361,7 +362,7 @@ function toggleLang(){
     </details>
     <details>
       <summary><span class="en">Will I lose quality?</span><span class="zh">会掉画质吗？</span></summary>
-      <p><span class="en">No. Nothing is re-encoded, and every output is verified.</span><span class="zh">不会。不重新编码，每个输出都经过校验。</span></p>
+      <p><span class="en">Video and audio: never — they’re rewrapped and verified. Android → iPhone keeps the photo as is. iPhone HEIC → Android JPEG must re-encode the still (Android’s HEIC support is limited), and the HDR gain map may not carry over losslessly.</span><span class="zh">视频和音频不会，只重新封装并校验。安卓转 iPhone，照片原样保留；iPhone 的 HEIC 转安卓 JPEG，静态图必须重新编码（安卓对 HEIC 支持有限），HDR 增益图也可能无法完全无损。</span></p>
     </details>
     <details>
       <summary><span class="en">Are my photos uploaded?</span><span class="zh">照片会上传吗？</span></summary>
