@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MomentStays — Android Motion Photos ↔ Apple Live Photos Converter for macOS | 安卓动态照片转苹果实况照片</title>
+<meta name="description" content="MomentStays converts Android Motion Photos to Apple Live Photos on macOS — and back. The cover frame stays the moment you picked, video and audio are never re-encoded, and Ultra HDR is preserved. 安卓动态照片转苹果实况照片：封面帧不换、画质不丢、HDR 不丢。">
+<meta name="keywords" content="Motion Photo, Live Photo, convert, macOS, Android, iPhone, Samsung, Xiaomi, HEIC, Ultra HDR, 动态照片, 实况照片, 安卓动态照片转实况照片">
+<meta property="og:title" content="MomentStays — The moment stays.">
+<meta property="og:description" content="Android Motion Photos ↔ Apple Live Photos, keeping the cover frame, the quality, and the HDR. Free & open source for macOS.">
+<meta property="og:image" content="https://opengraph.githubassets.com/1/LinoFish/MomentStays">
+<meta property="og:type" content="website">
+<link rel="icon" href="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" type="image/svg+xml">
+<style>
+  :root{
+    --bg:#0D1B27; --surface:#132A36; --surface2:#0A141E;
+    --teal:#65DCC5; --amber:#F3BE72; --ink:#F0F6F5; --muted:#B0C8CF; --line:rgba(176,200,207,.16);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif;line-height:1.6}
+  a{color:var(--teal);text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  header{position:sticky;top:0;background:rgba(13,27,39,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);z-index:10}
+  .nav{display:flex;align-items:center;gap:14px;padding:14px 0}
+  .nav img{width:34px;height:34px;border-radius:8px}
+  .nav .brand{font-weight:700;font-size:19px;color:var(--ink)}
+  .nav .spacer{flex:1}
+  .nav a.link{color:var(--muted);font-size:15px;margin:0 10px}
+  .nav a.link:hover{color:var(--ink)}
+  .btn{display:inline-block;padding:10px 20px;border-radius:10px;font-weight:600;font-size:15px;border:1px solid transparent}
+  .btn-primary{background:var(--teal);color:#0D1B27}
+  .btn-ghost{border-color:var(--line);color:var(--ink)}
+  .langbtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:14px}
+  .hero{text-align:center;padding:84px 0 56px}
+  .hero img.icon{width:132px;height:132px;border-radius:30px;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .hero h1{font-size:56px;letter-spacing:-1.5px;margin:26px 0 6px}
+  .hero .slogan{font-size:26px;color:var(--amber);font-weight:600}
+  .hero .sub{font-size:19px;color:var(--muted);max-width:720px;margin:18px auto 30px}
+  .hero .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .hero .meta{margin-top:18px;color:var(--muted);font-size:14px}
+  section{padding:52px 0;border-top:1px solid var(--line)}
+  h2{font-size:32px;letter-spacing:-.5px;margin-bottom:8px}
+  .lead{color:var(--muted);margin-bottom:30px;max-width:760px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px}
+  .card .k{font-size:13px;letter-spacing:2px;color:var(--teal);font-weight:700;text-transform:uppercase}
+  .card h3{font-size:21px;margin:8px 0 10px}
+  .card p{color:var(--muted);font-size:15px}
+  .card .amber{color:var(--amber)}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;counter-reset:step}
+  .step{background:var(--surface2);border:1px solid var(--line);border-radius:16px;padding:24px}
+  .step b{color:var(--amber);font-size:15px}
+  .step h3{font-size:18px;margin:6px 0 8px}
+  .step p{color:var(--muted);font-size:15px}
+  table{width:100%;border-collapse:collapse;font-size:15px}
+  th,td{border:1px solid var(--line);padding:12px 14px;text-align:left;vertical-align:top}
+  th{background:var(--surface);color:var(--ink)}
+  td{color:var(--muted)}
+  details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:12px}
+  summary{cursor:pointer;font-weight:600;font-size:16px}
+  details p{color:var(--muted);margin-top:8px;font-size:15px}
+  pre{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:18px;overflow-x:auto;font-size:14px;color:var(--ink)}
+  .download-box{text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:44px 24px}
+  footer{border-top:1px solid var(--line);padding:34px 0 46px;color:var(--muted);font-size:14px;text-align:center}
+  .zh{display:none}
+  body.show-zh .en{display:none}
+  body.show-zh .zh{display:block}
+  span.zh, a.zh{display:none}
+  body.show-zh span.zh, body.show-zh a.zh{display:inline}
+  body.show-zh span.en, body.show-zh a.en{display:none}
+  @media (max-width:640px){.hero h1{font-size:40px}.hero .slogan{font-size:21px}.nav a.link{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <img src="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" alt="MomentStays icon">
+    <span class="brand">MomentStays</span>
+    <span class="spacer"></span>
+    <a class="link en" href="#keeps">What it keeps</a><a class="link zh" href="#keeps">保留什么</a>
+    <a class="link en" href="#support">Support</a><a class="link zh" href="#support">格式支持</a>
+    <a class="link en" href="#faq">FAQ</a><a class="link zh" href="#faq">常见问题</a>
+    <button class="langbtn" onclick="document.body.classList.toggle('show-zh')">中文 / EN</button>
+    <a class="btn btn-ghost" href="https://github.com/LinoFish/MomentStays">GitHub</a>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <img class="icon" src="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" alt="MomentStays">
+  <h1>MomentStays</h1>
+  <div class="slogan en">The moment stays.</div>
+  <div class="slogan zh">留住原来的瞬间。</div>
+  <p class="sub en">Convert Android Motion Photos to Apple Live Photos on macOS — and back. Nothing that matters is lost: not the cover frame, not the quality, not the HDR.</p>
+  <p class="sub zh">在 Mac 上把安卓动态照片转成苹果实况照片，也能反向转回。该留的，一个不少：封面帧不换、画质不丢、HDR 不丢。</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="https://github.com/LinoFish/MomentStays/releases"><span class="en">Download for macOS</span><span class="zh">下载 macOS 版</span></a>
+    <a class="btn btn-ghost" href="https://github.com/LinoFish/MomentStays"><span class="en">View source on GitHub</span><span class="zh">在 GitHub 查看源码</span></a>
+  </div>
+  <div class="meta en">Free &amp; open source (GPL-3.0) · macOS 12+ · Native SwiftUI · 100% local — your photos never leave your Mac</div>
+  <div class="meta zh">免费开源（GPL-3.0）· macOS 12+ · 原生 SwiftUI · 全部本地处理，照片不离开你的 Mac</div>
+</div>
+
+<section id="keeps">
+  <div class="wrap">
+    <h2 class="en">Three things it refuses to lose</h2>
+    <h2 class="zh">三件绝不妥协的事</h2>
+    <p class="lead en">Most converters quietly sacrifice one of these. MomentStays is built around keeping all three.</p>
+    <p class="lead zh">多数转换工具会悄悄牺牲其中之一。MomentStays 从设计上就是为了把三样都留住。</p>
+    <div class="cards">
+      <div class="card">
+        <div class="k en">01 · Cover frame</div><div class="k zh">01 · 封面帧</div>
+        <h3 class="en">The cover frame stays yours</h3>
+        <h3 class="zh">封面帧，还是你选的那一帧</h3>
+        <p class="en">The source cover timestamp is read and mapped through the real media timeline to the Live Photo timing marker, frame-aligned to within half a frame. Missing or ambiguous timing is reported — never silently replaced by the middle frame.</p>
+        <p class="zh">读取源文件的封面时间戳，映射到真实视频帧（对齐误差半帧以内）并写入实况照片标记。时间信息缺失或不明确时会明确报告，绝不偷偷用中间帧顶替。</p>
+      </div>
+      <div class="card">
+        <div class="k en">02 · No re-encoding</div><div class="k zh">02 · 不重新编码</div>
+        <h3 class="en">Original streams, <span class="amber">zero quality loss</span></h3>
+        <h3 class="zh">原始音视频，<span class="amber">画质零损失</span></h3>
+        <p class="en">Video and audio move as their original compressed samples — remuxed, never re-encoded — and verified sample by sample: hashes, sizes, counts, and presentation timestamps. Supported image paths keep the original JPEG/HEIC encoding.</p>
+        <p class="zh">视频和音频以原始压缩样本直接重新封装，绝不重新编码，并逐个样本校验哈希、大小、数量和时间戳。支持的图像路径保留原始 JPEG/HEIC 编码。</p>
+      </div>
+      <div class="card">
+        <div class="k en">03 · HDR</div><div class="k zh">03 · HDR</div>
+        <h3 class="en">HDR preserved, honestly</h3>
+        <h3 class="zh">HDR 保留，而且如实</h3>
+        <p class="en">Existing Ultra HDR gain maps are preserved with their parameters. Supported Apple/ISO gain data is converted through explicit models. Unsupported private HDR is reported as unsupported — never faked.</p>
+        <p class="zh">已有的 Ultra HDR 增益图连同参数原样保留；支持的 Apple/ISO 增益数据按明确模型转换；处理不了的私有 HDR 会如实报告，不装作转好了。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2 class="en">How it works</h2>
+    <h2 class="zh">怎么用</h2>
+    <div class="steps">
+      <div class="step"><b>STEP 1</b>
+        <h3 class="en">Add photos</h3><h3 class="zh">添加照片</h3>
+        <p class="en">Choose files or a folder, or pick directly from your Photos library via PhotoKit — originals by default.</p>
+        <p class="zh">选择文件、文件夹，或通过 PhotoKit 直接从「照片」图库选取，默认使用原片。</p>
+      </div>
+      <div class="step"><b>STEP 2</b>
+        <h3 class="en">Convert</h3><h3 class="zh">转换</h3>
+        <p class="en">Pick the direction and format. Batch conversion with progress, cancellation, and verified results.</p>
+        <p class="zh">选方向和格式即可。支持批量转换、进度与取消，结果逐个校验后才交付。</p>
+      </div>
+      <div class="step"><b>STEP 3</b>
+        <h3 class="en">Deliver</h3><h3 class="zh">交付</h3>
+        <p class="en">Send Live Photos straight into a Photos album, save JPEG/HEIC + MOV pairs, or share Motion Photos via the system share menu.</p>
+        <p class="zh">实况照片直接导入指定相册，或导出 JPEG/HEIC + MOV 配对文件；安卓动态照片可经系统共享发送。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="support">
+  <div class="wrap">
+    <h2 class="en">Supported formats</h2>
+    <h2 class="zh">格式支持</h2>
+    <table>
+      <tr><th class="en">Direction</th><th class="zh">方向</th><th class="en">Formats</th><th class="zh">格式</th></tr>
+      <tr>
+        <td>Android → Apple</td>
+        <td class="en">Google-compatible Motion Photo JPEG; supported Huawei/Honor, Samsung (incl. SEF), OPPO, vivo V2 containers; validated Samsung HEIC layouts → JPEG/HEIC + MOV</td>
+        <td class="zh">Google 兼容动态照片 JPEG；华为/荣耀、三星（含 SEF）、OPPO、vivo V2 容器；已验证的三星 HEIC 布局 → JPEG/HEIC + MOV</td>
+      </tr>
+      <tr>
+        <td>Apple → Android (JPEG)</td>
+        <td class="en">Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, vivo V2</td>
+        <td class="zh">Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2</td>
+      </tr>
+      <tr>
+        <td>Apple → Android (HEIC)</td>
+        <td class="en">Google, Xiaomi, Samsung — existing HEIC encoding retained</td>
+        <td class="zh">Google、小米、三星——保留原有 HEIC 编码</td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>FAQ</h2>
+    <details>
+      <summary><span class="en">Why not just copy the files to my iPhone?</span><span class="zh">为什么不能把文件直接拷到 iPhone？</span></summary>
+      <p class="en">Android Motion Photos and Apple Live Photos are different container formats. A copied Motion Photo shows up as a still image. MomentStays converts the pairing metadata and cover timing so Photos recognizes it as a real Live Photo.</p>
+      <p class="zh">安卓动态照片和苹果实况照片是两种不同的封装格式，直接拷过去只会被识别成静态图。MomentStays 会转换配对元数据和封面时间，让「照片」把它认成真正的实况照片。</p>
+    </details>
+    <details>
+      <summary><span class="en">Does conversion reduce quality?</span><span class="zh">转换会掉画质吗？</span></summary>
+      <p class="en">No. Video and audio are never re-encoded, and supported still-image paths keep their original encoding. Verification checks every sample before an output replaces anything.</p>
+      <p class="zh">不会。音视频从不重新编码，支持的静态图路径保留原始编码；输出在交付前逐个样本校验。</p>
+    </details>
+    <details>
+      <summary><span class="en">Are my photos uploaded anywhere?</span><span class="zh">照片会被上传吗？</span></summary>
+      <p class="en">No. Conversion and verification run entirely on your Mac. iCloud downloads during a session are opt-in.</p>
+      <p class="zh">不会。转换与校验全部在你的 Mac 本地完成；iCloud 下载也仅在你主动开启的会话内进行。</p>
+    </details>
+    <details>
+      <summary><span class="en">Is it free?</span><span class="zh">收费吗？</span></summary>
+      <p class="en">Yes — free and open source under GPL-3.0. If it saved your photos, you can support development via the Sponsor button on GitHub. Entirely optional.</p>
+      <p class="zh">免费开源（GPL-3.0)。如果它帮你留住了照片，可以通过 GitHub 的 Sponsor 按钮支持开发，完全自愿。</p>
+    </details>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <div class="download-box">
+      <h2 class="en">Get MomentStays</h2>
+      <h2 class="zh">获取 MomentStays</h2>
+      <p class="lead en" style="margin-left:auto;margin-right:auto">Download the latest DMG from GitHub Releases — no Python, FFmpeg or Homebrew needed. Or build from source:</p>
+      <p class="lead zh" style="margin-left:auto;margin-right:auto">从 GitHub Releases 下载最新 DMG 即可使用，无需 Python、FFmpeg 或 Homebrew。也可以从源码构建：</p>
+      <p style="margin-bottom:22px"><a class="btn btn-primary" href="https://github.com/LinoFish/MomentStays/releases"><span class="en">Download from Releases</span><span class="zh">去 Releases 下载</span></a></p>
+      <pre style="text-align:left">git clone https://github.com/LinoFish/MomentStays.git
+cd MomentStays
+bash scripts/build_app.sh        # Intel
+bash scripts/build_app.sh --universal
+open dist/MomentStays.app</pre>
+      <p class="en" style="color:var(--muted);font-size:14px;margin-top:16px">Current validation is on Intel / macOS 12; Apple Silicon validation is in progress. The app is ad-hoc signed (not notarized), so macOS may ask you to approve it once in Privacy &amp; Security settings.</p>
+      <p class="zh" style="color:var(--muted);font-size:14px;margin-top:16px">目前主要在 Intel / macOS 12 上验证，Apple Silicon 正在验证中。应用为自签名（未做 Apple 公证），首次打开可能需要在系统设置中放行一次。</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>© 2026 Lino · MomentStays is GPL-3.0-only open source ·
+      <a href="https://github.com/LinoFish/MomentStays">GitHub</a> ·
+      <a href="https://github.com/LinoFish/MomentStays/issues">Issues</a> ·
+      <a href="https://github.com/LinoFish/MomentStays/blob/main/README.zh-CN.md">中文说明</a>
+    </p>
+    <p style="margin-top:6px">The moment stays. 留住原来的瞬间。</p>
+  </div>
+</footer>
+</body>
+</html>
