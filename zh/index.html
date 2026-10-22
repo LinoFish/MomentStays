@@ -445,7 +445,7 @@ open dist/MomentStays.app</pre>
   var caps=[0,1,2].map(function(i){return document.getElementById('cap'+i)}), capAt=[4,10,K];
   var dots=[]; for(var i=0;i<N;i++){var c=document.createElementNS(NS,'circle'); c.setAttribute('class','dt'); c.setAttribute('r',4.2); if(i===K) c.setAttribute('opacity',0); g.appendChild(c); dots.push(c);}
   function zh(){return document.documentElement.classList.contains('lang-zh');}
-  var H={a:['The frame you treasure.','你珍重的画面。'],b:['New phone. Still that moment.','换了手机，还在那一刻。'],c:['The moment stays.','留住原来的瞬间。']};
+  var H={a:['The frame you treasure','你珍重的画面'],b:['New phone. Still that moment','换了手机，还在那一刻'],c:['The moment stays','留住原来的瞬间']};
   var T={a:['Motion Photo · Android','动态照片 · 安卓'],b:['Live Photo · iPhone','实况照片 · iPhone']};
   // layouts for the 23 non-amber dots
   var others=[]; for(i=0;i<N;i++) if(i!==K) others.push(i);
