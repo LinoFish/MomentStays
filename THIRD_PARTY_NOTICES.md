@@ -1,6 +1,6 @@
 # Third-party materials and distribution
 
-Motion-Live's original source, documentation, and artwork are licensed under **GPL-3.0-only**, with copyright **2026 Lino**. See [LICENSE](LICENSE) and [COPYRIGHT](COPYRIGHT).
+MomentStays's original source, documentation, and artwork are licensed under **GPL-3.0-only**, with copyright **2026 Lino**. See [LICENSE](LICENSE) and [COPYRIGHT](COPYRIGHT).
 
 ## Runtime dependencies
 
