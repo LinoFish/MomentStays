@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MomentStays User Guide · 使用手册</title>
+<meta name="description" content="MomentStays user guide: cover frames, no re-encoding, HDR, auxiliary tracks, Photos library import, batch & sharing, CLI. MomentStays 使用手册：封面帧、不重新编码、HDR、辅助轨、图库导入、批量与共享、命令行。">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D1B27">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F0F6F5">
+<link rel="icon" href="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" type="image/svg+xml">
+<style>
+  :root{
+    color-scheme:light dark;
+    --bg:#F0F6F5; --surface:#FFFFFF; --surface2:#E7F0EE;
+    --teal:#0E7A66; --amber:#A96F14; --ink:#122A38; --muted:#47636E; --line:rgba(18,42,56,.14);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0D1B27; --surface:#132A36; --surface2:#0A141E;
+      --teal:#65DCC5; --amber:#F3BE72; --ink:#F0F6F5; --muted:#B0C8CF; --line:rgba(176,200,207,.16);
+    }
+    header{background:rgba(13,27,39,.88)}
+    code{background:#0A141E}
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif;line-height:1.75}
+  a{color:var(--teal);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:860px;margin:0 auto;padding:0 24px}
+  header{position:sticky;top:0;background:rgba(240,246,245,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);z-index:10}
+  .nav{display:flex;align-items:center;gap:12px;padding:13px 0}
+  .nav img{width:32px;height:32px;border-radius:8px}
+  .nav .brand{font-weight:700;font-size:18px;color:var(--ink)}
+  .nav .spacer{flex:1}
+  .nav a.link{color:var(--muted);font-size:14.5px;margin:0 8px}
+  .langbtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:14px}
+  article{padding:38px 0 60px}
+  article h1{font-size:33px;letter-spacing:-.5px;margin-bottom:10px;line-height:1.3}
+  article h2{font-size:24px;margin:38px 0 12px;padding-top:22px;border-top:1px solid var(--line);letter-spacing:-.3px}
+  article h3{font-size:18.5px;margin:24px 0 8px}
+  article p{margin:10px 0}
+  article ul, article ol{margin:10px 0 10px 22px}
+  article li{margin:4px 0}
+  article blockquote{border-left:3px solid var(--amber);background:var(--surface);padding:12px 18px;border-radius:0 12px 12px 0;margin:14px 0;color:var(--muted)}
+  article table{width:100%;border-collapse:collapse;font-size:14.5px;margin:14px 0;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:var(--surface2)}
+  td{color:var(--muted)}
+  code{background:var(--surface2);padding:1.5px 6px;border-radius:6px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow-x:auto;margin:14px 0}
+  pre code{background:none;padding:0}
+  hr{border:none;border-top:1px solid var(--line);margin:26px 0}
+  footer{border-top:1px solid var(--line);padding:26px 0 40px;color:var(--muted);font-size:13.5px;text-align:center}
+  .zh{display:none}
+  html.lang-zh .en{display:none}
+  html.lang-zh .zh{display:block}
+  span.zh, a.zh{display:none}
+  html.lang-zh span.zh, html.lang-zh a.zh{display:inline}
+  html.lang-zh span.en, html.lang-zh a.en{display:none}
+  @media (max-width:640px){article h1{font-size:26px}article h2{font-size:21px}.nav a.link{margin:0 4px;font-size:13.5px}}
+</style>
+</head>
+<body>
+<script>
+(function(){
+  var saved = null;
+  try { saved = localStorage.getItem('ms-lang'); } catch(e){}
+  var lang = saved || ((navigator.language || 'en').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en');
+  if (lang === 'zh') document.documentElement.classList.add('lang-zh');
+  document.documentElement.lang = (lang === 'zh') ? 'zh-CN' : 'en';
+})();
+function toggleLang(){
+  var zh = document.documentElement.classList.toggle('lang-zh');
+  document.documentElement.lang = zh ? 'zh-CN' : 'en';
+  try { localStorage.setItem('ms-lang', zh ? 'zh' : 'en'); } catch(e){}
+}
+</script>
+<header>
+  <div class="wrap nav">
+    <img src="https://raw.githubusercontent.com/LinoFish/MomentStays/main/docs/branding/icon.svg" alt="MomentStays">
+    <a class="brand" href="index.html">MomentStays</a>
+    <span class="spacer"></span>
+    <a class="link en" href="index.html">Home</a><a class="link zh" href="index.html">首页</a>
+    <a class="link" href="https://github.com/LinoFish/MomentStays">GitHub</a>
+    <button class="langbtn" onclick="toggleLang()">中文 / EN</button>
+  </div>
+</header>
+<div class="wrap">
+<article>
+<div class="en">
+<h1 id="momentstays-user-guide">MomentStays User Guide</h1>
+<blockquote>
+<p>Applies to MomentStays 1.0.1 (macOS 12 or later).
+中文版见 <a href="guide.html">guide.html</a>.</p>
+</blockquote>
+<p>MomentStays converts Android Motion Photos into Apple Live Photos on your Mac — and back again. Everything follows three rules:</p>
+<ol>
+<li><strong>The cover frame stays</strong> — the moment you picked remains the cover, aligned to the real frame on the media timeline.</li>
+<li><strong>Nothing is re-encoded</strong> — video and audio are remuxed only and verified sample by sample, so quality is never lost.</li>
+<li><strong>HDR is preserved honestly</strong> — gain maps that can be kept are kept intact; anything unsupported is reported, never faked.</li>
+</ol>
+<p>All conversion and verification happen locally on your Mac. Nothing is uploaded.</p>
+<hr />
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#1-quick-start">1. Quick start</a></li>
+<li><a href="#2-interface-and-importing">2. Interface and importing</a></li>
+<li><a href="#3-directions-and-format-support">3. Directions and format support</a></li>
+<li><a href="#4-how-the-cover-frame-is-located">4. How the cover frame is located</a></li>
+<li><a href="#5-remuxing-and-sample-by-sample-verification">5. Remuxing and sample-by-sample verification</a></li>
+<li><a href="#6-how-hdr-is-handled">6. How HDR is handled</a></li>
+<li><a href="#7-the-auxiliary-track-the-second-video-track-most-people-never-see">7. The auxiliary track: the second video track most people never see</a></li>
+<li><a href="#8-photos-library-recognition-import-and-monitoring">8. Photos library: recognition, import, and monitoring</a></li>
+<li><a href="#9-batches-delivery-and-sharing">9. Batches, delivery, and sharing</a></li>
+<li><a href="#10-settings-reference">10. Settings reference</a></li>
+<li><a href="#11-manifests-and-reports">11. Manifests and reports</a></li>
+<li><a href="#12-command-line-tool-cli">12. Command-line tool (CLI)</a></li>
+<li><a href="#13-troubleshooting">13. Troubleshooting</a></li>
+<li><a href="#14-known-limitations">14. Known limitations</a></li>
+</ul>
+<hr />
+<h2 id="1-quick-start">1. Quick start</h2>
+<ol>
+<li>Open MomentStays and click <strong>Choose Photos</strong>, drag files into the queue, or pick <strong>Scan Photos Library…</strong> from the source menu.</li>
+<li>Confirm the direction: <strong>Android → Apple Live Photo</strong> (default) or <strong>Apple Live Photo → Android</strong>.</li>
+<li>Open <strong>Export Settings</strong> and check the destination (folder / Photos library / sharing), target format, and HDR options.</li>
+<li>Click <strong>Start</strong> (⌘Return). Settings are snapshotted when a task starts and locked while it runs.</li>
+<li>Review per-photo results in the report. <strong>Recent Results…</strong> lets you retry delivery, reveal files, or open the output folder.</li>
+</ol>
+<p>Each photo produces one result folder (see §9 for naming), not loose files.</p>
+<p><strong>First launch:</strong> the distributed app is ad-hoc signed and not notarized. If macOS blocks the first launch, allow it under System Settings → Privacy &amp; Security, or Control-click the app in Finder and choose Open. Once installed, the app needs no Python, FFmpeg, ExifTool, or Homebrew.</p>
+<h2 id="2-interface-and-importing">2. Interface and importing</h2>
+<h3 id="21-the-queue">2.1 The queue</h3>
+<p>Each row is one photo. On wide windows the columns are <strong>Filename | Format/HDR | Cover time | Status</strong>; below 640pt the row wraps to two lines, the second showing "HDR · Cover xx". Selecting a row shows vendor and vendor-format details, the relative path, the detected cover time, and HDR status.</p>
+<h3 id="22-four-ways-in">2.2 Four ways in</h3>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Choose files</td>
+<td>Multi-select file picker</td>
+</tr>
+<tr>
+<td>Choose folder</td>
+<td>Read recursively</td>
+</tr>
+<tr>
+<td>Drag &amp; drop</td>
+<td>Drop files onto the queue</td>
+</tr>
+<tr>
+<td>Scan Photos Library</td>
+<td>Enumerates library assets via PhotoKit and identifies formats; can be scoped to one album (see §8)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-keyboard-shortcuts">2.3 Keyboard shortcuts</h3>
+<table>
+<thead>
+<tr>
+<th>Shortcut</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>⌘O</td>
+<td>Choose photos</td>
+</tr>
+<tr>
+<td>⌘R</td>
+<td>Rescan</td>
+</tr>
+<tr>
+<td>⌘Return</td>
+<td>Start conversion</td>
+</tr>
+<tr>
+<td>⌘.</td>
+<td>Stop</td>
+</tr>
+<tr>
+<td>⌘,</td>
+<td>Export settings</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-task-rules">2.4 Task rules</h3>
+<ul>
+<li>Starting a task snapshots all settings; they stay locked until it ends.</li>
+<li>Stopping signals cancellation and waits for the engine to clean up before a new task can start; stale callbacks from an old task never overwrite a new task's state.</li>
+<li>Reports are titled "Conversion report" or "Stopped task" accordingly.</li>
+</ul>
+<h2 id="3-directions-and-format-support">3. Directions and format support</h2>
+<blockquote>
+<p>Vendor support means "the layouts the parser can validate", not a promise for every device or firmware. Photos that were edited or forwarded through chat apps may already have lost their embedded video — lost video cannot be reconstructed from a still image.</p>
+</blockquote>
+<h3 id="31-android--apple">3.1 Android → Apple</h3>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google-compatible Motion Photo (JPEG)</td>
+<td>Main XMP, Extended XMP, and fully verified cover-metadata recovery</td>
+</tr>
+<tr>
+<td>Huawei / Honor (<code>LIVE_</code> trailer)</td>
+<td>Including the raw cover-frame-index path (see §4)</td>
+</tr>
+<tr>
+<td>Samsung SEF</td>
+<td>Including the SEF trailer structure</td>
+</tr>
+<tr>
+<td>Samsung HEIC</td>
+<td>Only validated mpvd/SEF layouts; original HEVC image items are kept, never transcoded to JPEG</td>
+</tr>
+<tr>
+<td>OPPO / OnePlus</td>
+<td>OPPO container layout</td>
+</tr>
+<tr>
+<td>vivo V2</td>
+<td>vivo V2 container layout</td>
+</tr>
+</tbody>
+</table>
+<p>Output is a Live Photo pair: a still (JPEG/HEIC) plus a separate MOV, paired by ContentIdentifier. The still output contains only verified still-image payloads and required extensions; motion and audio live only in the MOV.</p>
+<h3 id="32-apple--android">3.2 Apple → Android</h3>
+<p>Stills and MOVs are matched by Apple ContentIdentifier, and the <code>still-image-time</code> timed marker is read and aligned to the actual video frame.</p>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>Vendors</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>JPEG</td>
+<td>Google/generic, Xiaomi, Samsung (writes an SEF trailer), Huawei, Honor, OPPO, vivo V2</td>
+</tr>
+<tr>
+<td>HEIC</td>
+<td>Google, Xiaomi, Samsung only; existing image, thumbnail, and gain-map encodings and properties are retained. JPEG is never re-encoded into HEIC for this</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-how-the-cover-frame-is-located">4. How the cover frame is located</h2>
+<p>The <strong>cover timestamp</strong> is the instant in the motion video chosen as the cover. It is <em>not</em> the capture date — the two are separate metadata.</p>
+<p>MomentStays reads the cover time recorded in the source, maps it along the real media timeline to the actual frame, and writes the Live Photo <code>still-image-time</code> marker. Converting back reads the marker and restores the Android cover position.</p>
+<p>Rules that protect your cover:</p>
+<ul>
+<li><strong>Half-frame tolerance.</strong> Frame alignment is checked with a default tolerance of half a frame; the snap error is recorded in the manifest (<code>snap_error_seconds</code>).</li>
+<li><strong>No guessing.</strong> Missing, ambiguous, or out-of-range timing is reported — the app never silently substitutes the video midpoint, the capture date, or numbers from the file tail. Using the midpoint requires opting in under Advanced settings.</li>
+<li><strong>Two timelines (time domains).</strong> A cover time may be recorded on the sample (media) timeline or the presentation timeline (edit list). Auto mode checks both; if they point to different frames, conversion stops and asks you to choose a time domain (see §10). Negative-PTS media needs explicit timeline handling, otherwise the original is kept and an error is reported.</li>
+<li><strong>Huawei/Honor frame index.</strong> Some Huawei/Honor files record a raw cover <em>frame index</em> instead of a timestamp; the engine locates the frame by index and errors if it is out of range.</li>
+<li><strong>Recovery from video metadata.</strong> If the main XMP is missing but the embedded video carries cover-time metadata, the engine can recover the original cover time from it and warns you about the source.</li>
+<li><strong>Read-back verification.</strong> After the MOV is written, it is re-read to confirm the cover marker survived and the cover duration equals the actual frame duration; otherwise nothing is published.</li>
+</ul>
+<h2 id="5-remuxing-and-sample-by-sample-verification">5. Remuxing and sample-by-sample verification</h2>
+<ul>
+<li>Video and audio move as their <strong>original compressed samples</strong> — remuxed, never decoded or re-encoded. Outputs are verified sample by sample for <strong>hash, size, count, and presentation timestamps</strong>, plus track-count equality and timeline-shift tolerance.</li>
+<li>Stills carry a <strong>coding hash</strong> over the encoded data only (metadata excluded); it must be identical before and after, and exported stills are asserted to contain no embedded media.</li>
+<li>The ContentIdentifier in the still's EXIF, the identifier inside the MOV, and the manifest UUID must all agree.</li>
+</ul>
+<p><strong>Publishing and source protection:</strong></p>
+<ul>
+<li><strong>Atomic publish.</strong> Results are written to a staging area and published only after every check passes; replacements swap atomically after the new result verifies.</li>
+<li><strong>Source fingerprint.</strong> The source file's SHA-256 is compared before and after; if another program modifies the source mid-conversion, the result is not published.</li>
+<li><strong>Output location rule.</strong> The output folder must be outside the source folder (enforced in both GUI and CLI).</li>
+</ul>
+<p><strong>When an output already exists:</strong></p>
+<ul>
+<li>Same source, same settings, and the existing manifest verifies → the item is marked <code>resumed</code> and skipped.</li>
+<li>Different content or settings → an error, never a silent overwrite; pick a new output folder or explicitly choose Overwrite in the dialog.</li>
+<li>An older result that lacks Honor private-HDR still extensions is refused for resume and must be overwritten.</li>
+</ul>
+<p>Batch item states: <code>converted</code>, <code>resumed</code>, <code>skipped</code>, <code>failed</code>.</p>
+<h2 id="6-how-hdr-is-handled">6. How HDR is handled</h2>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Handling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Existing Ultra HDR (JPEG gain map)</td>
+<td>Gain map and parameters preserved as-is; main image keeps its original encoding</td>
+</tr>
+<tr>
+<td>Legacy Apple gain map</td>
+<td>Converted to an Ultra HDR gain map using Apple's published Rec.709 brightness model. Only the gain map is re-encoded — the SDR base image never is. Valid headroom (stops) range: (0, 16]</td>
+</tr>
+<tr>
+<td>ISO gain data (ISO/TS 21496-1)</td>
+<td>When parameters are complete and interpretable, the encoded image is kept and only metadata is added; output can be promoted to Ultra HDR + ISO</td>
+</tr>
+<tr>
+<td>HEIC passthrough</td>
+<td>Encoded image items, auxiliary data, and supported properties retained. tmap-style variants stay inside HEIC and are never guessed into a legacy gain model</td>
+</tr>
+<tr>
+<td>Honor private EHDR</td>
+<td>Still extensions preserved as opaque data with byte-level verification. Preservation does not mean Apple devices can render the private model</td>
+</tr>
+<tr>
+<td>SDR</td>
+<td>Stays SDR; no gain map is invented</td>
+</tr>
+<tr>
+<td>Unknown/private HDR (unknown tmap, PQ/HLG, complex HEIF…)</td>
+<td>Never silently converted to SDR and never faked; reported clearly. Keeping the original HEIC encoding is an option</td>
+</tr>
+</tbody>
+</table>
+<p>More detail:</p>
+<ul>
+<li>Ultra HDR output needs an ICC profile: if none is present, an sRGB profile is added only when the EXIF ColorSpace explicitly says sRGB. Otherwise conversion errors instead of guessing.</li>
+<li>The <strong>"Try compatible conversion for non-Ultra HDR"</strong> switch (on by default) controls legacy compatibility paths. For Apple → Android, JPEG output uses Ultra HDR; plain SDR sources get no gain map.</li>
+<li><strong>HEIC → JPEG limit:</strong> if a HEIC carries HDR that cannot be extracted safely on macOS 12 (some tmap/gain tracks), conversion fails explicitly and suggests keeping the HEIC encoding or providing a supported Apple HDR gain map.</li>
+<li><strong>Edited versions</strong> may already have lost their gain map; reports mark them "edited version has no HDR gain map", and the app never borrows the original's gain map for an edit.</li>
+</ul>
+<h2 id="7-the-auxiliary-track-the-second-video-track-most-people-never-see">7. The auxiliary track: the second video track most people never see</h2>
+<h3 id="71-what-it-is">7.1 What it is</h3>
+<p>Some Motion Photos carry <strong>two</strong> video tracks in their embedded video: the <strong>primary motion track</strong> — the continuous clip that matches the cover — and a <strong>secondary (auxiliary) track</strong>. In measured samples the auxiliary track can be a single frame at <em>higher</em> resolution (e.g. 2048px wide): more like a high-resolution key frame than a video. The engine's rule: at most one auxiliary track per photo.</p>
+<p>Do not confuse it with two other things: the MPF auxiliary <em>images</em> inside a JPEG (gain maps etc. — that's what the manifest field <code>auxiliary_sha256</code> refers to) and HEIC auxiliary data. "Auxiliary track" here always means the <strong>video</strong> track.</p>
+<h3 id="72-three-export-modes">7.2 Three export modes</h3>
+<p>Under Export Settings → Output content (Android → Apple only):</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Live Photo only (default)</td>
+<td>Build the Live Photo from the selected track</td>
+</tr>
+<tr>
+<td>Live Photo + auxiliary track</td>
+<td>Additionally saves the auxiliary track as a separate file, <code>&lt;name&gt;.auxiliary.mov</code>. Keep it apart from the Live Photo pair</td>
+</tr>
+<tr>
+<td>Auxiliary track only</td>
+<td>Exports just the auxiliary track as a standalone MOV (result folder suffix <code>.auxiliary-export</code>). No Live Photo, no audio; destination is forced to folder</td>
+</tr>
+</tbody>
+</table>
+<p>If the source has no auxiliary track, these operations report that clearly instead of skipping silently.</p>
+<h3 id="73-using-the-auxiliary-track-as-the-motion-video--strict-conditions">7.3 Using the auxiliary track as the motion video — strict conditions</h3>
+<p>The <strong>Video track</strong> setting can switch between the primary and auxiliary tracks, but:</p>
+<ul>
+<li>Fewer than 2 frames is an immediate refusal: "The auxiliary track has only X frame(s) and cannot be used as the motion video." <strong>A single-frame auxiliary track is never stretched into fabricated motion.</strong></li>
+<li>The cover time must map onto the auxiliary track's <em>own</em> timeline. If it cannot, conversion errors out — it never falls back to the primary track and never moves the cover.</li>
+<li>Multi-frame auxiliary tracks convert normally; the manifest records <code>selected_video_role = "secondary"</code>.</li>
+</ul>
+<p>The UI says it plainly: "The auxiliary track may contain only one frame and cannot replace continuous motion video."</p>
+<h3 id="74-standalone-export-specification">7.4 Standalone export specification</h3>
+<ul>
+<li>Precondition: the source must have exactly 2 video tracks.</li>
+<li><strong>Video only, no audio</strong> (<code>audio_included: false</code> in the manifest).</li>
+<li>Samples pass through untouched, then verify: exactly 1 output video track, with compressed-data hash, sample sizes, and PTS counts matching the source.</li>
+<li>The result detail reads: "Auxiliary track exported separately: W × H, N frames, D seconds; no audio, not re-encoded."</li>
+<li><strong>Important:</strong> an independent auxiliary MOV is an ordinary video. Do not import it into the library together with a Live Photo pair.</li>
+</ul>
+<h3 id="75-advanced-repairing-zero-duration-auxiliary-tracks">7.5 Advanced: repairing zero-duration auxiliary tracks</h3>
+<p>Some auxiliary tracks declare a duration of 0 for their only frame, so the system cannot read a valid sample and export fails. The Advanced switch <strong>"Allow repair of zero-duration auxiliary tracks"</strong> (off by default) handles this:</p>
+<ul>
+<li>It edits only the <strong>exported copy's</strong> duration fields (borrowing the primary track's shortest positive frame duration). Compressed sample bytes and sample timestamps are completely unchanged.</li>
+<li>If the layout cannot be strictly validated, the repair is refused.</li>
+<li>The repair is recorded in the manifest (<code>duration_repair</code>: method, original and repaired durations, <code>sample_pts_unchanged</code>) and surfaced as a warning in the results.</li>
+<li>It only affects standalone auxiliary exports; the switch is disabled in Live-Photo-only mode.</li>
+</ul>
+<h2 id="8-photos-library-recognition-import-and-monitoring">8. Photos library: recognition, import, and monitoring</h2>
+<p>MomentStays talks to the Photos library only through the public PhotoKit API — it never reads or writes the library database directly. Library permission is requested the first time you enter a library feature, not at app launch.</p>
+<h3 id="81-scanning-and-recognition">8.1 Scanning and recognition</h3>
+<ul>
+<li>Scanning can be scoped to a chosen album. Progress distinguishes scanning assets, reading originals, and identifying formats.</li>
+<li>Identification parses the actual originals (vendor markers, XMP, container structure, video boundaries) — never just the file extension, filename, or an HDR flag. Plain stills are skipped without counting as failures; items marked as motion photos whose video is gone show a specific reason instead of a guess.</li>
+<li>Results are annotated with vendor, motion type, original/edited status, HDR status, and whether the original must be downloaded from iCloud.</li>
+<li>Assets previously created by MomentStays are excluded by local identifiers, so nothing loops through conversion twice.</li>
+</ul>
+<h3 id="82-originals-vs-edited-versions">8.2 Originals vs edited versions</h3>
+<p>The Library version setting defaults to <strong>Unmodified original (keeps original HDR)</strong>:</p>
+<ul>
+<li>Original: the paired original photo + paired video resources.</li>
+<li>Edited: "Current edited version (may lack HDR)" — only the matching full-size edited pair is used. If either half is missing, the reason is shown; halves are <strong>never mixed</strong>, and there is <strong>no silent fallback</strong> to the original.</li>
+</ul>
+<h3 id="83-direct-import">8.3 Direct import</h3>
+<ul>
+<li>Import is available for <strong>Android → Apple</strong> only. The still and paired video are created as one Live Photo in a single library request, then associated with the target album — default <strong>"MomentStays Conversion Results"</strong>, or another user album you pick.</li>
+<li>Before import, pairing identifiers, the cover timing marker, and "no embedded media in the still" are verified again. <strong>Independent auxiliary MOVs are never attached as the paired video</strong>, and JSON manifests are never imported as photo resources.</li>
+<li>Original filenames, capture dates, and locations are preserved (library values win; file metadata is the fallback). After writing, the new asset is read back and checked — Live Photo properties, filename, date, location, album membership — before it is shown as "Imported".</li>
+<li><strong>Stage-scoped retries:</strong> an import failure retries only the import (verified files are kept); an album-association failure retries only the association. Assets are never created twice.</li>
+<li><strong>De-duplication records</strong> live in <code>~/Library/Application Support/Motion-Live/</code> (the internal data-folder name intentionally keeps the legacy name): <code>imports.json</code> and friends record source assets, settings, verification summaries, and target assets. If a record file is unreadable, writing stops with an error rather than risking duplicate imports. Assets you deleted in Photos are marked missing and are not silently re-created; anything unconfirmable is marked "to verify" instead of being blindly retried.</li>
+</ul>
+<h3 id="84-icloud-and-incremental-monitoring">8.4 iCloud and incremental monitoring</h3>
+<ul>
+<li>Library resources may exist only in iCloud; scans flag "original needs download". <strong>Downloads and monitoring are opt-in</strong>, chosen in the library picker, and stop when you leave.</li>
+<li>Incremental monitoring (second-stage feature) watches the chosen albums and direction <strong>while the app is running</strong>; the status bar shows "Monitoring the selected library scope" with a Stop button. There is no background daemon: quitting stops monitoring, and after a restart the app re-enumerates and reconciles with local records (macOS 12 has no persistent change token).</li>
+</ul>
+<h2 id="9-batches-delivery-and-sharing">9. Batches, delivery, and sharing</h2>
+<h3 id="91-destinations">9.1 Destinations</h3>
+<table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>Android → Apple</th>
+<th>Apple → Android</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Save to folder</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Import into Photos library</td>
+<td>✓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Folder + import</td>
+<td>✓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Share directly</td>
+<td>—</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Folder + share</td>
+<td>—</td>
+<td>✓</td>
+</tr>
+</tbody>
+</table>
+<p>Auxiliary-only mode is folder-only. The main button label follows the destination ("Convert and Import", "Export Auxiliary Track", …).</p>
+<h3 id="92-output-naming">9.2 Output naming</h3>
+<p>One result folder per source (stills/MOV default to <code>photo.jpg</code> / <code>photo.mov</code> inside; the original filename is recorded in the manifest's <code>original_filename</code>, and output modification times inherit the source's):</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Folder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Android → Apple</td>
+<td><code>&lt;relative path&gt;.livephoto</code> (still + MOV, plus manifest when enabled)</td>
+</tr>
+<tr>
+<td>Auxiliary only</td>
+<td><code>&lt;relative path&gt;.auxiliary-export</code></td>
+</tr>
+<tr>
+<td>Apple → Android</td>
+<td><code>&lt;relative path&gt;.motionphoto</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="93-system-sharing-apple--android">9.3 System sharing (Apple → Android)</h3>
+<ul>
+<li>When a batch finishes, the system share menu is presented <strong>once</strong> for the successful files, passing the final file URLs (<code>.MP.jpg</code> / <code>.MP.heic</code>) — never thumbnails or NSImage objects that the system might re-encode.</li>
+<li>Manifests, result folders, and paired MOVs are not shared by default. Partial success shares only the successes and reports the failure count; total failure or a stopped task does not pop the menu.</li>
+<li>Cancelling the share sheet does not change "conversion succeeded" status; status records only "handed to the sharing app", never "received".</li>
+<li>Third-party services may still modify files in transit; verify byte/HDR/motion/cover integrity at the receiving end when it matters.</li>
+</ul>
+<h3 id="94-reports-and-recent-results">9.4 Reports and recent results</h3>
+<ul>
+<li>Reports filter by <strong>All / Converted / Resumed / Skipped / Failed</strong>; each entry offers the full reason, copyable details, and Reveal in Finder. Reports remain viewable in-app even when manifest export is off.</li>
+<li><strong>Recent Results…</strong> can retry delivery, view files, open the output folder, and clear the <strong>app's own task cache</strong>. Cleanup never deletes files in your output folders or library assets, and is disabled while a share is in progress.</li>
+</ul>
+<h2 id="10-settings-reference">10. Settings reference</h2>
+<p>Open via the top-bar <strong>Export Settings</strong> (an inspector on windows ≥960pt wide, otherwise a sheet). Items marked * are Advanced and collapsed by default.</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Setting</th>
+<th>Options / default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direction</td>
+<td>Conversion direction</td>
+<td>Android → Apple Live Photo (default) / Apple Live Photo → Android</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>Destination</td>
+<td>See §9.1; enabled options depend on direction and mode</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>Target album name</td>
+<td>Default "MomentStays Conversion Results"; empty falls back to default</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>Library version</td>
+<td>Unmodified original (default) / Current edited version</td>
+</tr>
+<tr>
+<td>Content (→Apple)</td>
+<td>Export mode</td>
+<td>Live Photo only (default) / + auxiliary track / auxiliary only</td>
+</tr>
+<tr>
+<td>Content (→Apple)</td>
+<td>Video track</td>
+<td>Primary motion track (default) / Auxiliary track</td>
+</tr>
+<tr>
+<td>HDR (→Apple)</td>
+<td>Try compatible conversion for non-Ultra HDR</td>
+<td>On by default</td>
+</tr>
+<tr>
+<td>Target (→Android)</td>
+<td>Target vendor</td>
+<td>Google/generic (default), Xiaomi, Samsung, Huawei, Honor, OPPO, vivo V2</td>
+</tr>
+<tr>
+<td>Target (→Android)</td>
+<td>Photo format</td>
+<td>JPEG · Ultra HDR / HEIC · keep original encoding (HEIC only for Google, Xiaomi, Samsung; other vendors force JPEG)</td>
+</tr>
+<tr>
+<td>Image quality (→Android)</td>
+<td>Keep original JPEG encoding</td>
+<td>On by default (no recompression)</td>
+</tr>
+<tr>
+<td>Image quality (→Android)</td>
+<td>Main image quality / gain map quality</td>
+<td>Sliders 1%–100%, both default 95%</td>
+</tr>
+<tr>
+<td>Verification</td>
+<td>Export manifest &amp; JSON report</td>
+<td>Off by default (see §11)</td>
+</tr>
+<tr>
+<td>Advanced *</td>
+<td>When cover time is not recorded</td>
+<td>Report an error (default, recommended) / Use video midpoint</td>
+</tr>
+<tr>
+<td>Advanced *</td>
+<td>Cover time meaning (time domain)</td>
+<td>Auto-check (default, recommended) / media / presentation</td>
+</tr>
+<tr>
+<td>Advanced *</td>
+<td>Allow repair of zero-duration auxiliary tracks</td>
+<td>Off by default (see §7.5)</td>
+</tr>
+</tbody>
+</table>
+<p>As the Advanced section warns: auto mode checks the cover position and reports ambiguity as an error — change these only if you understand the source's timeline.</p>
+<h2 id="11-manifests-and-reports">11. Manifests and reports</h2>
+<p>Each result folder includes a <code>manifest.json</code> when <strong>Export manifest &amp; JSON report</strong> is enabled. The switch is <strong>off by default</strong>: with it off, only media is exported, but internal verification still runs, the in-app report is still available, and library import does not depend on the files. Key fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code> / <code>source_sha256</code></td>
+<td>Source path and fingerprint</td>
+</tr>
+<tr>
+<td><code>identifier</code></td>
+<td>The pairing ContentIdentifier UUID</td>
+</tr>
+<tr>
+<td><code>source_format</code></td>
+<td>Detected source format (e.g. <code>samsung-sef</code>, <code>vivo-v2</code>)</td>
+</tr>
+<tr>
+<td><code>source_timestamp_us</code> / <code>source_timestamp_tag</code></td>
+<td>Source cover time and where it came from</td>
+</tr>
+<tr>
+<td><code>timing</code></td>
+<td>Timeline report: time domain, cover seconds, <code>snap_error_seconds</code>, timing policy (source XMP / video metadata / Huawei frame / midpoint), selected track and role, frame count, dimensions</td>
+</tr>
+<tr>
+<td><code>hdr</code></td>
+<td>Input/output HDR status and reason</td>
+</tr>
+<tr>
+<td><code>primary_coding_sha256</code></td>
+<td>Coding hash of the main still</td>
+</tr>
+<tr>
+<td><code>auxiliary_sha256</code></td>
+<td>Per-image hashes of MPF auxiliary images inside the still (gain maps etc.) — image data, not the §7 video track</td>
+</tr>
+<tr>
+<td><code>auxiliary_video</code></td>
+<td>Auxiliary-track export info: track id, frames, dimensions, duration, hash, audio flag, duration-repair record</td>
+</tr>
+<tr>
+<td><code>output_sha256</code> / <code>warnings</code></td>
+<td>Output file hashes and all warnings</td>
+</tr>
+</tbody>
+</table>
+<p>Batch reports are named <code>report-&lt;date&gt;-&lt;time&gt;-&lt;random&gt;.json</code>, with counts and per-file results. History reports are not deleted automatically.</p>
+<p><strong>Privacy:</strong> reports and manifests can contain source paths, EXIF, dates, and hashes. Keep them local; MomentStays itself uploads nothing.</p>
+<h2 id="12-command-line-tool-cli">12. Command-line tool (CLI)</h2>
+<p>The repository ships a separate Python CLI that shares parts of the native engine. <strong>Scope:</strong> the CLI covers the Google Motion Photo (JPEG) workflow only — no HEIC, vendor containers, auxiliary tracks, or library features.</p>
+<p>Requirements: Python 3.9+, macOS 12+, Xcode Command Line Tools. The first run compiles the native helper automatically (with a notice).</p>
+<pre><code class="language-bash"># from the repository root
+./motion-live --help
+./motion-live --version        # 0.1.0
+
+# 1) Read-only scan: cover time, HDR, format problems (file or folder, recursive)
+./motion-live scan ~/Photos/incoming
+
+# 2) Batch convert (output dir is required and must be outside the input dir)
+./motion-live convert ~/Photos/incoming -o ~/Photos/converted
+
+# 3) Verify an existing result against its recorded checksums
+./motion-live verify ~/Photos/converted/IMG_0001.jpg.livephoto
+</code></pre>
+<p><code>convert</code> options:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--missing-time {error,midpoint}</code></td>
+<td><code>error</code></td>
+<td>Error when cover time is missing; <code>midpoint</code> uses the video midpoint and must be chosen explicitly</td>
+</tr>
+<tr>
+<td><code>--legacy-hdr {auto,preserve}</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code> tries converting an existing legacy Apple gain map; plain SDR never gains HDR. <code>preserve</code> keeps it untouched</td>
+</tr>
+<tr>
+<td><code>--time-domain {auto,media,presentation}</code></td>
+<td><code>auto</code></td>
+<td>Checks sample and presentation timelines and errors on ambiguity; can be pinned explicitly</td>
+</tr>
+</tbody>
+</table>
+<p>Behavior: inputs are <code>.jpg/.jpeg</code> only (symlinks skipped). Plain still JPEGs are <code>skipped</code>; corrupt motion photos are <code>failed</code> and make the exit code 1. Each result is a <code>&lt;name&gt;.livephoto/</code> folder (photo.jpg + photo.mov + manifest.json) plus a batch report in the output root. Existing results with matching fingerprint and options are <code>resumed</code>; mismatches error out and ask for a different output directory. Publishing is atomic and non-overwriting, and output timestamps inherit the source's access/modification times.</p>
+<p>Parsing is strict by design: Motion Photo detection relies on GCamera XMP and container structure, the video must sit at the file tail and pass full box-structure validation — never signature sniffing — and an Ultra HDR claim without an MPF auxiliary image is an error.</p>
+<h2 id="13-troubleshooting">13. Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom / message</th>
+<th>Cause and what to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Converted photo doesn't move on iPhone</td>
+<td>Usually the file was copied without conversion, or pairing/cover markers are incomplete. Convert with MomentStays and deliver via library import or as a pair; long-press in Photos to play</td>
+</tr>
+<tr>
+<td>"Cover time missing"</td>
+<td>The source has no verifiable cover time. Use an unedited original; if you must proceed, choose "Use video midpoint" under Advanced (the strategy is recorded)</td>
+</tr>
+<tr>
+<td>"Ambiguous cover time (media vs presentation)"</td>
+<td>The two timelines disagree. Pin a time domain under Advanced, or use the unedited original</td>
+</tr>
+<tr>
+<td>"Auxiliary track has only 1 frame"</td>
+<td>Expected. Use the primary track, or export the auxiliary track on its own as an ordinary video</td>
+</tr>
+<tr>
+<td>"Source has no auxiliary video track"</td>
+<td>That photo has a single video track; auxiliary modes don't apply</td>
+</tr>
+<tr>
+<td>"Output exists with different content or settings"</td>
+<td>The app refuses to overwrite a mismatched result. Choose a new output folder or explicitly Overwrite in the dialog</td>
+</tr>
+<tr>
+<td>"Library de-duplication record unreadable; writing stopped"</td>
+<td>The dedup record is corrupt; writing stops to prevent duplicate imports. Inspect the records under <code>~/Library/Application Support/Motion-Live/</code> or contact the developer</td>
+</tr>
+<tr>
+<td>HEIC → JPEG says HDR cannot be extracted safely</td>
+<td>That HEIC's HDR structure is unsupported. Choose "HEIC · keep original encoding" instead</td>
+</tr>
+<tr>
+<td>HDR missing after conversion</td>
+<td>You may have used the library's edited version (edits can drop the gain map) — switch to the unmodified original. SDR or unknown private HDR sources are reported as such</td>
+</tr>
+<tr>
+<td>macOS blocks first launch</td>
+<td>The app is ad-hoc signed. Allow it in System Settings → Privacy &amp; Security, or Control-click → Open in Finder</td>
+</tr>
+<tr>
+<td>Library scan shows "download needed"</td>
+<td>The original is only in iCloud. Enable downloads in the library picker and retry</td>
+</tr>
+</tbody>
+</table>
+<h2 id="14-known-limitations">14. Known limitations</h2>
+<ul>
+<li><strong>Platform:</strong> macOS 12+ only. Validation is primarily on Intel / macOS 12; Apple Silicon validation is in progress. No iOS release.</li>
+<li><strong>Signing:</strong> ad-hoc signature, no Developer ID, no notarization (see the first-launch note in §1).</li>
+<li><strong>Builds:</strong> source builds default to Intel; <code>--arm64</code> / <code>--universal</code> must be requested explicitly.</li>
+<li><strong>Vendor formats:</strong> only parser-validated layouts; not every device, firmware, or edited image is covered. Motion Photos stripped by editors/sharing may have lost their video irrecoverably.</li>
+<li><strong>Real-library behavior:</strong> real-world playback after import, re-export, HDR display, permission revocation, and similar system behaviors are under ongoing real-environment validation; automated regression uses synthetic fixtures and does not equal every real device.</li>
+<li><strong>Monitoring scope:</strong> library monitoring runs only while the app is open and only for the chosen scope; no background daemon.</li>
+<li><strong>Sharing scope:</strong> third-party share targets may still modify files; verify at the receiving end.</li>
+<li><strong>CLI scope:</strong> Google Motion Photo JPEG workflow only (see §12).</li>
+</ul>
+<hr />
+<p><em>This guide is based on the MomentStays 1.0.1 product, design, and validation documents and on the application's source behavior. If the guide and an in-app message disagree, the in-app message and the result report win.</em></p>
+</div>
+<div class="zh">
+<h1 id="momentstays-使用手册">MomentStays 使用手册</h1>
+<blockquote>
+<p>适用版本：MomentStays 1.0.1（macOS 12 或更高版本）
+本手册介绍图形界面（App）的全部功能，以及附带的命令行工具。英文版见 <a href="guide.html">guide.html</a>。</p>
+</blockquote>
+<p>MomentStays 在 Mac 上把 Android 动态照片（Motion Photo）转换成 Apple 实况照片（Live Photo），也能反向转换。全过程遵循三条原则：</p>
+<ol>
+<li><strong>封面帧不变</strong>——你选定的那一帧仍是封面，按真实时间线对齐到帧；</li>
+<li><strong>不重新编码</strong>——视频与音频只重新封装，逐个样本校验，画质零损失；</li>
+<li><strong>HDR 如实保留</strong>——能保留的增益图原样保留，处理不了的明确报告，绝不伪造。</li>
+</ol>
+<p>所有转换与校验都在本机完成，不上传任何照片。</p>
+<hr />
+<h2 id="目录">目录</h2>
+<ul>
+<li><a href="#1-快速上手">1. 快速上手</a></li>
+<li><a href="#2-界面与导入">2. 界面与导入</a></li>
+<li><a href="#3-转换方向与格式支持">3. 转换方向与格式支持</a></li>
+<li><a href="#4-核心机制一封面帧如何定位">4. 核心机制一：封面帧如何定位</a></li>
+<li><a href="#5-核心机制二不重新编码与逐样本校验">5. 核心机制二：不重新编码与逐样本校验</a></li>
+<li><a href="#6-核心机制三hdr-的处理方式">6. 核心机制三：HDR 的处理方式</a></li>
+<li><a href="#7-辅助轨一般人不知道的第二条视频轨">7. 辅助轨：一般人不知道的第二条视频轨</a></li>
+<li><a href="#8-系统图库识别导入与监测">8. 系统图库：识别、导入与监测</a></li>
+<li><a href="#9-批量交付与共享">9. 批量、交付与共享</a></li>
+<li><a href="#10-设置全表">10. 设置全表</a></li>
+<li><a href="#11-清单manifest与报告">11. 清单（manifest）与报告</a></li>
+<li><a href="#12-命令行工具cli">12. 命令行工具（CLI）</a></li>
+<li><a href="#13-疑难排解">13. 疑难排解</a></li>
+<li><a href="#14-已知限制">14. 已知限制</a></li>
+</ul>
+<hr />
+<h2 id="1-快速上手">1. 快速上手</h2>
+<ol>
+<li>打开 MomentStays，点顶部的「选择照片」，或把文件直接拖进队列；也可以从菜单选择「扫描系统照片图库…」直接从「照片」图库取图。</li>
+<li>确认转换方向：<strong>安卓 → 苹果实况</strong>（默认）或<strong>苹果实况 → 安卓</strong>。</li>
+<li>点「导出设置」核对输出方式（保存到文件夹 / 导入图库 / 共享等）、目标格式与 HDR 选项。</li>
+<li>点「开始转换」（快捷键 ⌘Return）。参数在任务开始时会被快照锁定，运行中不可修改。</li>
+<li>完成后在报告里查看每张照片的结果；点「最近结果…」可以重试交付、定位文件或打开输出文件夹。</li>
+</ol>
+<p>转换一份照片会生成一个结果目录（见 <a href="#9-批量交付与共享">§9</a> 的命名规则），而不是散落的文件。</p>
+<p><strong>首次打开提示</strong>：发布版为自签名（ad-hoc），未做 Apple 公证。若 macOS 拦截首次打开，请到「系统设置 → 隐私与安全性」放行，或在访达中 Control-点按应用图标选择「打开」。安装后的 App 不依赖 Python、FFmpeg、ExifTool 或 Homebrew。</p>
+<h2 id="2-界面与导入">2. 界面与导入</h2>
+<h3 id="21-照片队列">2.1 照片队列</h3>
+<p>队列是主工作区，每行一张照片。宽屏时列为：<strong>文件名 ｜ 格式/HDR ｜ 封面时间 ｜ 状态</strong>；窗口较窄（&lt;640pt）时改为两行布局，第二行显示「HDR · 封面 xx」。选中一行后，详情区会显示：</p>
+<ul>
+<li>厂商与厂商格式细节（如三星 SEF、vivo V2）；</li>
+<li>文件相对路径；</li>
+<li>识别到的封面时间与 HDR 状态。</li>
+</ul>
+<h3 id="22-四种导入来源">2.2 四种导入来源</h3>
+<table>
+<thead>
+<tr>
+<th>来源</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>选择文件</td>
+<td>文件选择器，可多选</td>
+</tr>
+<tr>
+<td>选择文件夹</td>
+<td>递归读取其中照片</td>
+</tr>
+<tr>
+<td>拖放</td>
+<td>把文件直接拖入队列区域</td>
+</tr>
+<tr>
+<td>扫描系统图库</td>
+<td>通过 PhotoKit 枚举图库资产并识别格式，可限定相册范围（见 §8）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-快捷键">2.3 快捷键</h3>
+<table>
+<thead>
+<tr>
+<th>快捷键</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>⌘O</td>
+<td>选择照片</td>
+</tr>
+<tr>
+<td>⌘R</td>
+<td>重新扫描</td>
+</tr>
+<tr>
+<td>⌘Return</td>
+<td>开始转换</td>
+</tr>
+<tr>
+<td>⌘.</td>
+<td>停止</td>
+</tr>
+<tr>
+<td>⌘,</td>
+<td>导出设置</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-任务运行规则">2.4 任务运行规则</h3>
+<ul>
+<li>点「开始」后，本次任务的全部参数形成快照，运行期间设置锁定。</li>
+<li>点「停止」会先发出取消信号，等引擎清理完毕才允许开始新任务；旧任务迟到的回调不会覆盖新任务的状态。</li>
+<li>报告标题会区分「转换报告」与「已停止的任务」。</li>
+</ul>
+<h2 id="3-转换方向与格式支持">3. 转换方向与格式支持</h2>
+<blockquote>
+<p>厂商支持的口径是「解析器能验证的布局」，不是对所有机型与固件版本的承诺。编辑过、被聊天软件转发过的照片可能已经丢失内嵌视频，丢失的视频无法凭静态图恢复。</p>
+</blockquote>
+<h3 id="31-安卓--苹果">3.1 安卓 → 苹果</h3>
+<table>
+<thead>
+<tr>
+<th>输入</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google 兼容 Motion Photo（JPEG）</td>
+<td>支持主 XMP、Extended XMP，以及经完整验证的封面元数据恢复</td>
+</tr>
+<tr>
+<td>华为 / 荣耀（<code>LIVE_</code> 尾标）</td>
+<td>含以原始帧号记录封面的特殊路径（见 §4）</td>
+</tr>
+<tr>
+<td>三星 SEF</td>
+<td>含 SEF 尾标结构</td>
+</tr>
+<tr>
+<td>三星 HEIC</td>
+<td>仅已验证的 mpvd/SEF 布局；保留原始 HEVC 图像项目，不转码为 JPEG</td>
+</tr>
+<tr>
+<td>OPPO / 一加</td>
+<td>OPPO 容器布局</td>
+</tr>
+<tr>
+<td>vivo V2</td>
+<td>vivo V2 容器布局</td>
+</tr>
+</tbody>
+</table>
+<p>输出为 Live Photo 配对：静态图（JPEG/HEIC）+ 独立 MOV。静态图与 MOV 通过内容标识（ContentIdentifier）配对，输出只包含经验证的静态图像载荷与必要扩展，动态视频与音频只存在于 MOV 中。</p>
+<h3 id="32-苹果--安卓">3.2 苹果 → 安卓</h3>
+<p>按 Apple 内容标识匹配完整静态图与 MOV，读取其中的 still-image-time 定时标记并对齐实际视频帧。</p>
+<table>
+<thead>
+<tr>
+<th>目标</th>
+<th>厂商</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>JPEG</td>
+<td>Google/通用、小米、三星（写 SEF 尾标）、华为、荣耀、OPPO、vivo V2</td>
+</tr>
+<tr>
+<td>HEIC</td>
+<td>仅 Google、小米、三星；保留已有图像、缩略图、增益图编码与属性。JPEG 不会为此重新编码成 HEIC</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-核心机制一封面帧如何定位">4. 核心机制一：封面帧如何定位</h2>
+<p><strong>封面时间</strong>指动态视频中被选作封面的那个瞬间，与照片的拍摄日期是两回事，不要混淆。</p>
+<p>转换时，MomentStays 读取源文件记录的封面时间，沿实际媒体时间线映射到真实帧，再写入 Live Photo 的 <code>still-image-time</code> 定时标记；反向转换时读回该标记，恢复安卓侧的封面位置。</p>
+<p>关键规则：</p>
+<ul>
+<li><strong>半帧容差</strong>：帧对齐会逐帧核对，默认容差为半帧；对齐误差会记录在清单中（<code>snap_error_seconds</code>）。</li>
+<li><strong>拒绝猜测</strong>：源时间缺失、有歧义或超出视频范围时一律报错，<strong>绝不</strong>默认用视频中点、拍摄日期或文件尾部的数字顶替。确实想用中点，必须在高级参数里主动选择「使用视频中点」。</li>
+<li><strong>两条时间线（时间域）</strong>：封面时间可能记在样本时间线（media）或播放时间线（presentation，含 edit list）上。自动模式同时检查两者；若两者指向不同的帧，会报错并请你指定时间域（见 §10 高级参数）。带负 PTS 的视频需要显式的时间线处理，否则保留原片并报错。</li>
+<li><strong>华为/荣耀帧号路径</strong>：部分华为/荣耀文件记录的是原始封面<strong>帧号</strong>而非时间戳，引擎会按帧号定位；帧号越界直接报错，不推测。</li>
+<li><strong>从视频元数据恢复</strong>：主 XMP 缺失时，若内嵌视频里带有封面时间元数据，引擎可据此恢复原始封面时间，并在结果中给出警告说明来源。</li>
+<li><strong>写后回读</strong>：MOV 写入后会回读验证封面标记仍然存在且封面时长等于实际帧时长，不通过则整份结果不发布。</li>
+</ul>
+<h2 id="5-核心机制二不重新编码与逐样本校验">5. 核心机制二：不重新编码与逐样本校验</h2>
+<ul>
+<li>视频与音频以<strong>原始压缩样本</strong>直接重新封装（remux），不解码、不重编码；输出会逐样本核对<strong>哈希、大小、数量与时间戳（PTS）</strong>，并校验输出轨道数与输入一致、时间线位移不超过容差。</li>
+<li>静态主图有「编码哈希」校验：只对编码数据（不含元数据）计算哈希，转换前后必须一致，否则判定失败；同时断言导出的静态图里不残留内嵌媒体。</li>
+<li>静态图 EXIF 中的内容标识、MOV 内的标识与清单中的 UUID 必须三方一致。</li>
+</ul>
+<p><strong>发布与源文件保护：</strong></p>
+<ul>
+<li><strong>原子发布</strong>：结果先写到暂存目录，全部校验通过后才一次性发布；覆盖旧结果时，也是新结果完整校验后才原子替换。</li>
+<li><strong>源文件指纹</strong>：转换前后比对源文件 SHA-256；若转换期间源文件被其他程序改动，本次结果不发布。</li>
+<li><strong>输出位置硬规则</strong>：输出文件夹必须位于原片目录之外（GUI 与 CLI 均强制），避免边读边写与误覆盖原片。</li>
+</ul>
+<p><strong>遇到同名旧结果时：</strong></p>
+<ul>
+<li>同源、同设置且旧结果清单校验通过 → 标记为 <code>resumed</code>（已验证，跳过重复转换）；</li>
+<li>内容或设置不同 → 报错且不覆盖，请换输出目录，或在弹窗中明确选择覆盖；</li>
+<li>若旧结果未保留荣耀私有 HDR 静态扩展，续转会被拒绝并提示覆盖重转。</li>
+</ul>
+<p>批次中每份结果的状态为四种之一：<code>converted</code>（已转换）、<code>resumed</code>（已验证跳过）、<code>skipped</code>（已跳过）、<code>failed</code>（失败）。</p>
+<h2 id="6-核心机制三hdr-的处理方式">6. 核心机制三：HDR 的处理方式</h2>
+<table>
+<thead>
+<tr>
+<th>输入情况</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>已有 Ultra HDR（JPEG 增益图）</td>
+<td>增益图与参数原样保留，主图保留原始编码</td>
+</tr>
+<tr>
+<td>旧 Apple 增益图（HEIC/JPEG）</td>
+<td>按 Apple 公开的 Rec.709 亮度模型转换成 Ultra HDR 增益图；只重编码增益图本身，SDR 主图从不重编码。增益头程（stops）有效范围为 (0, 16]</td>
+</tr>
+<tr>
+<td>ISO 增益数据（ISO/TS 21496-1）</td>
+<td>参数完整可解释时保留编码图像、仅补充元数据，可升级为 Ultra HDR + ISO 输出</td>
+</tr>
+<tr>
+<td>HEIC 直通</td>
+<td>保留编码图像项目、辅助数据与受支持属性；tmap 等变体在 HEIC 内保留，不臆测成旧增益模型</td>
+</tr>
+<tr>
+<td>荣耀私有 EHDR</td>
+<td>静态扩展以不透明数据原样保留并做字节校验。注意：保留不等于 Apple 设备能按荣耀私有模型渲染</td>
+</tr>
+<tr>
+<td>SDR</td>
+<td>保持 SDR，不凭空生成增益图</td>
+</tr>
+<tr>
+<td>未知/私有 HDR（未知 tmap、PQ/HLG、复杂 HEIF 等）</td>
+<td>不静默转成 SDR、不虚构增益图，明确报告；可选择保留原 HEIC 编码</td>
+</tr>
+</tbody>
+</table>
+<p>细节与边界：</p>
+<ul>
+<li>Ultra HDR 成片需要 ICC 配置：文件无 ICC 时，仅当 EXIF 明确标注 sRGB 才补 sRGB ICC，其余情况报错，不猜测色彩空间。</li>
+<li>GUI 的「尝试兼容非 Ultra HDR」开关（默认开）控制旧 Apple 增益图等兼容路径；苹果 → 安卓的 JPEG 输出采用 Ultra HDR，普通 SDR 不生成增益图。</li>
+<li><strong>HEIC 转 JPEG 的限制</strong>：若 HEIC 内含无法在 macOS 12 安全提取的 HDR（如某些 tmap/增益轨），转换会明确失败并提示改走「保留 HEIC 原编码」或提供受支持的 Apple HDR 增益图。</li>
+<li><strong>编辑版照片</strong>可能已丢失增益图，报告中会标注「编辑版无 HDR 增益图」；应用不会把原片的增益图挪用到编辑版上。</li>
+</ul>
+<h2 id="7-辅助轨一般人不知道的第二条视频轨">7. 辅助轨：一般人不知道的第二条视频轨</h2>
+<h3 id="71-什么是辅助轨">7.1 什么是辅助轨</h3>
+<p>部分动态照片的内嵌视频里不止一条视频轨：与封面对应的连续动态视频是<strong>主运动轨</strong>；同容器里的第二条视频轨叫<strong>辅助影像轨</strong>（简称辅助轨）。实测样片中，辅助轨可能只有 1 帧、分辨率却更高（如 2048px 宽）——它更像一张高清关键帧，而不是一段视频。引擎的规则是：一张动态照片最多允许一条辅助轨。</p>
+<p>注意别与另外两个概念混淆：JPEG 里的 MPF 辅助图像（增益图等，清单字段 <code>auxiliary_sha256</code> 指它）和 HEIC 的辅助数据，都不是这里说的辅助轨。<strong>辅助轨特指视频辅助轨。</strong></p>
+<h3 id="72-三种导出模式">7.2 三种导出模式</h3>
+<p>在「导出设置 → 输出内容」中选择（仅安卓 → 苹果方向）：</p>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仅 Live Photo（默认）</td>
+<td>只用选定轨道生成 Live Photo</td>
+</tr>
+<tr>
+<td>Live Photo ＋ 辅助轨</td>
+<td>生成 Live Photo 之外，把辅助轨另存为独立文件 <code>&lt;原名&gt;.auxiliary.mov</code>。请与实况配对分开保存</td>
+</tr>
+<tr>
+<td>仅导出辅助轨</td>
+<td>只导出辅助轨为独立 MOV（结果目录后缀 <code>.auxiliary-export</code>），不生成 Live Photo、不含音频；此模式下交付目标只能是文件夹</td>
+</tr>
+</tbody>
+</table>
+<p>原片没有辅助轨时，相关操作会明确报错，不会静默跳过。</p>
+<h3 id="73-拿辅助轨当动态视频有条件">7.3 拿辅助轨当动态视频？有条件</h3>
+<p>「视频轨道」可以在主运动轨 / 辅助影像轨之间切换，但规则很严：</p>
+<ul>
+<li>辅助轨帧数少于 2 帧直接拒绝：「辅助轨只有 X 帧，不能作为动态视频」。<strong>单帧辅助轨永远不会被拉伸伪造成动态视频。</strong></li>
+<li>选辅助轨时，封面时间必须能映射到辅助轨自己的时间线；映射不上会报错，<strong>绝不回退主轨、也不改封面</strong>。</li>
+<li>多帧辅助轨可以正常选轨转换，清单中会记录 <code>selected_video_role = "secondary"</code>。</li>
+</ul>
+<p>界面里也会直接提示：「辅助轨可能只有一帧，不能代替连续动态视频。」</p>
+<h3 id="74-独立导出的规格">7.4 独立导出的规格</h3>
+<ul>
+<li>前置条件：原片必须恰有 2 条视频轨。</li>
+<li><strong>只导视频、不含音频</strong>（清单字段 <code>audio_included: false</code>）。</li>
+<li>同样逐样本直通封装、写后校验：输出必须恰 1 条视频轨，压缩数据哈希、样本大小与 PTS 数量与源一致。</li>
+<li>结果详情会写明：「辅助轨已单独导出：宽 × 高，N 帧，时长；无音频，未重新编码」。</li>
+<li><strong>重要</strong>：独立辅助轨 MOV 是普通视频，不要与 Live Photo 配对一起导入图库。</li>
+</ul>
+<h3 id="75-高级修复零时长辅助轨">7.5 高级：修复零时长辅助轨</h3>
+<p>个别辅助轨唯一帧的时长字段为 0，系统读不到有效样本，默认导出会失败。高级参数里有开关<strong>「允许修复辅助轨的零时长」</strong>（默认关闭）：</p>
+<ul>
+<li>只改<strong>导出副本</strong>中辅助轨的时长字段（借用主轨最短正时长帧的时长），压缩样本字节与样本时间戳完全不变；</li>
+<li>原片布局无法严格验证时拒绝修复，不冒险；</li>
+<li>修复会记录在清单中（<code>duration_repair</code> 字段，含修复前后时长与「样本时间戳未改变」标记），结果里也会出现相应警告；</li>
+<li>仅对独立导出有意义，「仅 Live Photo」模式下该开关不可用。</li>
+</ul>
+<h2 id="8-系统图库识别导入与监测">8. 系统图库：识别、导入与监测</h2>
+<p>MomentStays 只用公开的 PhotoKit 接口访问「照片」图库，不直接读写图库文件。图库权限在你首次进入图库功能时才申请，应用启动时不会自动索取。</p>
+<h3 id="81-扫描与识别">8.1 扫描与识别</h3>
+<ul>
+<li>扫描可限定在某个相册范围内进行；界面分别显示「扫描资产 / 读取原件 / 识别格式」的进度。</li>
+<li>识别靠实际解析原件（厂商标记、XMP、容器结构、视频边界），<strong>不</strong>仅凭扩展名、文件名或 HDR 标记下结论。普通静态图会被跳过，不算失败；带动态标记但视频已丢失的，会显示具体原因，不猜测恢复。</li>
+<li>扫描结果标注：厂商、动态类型、原片/编辑版、HDR 状态、是否需要从 iCloud 下载原件。</li>
+<li>本应用自己生成并导入的资产会被本地标识排除，避免反复转换的循环。</li>
+</ul>
+<h3 id="82-原片与编辑版">8.2 原片与编辑版</h3>
+<p>图库版本（导出设置）二选一，默认<strong>未修改原片（保留原始 HDR）</strong>：</p>
+<ul>
+<li>原片：使用成对的原始照片 + 配对视频；</li>
+<li>编辑版：「当前编辑版（可能无 HDR）」，只用成对的编辑后全尺寸资源；缺任何一半都会说明原因，<strong>不混配、不自动回退到原片</strong>。</li>
+</ul>
+<h3 id="83-直接导入图库">8.3 直接导入图库</h3>
+<ul>
+<li>仅<strong>安卓 → 苹果</strong>方向可导入图库。导入时静态图与配对视频在同一次图库请求中创建为一张 Live Photo，再关联到目标相册；默认相册名为 <strong>「MomentStays 转换结果」</strong>，可改选其他用户相册。</li>
+<li>导入前再次校验：内容标识匹配、视频带封面定时标记、静态图无残留内嵌媒体；<strong>独立辅助轨不会被当作配对视频附加</strong>；JSON 清单不会被导入为照片资源。</li>
+<li>保留原始资源文件名、拍摄日期与位置（优先图库信息，缺失时才用文件元数据）；写入后回读新资产核对 Live Photo 属性、文件名、日期、位置与相册归属，全部确认后才显示「已导入」。</li>
+<li><strong>按阶段重试</strong>：导入失败只重试导入（保留已校验文件）；相册关联失败只重试关联，绝不重复创建资产，避免图库里出现重复照片。</li>
+<li><strong>去重记录</strong>保存在 <code>~/Library/Application Support/Motion-Live/</code>（内部数据目录沿用旧名，有意保留）：<code>imports.json</code> 等记录着来源资产、设置、校验摘要与目标资产。记录损坏时会停止写入并报错，以防重复导入；目标资产被你在图库中删除后会标为缺失，不自动补回；状态无法确认的标为「待核对」，不盲目重试。</li>
+</ul>
+<h3 id="84-icloud-与增量监测">8.4 iCloud 与增量监测</h3>
+<ul>
+<li>图库资源可能只存在 iCloud。扫描会标注「需下载原件」；<strong>下载与监测均为自愿开启（opt-in）</strong>，在图库选择界面勾选，退出即停止。</li>
+<li>增量监测（运行期间）：启用后，应用会在<strong>运行期间</strong>监测所选相册与方向的新增、修改与删除，底部状态栏显示「正在监测所选图库范围」并提供「停止监测」。应用退出即停止，没有后台常驻；重启后靠重新枚举 + 本地记录核对。macOS 12 的限制下不做跨重启的持久监测。</li>
+</ul>
+<h2 id="9-批量交付与共享">9. 批量、交付与共享</h2>
+<h3 id="91-交付目标">9.1 交付目标</h3>
+<table>
+<thead>
+<tr>
+<th>交付方式</th>
+<th>安卓→苹果</th>
+<th>苹果→安卓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>保存到文件夹</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>导入系统图库</td>
+<td>✓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>文件夹并导入图库</td>
+<td>✓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>直接共享</td>
+<td>—</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>文件夹并共享</td>
+<td>—</td>
+<td>✓</td>
+</tr>
+</tbody>
+</table>
+<p>「仅导出辅助轨」模式下只能保存到文件夹。主按钮文案会随交付方式变化（如「转换并导入图库」「导出辅助轨」）。</p>
+<h3 id="92-输出命名">9.2 输出命名</h3>
+<p>每个源文件生成一个结果目录（静态图与 MOV 默认名为 <code>photo.jpg</code> / <code>photo.mov</code>，原始文件名记录在清单的 <code>original_filename</code> 中，输出文件的修改时间沿用源文件时间）：</p>
+<table>
+<thead>
+<tr>
+<th>情形</th>
+<th>目录名</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>安卓 → 苹果</td>
+<td><code>&lt;相对路径&gt;.livephoto</code>（内含静态图 + MOV，及开启时的清单）</td>
+</tr>
+<tr>
+<td>仅导出辅助轨</td>
+<td><code>&lt;相对路径&gt;.auxiliary-export</code></td>
+</tr>
+<tr>
+<td>苹果 → 安卓</td>
+<td><code>&lt;相对路径&gt;.motionphoto</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="93-系统共享苹果--安卓">9.3 系统共享（苹果 → 安卓）</h3>
+<ul>
+<li>批次结束后，对成功文件<strong>统一弹一次</strong>系统共享菜单，传的是最终文件本体（<code>.MP.jpg</code> / <code>.MP.heic</code>），不传缩略图或 NSImage，避免被系统重编码。</li>
+<li>默认不共享 JSON 清单、结果目录或配对 MOV；部分成功时只共享成功文件并显示失败数；全部失败或任务被停止时不自动弹菜单。</li>
+<li>取消共享不影响「转换成功」的状态；状态只记录「已交给共享应用」，不宣称对方已收到。</li>
+<li>共享出去的文件仍可能被第三方服务修改，接收端是否字节不变、HDR/动态/封面是否完好，要以对方实测为准。</li>
+</ul>
+<h3 id="94-报告与最近结果">9.4 报告与最近结果</h3>
+<ul>
+<li>报告可按 <strong>全部 / 已转换 / 已恢复 / 已跳过 / 失败</strong> 筛选；每条可查看完整原因、复制详情、在访达中显示结果文件。即使关闭了清单导出，本次报告仍可在应用内查看。</li>
+<li>「最近结果…」可重试交付、查看文件、打开输出文件夹、清理<strong>应用自身任务缓存</strong>。清理永远不会删除你输出文件夹里的文件，也不会动图库资产；共享进行期间禁止清理。</li>
+</ul>
+<h2 id="10-设置全表">10. 设置全表</h2>
+<p>打开方式：顶部「导出设置」（宽屏 ≥960pt 时为右侧检查器，否则为设置面板）。带 * 的为高级参数，默认折叠。</p>
+<table>
+<thead>
+<tr>
+<th>分组</th>
+<th>设置</th>
+<th>选项 / 默认值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>方向</td>
+<td>转换方向</td>
+<td>安卓→苹果实况（默认）/ 苹果实况→安卓</td>
+</tr>
+<tr>
+<td>输出位置</td>
+<td>输出方式</td>
+<td>见 §9.1，随方向与模式联动</td>
+</tr>
+<tr>
+<td>输出位置</td>
+<td>目标相册名</td>
+<td>默认「MomentStays 转换结果」，留空回退默认</td>
+</tr>
+<tr>
+<td>输出位置</td>
+<td>图库版本</td>
+<td>未修改原片（默认）/ 当前编辑版</td>
+</tr>
+<tr>
+<td>输出内容（→苹果）</td>
+<td>导出模式</td>
+<td>仅 Live Photo（默认）/ ＋辅助轨 / 仅辅助轨</td>
+</tr>
+<tr>
+<td>输出内容（→苹果）</td>
+<td>视频轨道</td>
+<td>主运动轨（默认）/ 辅助影像轨</td>
+</tr>
+<tr>
+<td>HDR（→苹果）</td>
+<td>尝试兼容非 Ultra HDR</td>
+<td>默认开</td>
+</tr>
+<tr>
+<td>目标格式（→安卓）</td>
+<td>目标厂商</td>
+<td>Google/通用（默认）、小米、三星、华为、荣耀、OPPO、vivo V2</td>
+</tr>
+<tr>
+<td>目标格式（→安卓）</td>
+<td>照片格式</td>
+<td>JPEG·Ultra HDR / HEIC·保留原编码（仅 Google、小米、三星可选，其余厂商强制 JPEG）</td>
+</tr>
+<tr>
+<td>图像质量（→安卓）</td>
+<td>保留 JPEG 原图编码</td>
+<td>默认开（开时不重压）</td>
+</tr>
+<tr>
+<td>图像质量（→安卓）</td>
+<td>主图质量 / 增益图质量</td>
+<td>滑杆 1%–100%，默认均为 95%</td>
+</tr>
+<tr>
+<td>校验与报告</td>
+<td>导出清单与 JSON 报告</td>
+<td>默认关（见 §11）</td>
+</tr>
+<tr>
+<td>高级 *</td>
+<td>封面时间未记录时</td>
+<td>报告错误（默认，推荐）/ 使用视频中点</td>
+</tr>
+<tr>
+<td>高级 *</td>
+<td>封面时间的含义（时间域）</td>
+<td>自动检查（默认，推荐）/ media（样本时间）/ presentation（播放时间）</td>
+</tr>
+<tr>
+<td>高级 *</td>
+<td>允许修复辅助轨的零时长</td>
+<td>默认关（见 §7.5）</td>
+</tr>
+</tbody>
+</table>
+<p>高级区警示原文：「自动模式检查封面位置，遇到歧义会报告错误。仅在了解原片时间轴时修改。」</p>
+<h2 id="11-清单manifest与报告">11. 清单（manifest）与报告</h2>
+<p>每个结果目录在开启「导出清单与 JSON 报告」时包含一份 <code>manifest.json</code>（该开关<strong>默认关</strong>：关时仅导出媒体，但内部校验照常进行，本次报告仍可在应用内查看；图库导入不依赖清单文件）。清单主要字段：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code> / <code>source_sha256</code></td>
+<td>源文件路径与指纹</td>
+</tr>
+<tr>
+<td><code>identifier</code></td>
+<td>本次配对的内容标识 UUID</td>
+</tr>
+<tr>
+<td><code>source_format</code></td>
+<td>识别到的源格式（如 samsung-sef、vivo-v2）</td>
+</tr>
+<tr>
+<td><code>source_timestamp_us</code> / <code>source_timestamp_tag</code></td>
+<td>源封面时间与来源标签</td>
+</tr>
+<tr>
+<td><code>timing</code></td>
+<td>时间线报告：时间域、封面秒数、对齐误差 <code>snap_error_seconds</code>、计时策略（源 XMP / 视频元数据 / 华为帧号 / 中点）、所选轨道与角色、帧数与分辨率</td>
+</tr>
+<tr>
+<td><code>hdr</code></td>
+<td>输入/输出 HDR 状态与原因</td>
+</tr>
+<tr>
+<td><code>primary_coding_sha256</code></td>
+<td>静态主图编码哈希</td>
+</tr>
+<tr>
+<td><code>auxiliary_sha256</code></td>
+<td>静态图内 MPF 辅助图像（增益图等）逐张哈希——注意这是图像辅助数据，不是 §7 的视频辅助轨</td>
+</tr>
+<tr>
+<td><code>auxiliary_video</code></td>
+<td>辅助轨导出信息（轨道号、帧数、分辨率、时长、哈希、是否含音频、零时长修复记录）</td>
+</tr>
+<tr>
+<td><code>output_sha256</code> / <code>warnings</code></td>
+<td>输出文件哈希与全部警告</td>
+</tr>
+</tbody>
+</table>
+<p>批次报告文件名为 <code>report-&lt;日期&gt;-&lt;时间&gt;-&lt;随机&gt;.json</code>，含计数与逐文件结果，历史报告不自动删除。</p>
+<p><strong>隐私提醒</strong>：报告与清单可能包含源文件路径、EXIF、日期与哈希，请只保存在本地，不要公开上传。MomentStays 本身不上传任何内容。</p>
+<h2 id="12-命令行工具cli">12. 命令行工具（CLI）</h2>
+<p>仓库附带一个独立的 Python 命令行工具，与 App 共用原生引擎的部分能力。<strong>范围提醒</strong>：CLI 只提供 Google Motion Photo（JPEG）工作流，不包含 App 的 HEIC、厂商容器、辅助轨与图库功能。</p>
+<p>环境：Python 3.9+、macOS 12+、Xcode Command Line Tools。首次运行会自动编译原生组件（有提示），之后直接使用。</p>
+<pre><code class="language-bash"># 在仓库根目录
+./motion-live --help
+./motion-live --version        # 0.1.0
+
+# 1) 只读扫描：查看封面时间、HDR 与格式问题（文件或目录，递归）
+./motion-live scan ~/Photos/待转换
+
+# 2) 批量转换（输出目录必填，必须位于输入目录之外）
+./motion-live convert ~/Photos/待转换 -o ~/Photos/已转换
+
+# 3) 校验已有结果与转换时记录的校验值是否一致
+./motion-live verify ~/Photos/已转换/IMG_0001.jpg.livephoto
+</code></pre>
+<p><code>convert</code> 的选项：</p>
+<table>
+<thead>
+<tr>
+<th>选项</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--missing-time {error,midpoint}</code></td>
+<td><code>error</code></td>
+<td>缺封面时间时报错；<code>midpoint</code> 用视频中点，必须主动选择</td>
+</tr>
+<tr>
+<td><code>--legacy-hdr {auto,preserve}</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code> 尝试转换已有的旧 Apple 增益图；普通 SDR 不生成 HDR；<code>preserve</code> 原样保留</td>
+</tr>
+<tr>
+<td><code>--time-domain {auto,media,presentation}</code></td>
+<td><code>auto</code></td>
+<td>检查样本与播放两条时间线，歧义时报错；可显式指定</td>
+</tr>
+</tbody>
+</table>
+<p>行为说明：输入只接受 <code>.jpg/.jpeg</code>（跳过符号链接）；普通静态 JPEG 记为 <code>skipped</code>，损坏的动态照片记为 <code>failed</code>，有失败时退出码为 1；每份结果生成 <code>&lt;原名&gt;.livephoto/</code> 目录（photo.jpg + photo.mov + manifest.json），并在输出根目录写批次报告；已存在且指纹/设置一致的结果记为 <code>resumed</code>，不一致则报错要求更换输出目录。CLI 发布采用不覆盖的一次性原子发布，并把源文件的访问/修改时间保留到输出上。</p>
+<p>解析严格性（了解即可）：动态照片的判定依赖 GCamera XMP 与容器结构，视频必须位于文件尾部并通过完整的 box 结构校验，绝不靠搜索文件签名猜测；Ultra HDR 声明了却没有 MPF 辅助图会直接报错。</p>
+<h2 id="13-疑难排解">13. 疑难排解</h2>
+<table>
+<thead>
+<tr>
+<th>现象 / 报错</th>
+<th>原因与处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>导入后在 iPhone 上不动</td>
+<td>多半是文件未经转换直接拷贝，或配对/封面标记不完整。用 MomentStays 转换并通过图库导入或配对文件传输后，在「照片」中长按即可播放</td>
+</tr>
+<tr>
+<td>「封面时间缺失」</td>
+<td>源文件没有可验证的封面时间。确认原片未经聊天软件/编辑器处理；确需继续时在高级参数改「使用视频中点」（结果会注明策略）</td>
+</tr>
+<tr>
+<td>「封面时间有歧义（media / presentation 指向不同帧）」</td>
+<td>两条时间线不一致。在高级参数中指定时间域，或换回未经编辑的原片</td>
+</tr>
+<tr>
+<td>「辅助轨只有 1 帧，不能作为动态视频」</td>
+<td>预期行为。改用主运动轨，或用「仅导出辅助轨」把它单独导出为普通视频</td>
+</tr>
+<tr>
+<td>「原片没有辅助视频轨」</td>
+<td>该照片只有一条视频轨，辅助轨相关模式不适用</td>
+</tr>
+<tr>
+<td>「同名输出已存在且内容或设置不同」</td>
+<td>旧结果与本次不一致，应用拒绝覆盖。换输出目录，或在弹窗中明确选择覆盖</td>
+</tr>
+<tr>
+<td>「图库去重记录不可读，已停止写入」</td>
+<td>去重记录损坏时为防重复导入而停写。检查 <code>~/Library/Application Support/Motion-Live/</code> 下记录文件，或联系开发者</td>
+</tr>
+<tr>
+<td>HEIC 转 JPEG 时提示 HDR 不能安全提取</td>
+<td>该 HEIC 的 HDR 结构不受支持。改选「HEIC · 保留原编码」输出</td>
+</tr>
+<tr>
+<td>转换后 HDR 不显示</td>
+<td>可能用了图库「编辑版」（编辑版可能无增益图），改用未修改原片；或源本身是 SDR/未知私有 HDR，报告中会写明原因</td>
+</tr>
+<tr>
+<td>首次打开被 macOS 拦截</td>
+<td>自签名未公证。在「系统设置 → 隐私与安全性」放行，或访达中 Control-点按 → 打开</td>
+</tr>
+<tr>
+<td>图库扫描不到/提示需下载原件</td>
+<td>资源只在 iCloud。在图库选择界面开启下载选项后重试</td>
+</tr>
+</tbody>
+</table>
+<h2 id="14-已知限制">14. 已知限制</h2>
+<ul>
+<li><strong>平台</strong>：仅 macOS 12+；当前主要在 Intel / macOS 12 上验证，Apple Silicon 真机验证进行中；iOS 版未发布。</li>
+<li><strong>签名</strong>：ad-hoc 签名，无 Developer ID 与 Apple 公证（见 §1 首次打开说明）。</li>
+<li><strong>构建</strong>：从源码构建默认 Intel；<code>--arm64</code> / <code>--universal</code> 需显式指定。</li>
+<li><strong>厂商格式</strong>：只支持解析器可验证的布局，不承诺所有机型、固件与编辑后图片；被编辑/分享过的动态照片可能已经丢视频，无法恢复。</li>
+<li><strong>图库真实环境</strong>：图库入库后的真实播放、再导出、HDR 显示、权限撤销等系统行为仍在持续验收中；自动化回归覆盖的是合成样片，不等同于全部真实设备表现。</li>
+<li><strong>监测边界</strong>：图库增量监测仅在应用运行期间、仅限所选范围，无后台常驻。</li>
+<li><strong>共享边界</strong>：第三方共享服务仍可能修改文件，接收端效果以实测为准。</li>
+<li><strong>CLI 局限</strong>：仅 Google Motion Photo JPEG 工作流（见 §12）。</li>
+</ul>
+<hr />
+<p><em>本手册依据 MomentStays 1.0.1 的产品、设计与校验文档及源码行为编写。若手册与应用内提示不一致，以应用内提示与结果报告为准。</em></p>
+</div>
+</article>
+</div>
+<footer><div class="wrap">© 2026 Lino · MomentStays · GPL-3.0 · <a href="index.html"><span class="en">Home</span><span class="zh">首页</span></a></div></footer>
+</body>
+</html>
