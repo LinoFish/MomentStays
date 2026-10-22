@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func applicationDidFinishLaunching(_ notification: Notification) {
         if startupArgument("--direction") == "to-android" { model.updateSettings { $0.direction = .toAndroid } }
         buildMenu()
+        AppIconAppearance.shared.start()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "MomentStays"; window.isReleasedWhenClosed = false
