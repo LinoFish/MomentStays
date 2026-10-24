@@ -558,7 +558,7 @@ open dist/MomentStays.app</pre>
     var de=document.documentElement; de.classList.add('introrev'); de.classList.remove('introlock'); window.scrollTo(0,0);
     if(window.msHeroText) window.msHeroText();
     stage.classList.add('leaving');
-    setTimeout(function(){ head.classList.add('out'); setTag(null); slot.insertBefore(art,mk); stage.parentNode.removeChild(stage); },950); }
+    setTimeout(function(){ head.classList.add('out'); setTag(null); var st=stage; if(introOn) return; slot.insertBefore(art,mk); slot.appendChild(hint); if(st.parentNode) st.parentNode.removeChild(st); },950); }
   var ty=null;
   function ts(e){ ty=e.touches[0].clientY; }
   function tm(e){ e.preventDefault(); if(ty!==null && ty-e.touches[0].clientY>40){ ty=null; leaveIntro(); } }
@@ -566,7 +566,11 @@ open dist/MomentStays.app</pre>
   function kd(e){ if(['ArrowDown','PageDown',' ','Enter','Escape'].indexOf(e.key)>=0){ e.preventDefault(); leaveIntro(); } }
   function attach(){ stage.addEventListener('touchstart',ts,{passive:true}); window.addEventListener('touchmove',tm,{passive:false}); window.addEventListener('wheel',wh,{passive:false}); window.addEventListener('keydown',kd); }
   function detach(){ stage.removeEventListener('touchstart',ts); window.removeEventListener('touchmove',tm); window.removeEventListener('wheel',wh); window.removeEventListener('keydown',kd); }
-  function replay(){ if(!done) return; caps.forEach(function(c){c.classList.remove('on')}); head.textContent=''; vals.classList.remove('on');
+  function replay(){ if(!done) return;
+    if(window.matchMedia && matchMedia('(max-width:640px)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+      if(introOn) return; if(stage&&stage.parentNode){ stage.parentNode.removeChild(stage); }
+      caps.forEach(function(c){c.classList.remove('on')}); head.textContent=''; head.classList.remove('out'); vals.classList.remove('on'); setTag(null);
+      enterIntro(true); done=false; still=false; last=-1; t0=performance.now(); requestAnimationFrame(frame); return; } caps.forEach(function(c){c.classList.remove('on')}); head.textContent=''; vals.classList.remove('on');
     slot.classList.remove('done'); fit(); done=false; last=-1; t0=performance.now(); requestAnimationFrame(frame); }
   window.addEventListener('resize',fit); fit();
   if(mk) mk.addEventListener('click',replay);
@@ -574,11 +578,14 @@ open dist/MomentStays.app</pre>
     slot.classList.add('instant'); done=true; slot.classList.add('done');
     slot.style.height=(mk.offsetHeight+14)+'px'; return;
   }
-  if(window.msIntro){ introOn=true; stage=document.createElement('div'); stage.className='introstage'; stage.setAttribute('aria-hidden','false');
-    stage.appendChild(art); stage.appendChild(hint); document.body.appendChild(stage);
+  function enterIntro(fadeIn){ introOn=true; stage=document.createElement('div'); stage.className='introstage'+(fadeIn?' leaving':'');
+    stage.appendChild(art); stage.appendChild(hint); hint.classList.remove('on'); document.body.appendChild(stage);
     slot.classList.add('instant','done'); slot.style.height=(mk.offsetHeight+14)+'px'; void slot.offsetHeight; slot.classList.remove('instant');
-    document.documentElement.classList.add('introlock'); window.scrollTo(0,0); attach();
-    setTimeout(function(){ if(introOn) hint.classList.add('on'); },2200); }
+    var lock=function(){ if(!introOn) return; document.documentElement.classList.add('introlock'); window.scrollTo(0,0); };
+    if(fadeIn){ void stage.offsetHeight; stage.classList.remove('leaving'); setTimeout(lock,900); } else lock();
+    attach();
+    var me=stage; setTimeout(function(){ if(introOn&&stage===me) hint.classList.add('on'); },2200); }
+  if(window.msIntro) enterIntro(false);
   var go=false;
   function start(){ if(go) return; go=true; t0=performance.now(); requestAnimationFrame(frame); }
   setTimeout(start,250);
