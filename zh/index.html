@@ -170,6 +170,26 @@
   .heroslot.done .mark{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
   .heroslot.instant,.heroslot.instant *{transition:none!important}
 
+  /* ---- Mobile intro: animation is the full-screen first scene (2026-10-24) ---- */
+  html.introlock,html.introlock body{overflow:hidden;height:100%;overscroll-behavior:none}
+  html.introlock .mark *,html.introlock .mark .glow,html.introlock .reveal-h{animation:none!important}
+  html.introlock .reveal-h{opacity:0}
+  html.introlock .heroslot .mark{opacity:0!important}
+  html.introrev .reveal-h{animation-delay:.15s!important}
+  html.introrev .mark .glow{animation-delay:1.35s,2.9s!important}
+  .introstage{position:fixed;inset:0;z-index:100;background:var(--bg);transition:opacity .9s ease,transform .9s cubic-bezier(.4,0,.2,1);touch-action:none}
+  .introstage.leaving{opacity:0;transform:translateY(-6%);pointer-events:none}
+  .introstage .art{position:absolute;left:6px;right:6px;top:46%;margin:0;max-width:none;transform:translateY(-50%)}
+  .introstage .art .head{font-size:21px;top:-14%}
+  .introstage .art .cap{font-size:13px}
+  .introstage .art .vals{font-size:13px;top:100%}
+  .introstage .art .tag{top:88%}
+  .swipehint{display:none}
+  .introstage .swipehint{display:flex;flex-direction:column;align-items:center;gap:6px;position:absolute;left:0;right:0;bottom:calc(28px + env(safe-area-inset-bottom));font-size:12px;letter-spacing:2px;color:var(--muted);opacity:0;transition:opacity .8s ease}
+  .introstage .swipehint.on{opacity:1}
+  .swipehint i{width:10px;height:10px;border-left:1.6px solid currentColor;border-top:1.6px solid currentColor;transform:rotate(45deg);animation:ms-hint 1.8s ease-in-out infinite}
+  @keyframes ms-hint{0%,100%{transform:translateY(4px) rotate(45deg);opacity:.4}50%{transform:translateY(-4px) rotate(45deg);opacity:1}}
+
   /* ---- Polish (2026-10-22) ---- */
   header .wrap{padding-left:clamp(20px,4vw,48px);padding-right:clamp(20px,4vw,48px);max-width:1180px}
   .nav .home{display:flex;align-items:center;gap:11px;color:var(--ink)}
@@ -225,6 +245,8 @@
   .more{margin-top:18px;font-size:15px}
   .card li.note{color:var(--muted);font-size:.92em}
 </style>
+<script>try{if(matchMedia('(max-width:640px)').matches&&!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('introlock')}catch(e){}</script>
+<style>html.introlock body>*:not(.introstage){visibility:hidden}</style>
 </head>
 <body>
 <script>
@@ -265,6 +287,7 @@ function toggleLang(){
     <div class="tag" id="artTag"></div>
     <div class="vals" id="artVals"><span class="en">Cover frame <b>unchanged</b> · quality <b>untouched</b> · HDR <b>kept</b></span><span class="zh">封面<b>不换</b> · 画质<b>不丢</b> · HDR <b>不丢</b></span></div>
   </div>
+  <div class="swipehint" id="swipeHint"><i></i><span class="en">Swipe up</span><span class="zh">上滑进入</span></div>
 <div class="mark" id="heroMark" aria-label="MomentStays" title="Replay">
   <div class="glow"></div>
   <svg viewBox="100 100 824 824" role="img" aria-label="MomentStays icon">
@@ -417,22 +440,27 @@ open dist/MomentStays.app</pre>
 <script>
 (function(){
   var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var intro = !reduce && window.matchMedia && matchMedia('(max-width:640px)').matches;
+  window.msIntro = intro;
+  function run(sh){
   function tokens(t){ return t.match(/[A-Za-z0-9&;’'.,:—()-]+\s*|[\u3000-\u303f\uff00-\uffef]|[\u4e00-\u9fff]{1,2}|\s+|./g) || [t]; }
   document.querySelectorAll('[data-type]').forEach(function(el){
     var full = el.textContent; el.textContent=''; var txt=document.createTextNode(''); var c=document.createElement('span'); c.className='caret';
     el.appendChild(txt); el.appendChild(c);
     if (reduce){ txt.data=full; return; }
     var chars=Array.from(full), i=0;
-    setTimeout(function step(){ txt.data += chars[i++]; if(i<chars.length) setTimeout(step, 55 + Math.random()*55); }, 2700);
+    setTimeout(function step(){ txt.data += chars[i++]; if(i<chars.length) setTimeout(step, 55 + Math.random()*55); }, 2700 - sh);
   });
   document.querySelectorAll('[data-stream]').forEach(function(el){
     var parts=tokens(el.textContent); el.textContent='';
     var spans=parts.map(function(p){ var s=document.createElement('span'); s.className='tk'; s.textContent=p; el.appendChild(s); return s; });
     if (reduce){ spans.forEach(function(s){s.classList.add('on')}); return; }
-    spans.forEach(function(s,k){ setTimeout(function(){ s.classList.add('on'); }, 3700 + k*45); });
+    spans.forEach(function(s,k){ setTimeout(function(){ s.classList.add('on'); }, 3700 - sh + k*45); });
   });
   var later = reduce ? 0 : 3900;
-  setTimeout(function(){ document.querySelectorAll('.reveal').forEach(function(e){ e.classList.add('on'); }); }, later + (reduce?0:1500));
+  setTimeout(function(){ document.querySelectorAll('.reveal').forEach(function(e){ e.classList.add('on'); }); }, Math.max(0,later + (reduce?0:1500) - sh));
+  }
+  if (intro) window.msHeroText=function(){ run(2400); }; else run(0);
 })();
 </script>
 <script>
@@ -520,9 +548,24 @@ open dist/MomentStays.app</pre>
   }
   var still=false, done=false, slot=document.getElementById('heroSlot'), mk=document.getElementById('heroMark');
   function fit(){ if(!slot||slot.classList.contains('done')) return; slot.style.height=art.offsetHeight+'px'; }
-  function finish(){ if(done) return; done=true; head.classList.add('out'); setTag(null);
+  var introOn=false, stage=null, hint=document.getElementById('swipeHint');
+  function finish(){ if(done) return;
+    if(introOn){ leaveIntro(); return; }
+    done=true; head.classList.add('out'); setTag(null);
     slot.style.height=(mk.offsetHeight+14)+'px';
     slot.classList.add('done'); }
+  function leaveIntro(){ if(!introOn) return; introOn=false; done=true; detach();
+    var de=document.documentElement; de.classList.add('introrev'); de.classList.remove('introlock'); window.scrollTo(0,0);
+    if(window.msHeroText) window.msHeroText();
+    stage.classList.add('leaving');
+    setTimeout(function(){ head.classList.add('out'); setTag(null); slot.insertBefore(art,mk); stage.parentNode.removeChild(stage); },950); }
+  var ty=null;
+  function ts(e){ ty=e.touches[0].clientY; }
+  function tm(e){ e.preventDefault(); if(ty!==null && ty-e.touches[0].clientY>40){ ty=null; leaveIntro(); } }
+  function wh(e){ e.preventDefault(); if(e.deltaY>20) leaveIntro(); }
+  function kd(e){ if(['ArrowDown','PageDown',' ','Enter','Escape'].indexOf(e.key)>=0){ e.preventDefault(); leaveIntro(); } }
+  function attach(){ stage.addEventListener('touchstart',ts,{passive:true}); window.addEventListener('touchmove',tm,{passive:false}); window.addEventListener('wheel',wh,{passive:false}); window.addEventListener('keydown',kd); }
+  function detach(){ stage.removeEventListener('touchstart',ts); window.removeEventListener('touchmove',tm); window.removeEventListener('wheel',wh); window.removeEventListener('keydown',kd); }
   function replay(){ if(!done) return; caps.forEach(function(c){c.classList.remove('on')}); head.textContent=''; vals.classList.remove('on');
     slot.classList.remove('done'); fit(); done=false; last=-1; t0=performance.now(); requestAnimationFrame(frame); }
   window.addEventListener('resize',fit); fit();
@@ -531,6 +574,11 @@ open dist/MomentStays.app</pre>
     slot.classList.add('instant'); done=true; slot.classList.add('done');
     slot.style.height=(mk.offsetHeight+14)+'px'; return;
   }
+  if(window.msIntro){ introOn=true; stage=document.createElement('div'); stage.className='introstage'; stage.setAttribute('aria-hidden','false');
+    stage.appendChild(art); stage.appendChild(hint); document.body.appendChild(stage);
+    slot.classList.add('instant','done'); slot.style.height=(mk.offsetHeight+14)+'px'; void slot.offsetHeight; slot.classList.remove('instant');
+    document.documentElement.classList.add('introlock'); window.scrollTo(0,0); attach();
+    setTimeout(function(){ if(introOn) hint.classList.add('on'); },2200); }
   var go=false;
   function start(){ if(go) return; go=true; t0=performance.now(); requestAnimationFrame(frame); }
   setTimeout(start,250);
