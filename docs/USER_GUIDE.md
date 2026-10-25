@@ -1,6 +1,6 @@
 # MomentStays User Guide
 
-> Applies to MomentStays 1.0.1 (macOS 12 or later).
+> Applies to MomentStays 1.1.0 (macOS 12 or later).
 > 中文版见 [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md).
 
 MomentStays converts Android Motion Photos into Apple Live Photos on your Mac — and back again. Everything follows three rules:
@@ -34,9 +34,9 @@ All conversion and verification happen locally on your Mac. Nothing is uploaded.
 
 ## 1. Quick start
 
-1. Open MomentStays and click **Choose Photos**, drag files into the queue, or pick **Scan Photos Library…** from the source menu.
+1. Open MomentStays and click **Add Photos**, drag files into the queue, or pick **Scan Photos Library…** from the source menu.
 2. Confirm the direction: **Android → Apple Live Photo** (default) or **Apple Live Photo → Android**.
-3. Open **Export Settings** and check the destination (folder / Photos library / sharing), target format, and HDR options.
+3. Use the right-hand **Delivery Settings** inspector or settings panel to check the destination (folder / Photos library / sharing), target format, and HDR options.
 4. Click **Start** (⌘Return). Settings are snapshotted when a task starts and locked while it runs.
 5. Review per-photo results in the report. **Recent Results…** lets you retry delivery, reveal files, or open the output folder.
 
@@ -48,7 +48,13 @@ Each photo produces one result folder (see §9 for naming), not loose files.
 
 ### 2.1 The queue
 
-Each row is one photo. On wide windows the columns are **Filename | Format/HDR | Cover time | Status**; below 640pt the row wraps to two lines, the second showing "HDR · Cover xx". Selecting a row shows vendor and vendor-format details, the relative path, the detected cover time, and HDR status.
+Wide windows have three columns: queue scopes on the left, photos in the center, and delivery settings on the right. Narrow windows collapse the sidebar and inspector; use the queue scope picker and the settings button instead. The interface follows the system appearance and accent color, with the official light/dark brand icon.
+
+Switch between thumbnails and a file list; narrow queues use the list automatically. Select a photo to inspect its vendor, path, detected cover time, and HDR information.
+
+Below each motion-photo thumbnail, an **amber marker shows the source cover position**. Hover over the timeline to see the actual video frame and time; move away to restore the still photo. Missing or ambiguous covers are reported, and unreadable video is not replaced with a fabricated preview. Preview reads the original primary motion track and does not change the cover.
+
+Queue scopes filter the display only: **conversion still processes all selected sources**. Outside the All Photos scope, the action is explicitly labeled to convert all sources. Open past tasks with Recent Results and Delivery.
 
 ### 2.2 Four ways in
 

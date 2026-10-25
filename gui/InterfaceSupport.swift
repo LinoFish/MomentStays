@@ -30,6 +30,8 @@ struct WorkspaceActions {
 }
 
 enum InterfaceStyle {
+    // Follow the user's macOS accent preference in both light and dark appearances.
+    static var accent: Color { .accentColor }
     static var canvas: Color {
         #if os(macOS)
         return Color(nsColor: .windowBackgroundColor)
@@ -58,8 +60,10 @@ struct WorkspaceLayout {
     var compact: Bool { size.width < 640 }
     var stackedFooter: Bool { size.width < 800 }
     var supportsInspector: Bool { size.width >= 960 }
+    var supportsSidebar: Bool { size.width >= 1100 }
+    var sidebarWidth: CGFloat { 168 }
     var short: Bool { size.height < 560 }
-    var inspectorWidth: CGFloat { min(340, max(280, size.width * 0.27)) }
+    var inspectorWidth: CGFloat { min(320, max(280, size.width * 0.25)) }
     var margin: CGFloat { compact ? 12 : 16 }
 }
 
@@ -115,4 +119,54 @@ struct QueueLayout {
     let width: CGFloat
     var twoLines: Bool { width < 560 }
     var showsCover: Bool { width >= 800 }
+}
+
+// Scope affects only the presentation; conversions always use the complete source job.
+enum PhotoQueueScope: String, CaseIterable, Identifiable {
+    case all, completed, attention
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: return "全部照片"
+        case .completed: return "已完成"
+        case .attention: return "需处理"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .all: return "photo.on.rectangle"
+        case .completed: return "checkmark.circle"
+        case .attention: return "exclamationmark.circle"
+        }
+    }
+    func includes(_ item: PhotoQueueItem) -> Bool {
+        switch self {
+        case .all: return true
+        case .completed: return [.converted, .resumed].contains(item.state)
+        case .attention: return [.inspect, .failed].contains(item.state) || (item.isMotion && item.cover == "未记录")
+        }
+    }
+}
+
+// Uses the same official artwork as the Dock icon and the GitHub/website brand assets.
+struct MomentStaysBrandIcon: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        #if os(macOS)
+        let name = NSImage.Name(colorScheme == .dark ? "AppIconDark" : "AppIcon")
+        if let icon = Bundle.main.image(forResource: name) {
+            Image(nsImage: icon)
+                .renderingMode(.original)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+        }
+        #else
+        Image(colorScheme == .dark ? "AppIconDark" : "AppIcon")
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFit()
+        #endif
+    }
 }

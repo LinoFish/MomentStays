@@ -7,6 +7,7 @@ struct WorkspaceView: View {
     let actions: WorkspaceActions
     var layoutObserver: ([String: CGRect]) -> Void = { _ in }
     @State private var outputDropTargeted = false
+    @State private var queueScope = PhotoQueueScope.all
     @State private var showingError = false
     @FocusState private var settingsFocused: Bool
 
@@ -17,20 +18,30 @@ struct WorkspaceView: View {
             VStack(spacing: 0) {
                 commandBar(layout)
                 Divider()
-                sourceSummary(layout, showInspector: showInspector)
-                Divider()
                 HStack(spacing: 0) {
-                    PhotoQueueView(model: model, actions: actions, short: layout.short)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if layout.supportsSidebar {
+                        workspaceSidebar
+                            .frame(width: layout.sidebarWidth)
+                        Divider()
+                    }
+                    VStack(spacing: 0) {
+                        workspaceHeader(layout)
+                        sourceSummary(layout, showInspector: showInspector)
+                        PhotoQueueView(model: model, actions: actions, short: layout.short, scope: $queueScope, showsScopePicker: !layout.supportsSidebar)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     if showInspector {
                         Divider()
                         VStack(spacing: 0) {
-                            HStack {
-                                Text("导出设置").font(.system(size: 14, weight: .semibold))
+                            HStack(alignment: .firstTextBaseline) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("交付设置").font(.headline)
+                                    Text(model.settings.direction == .toApple ? "Live Photo" : "Motion Photo")
+                                        .font(.title3.weight(.semibold))
+                                }
                                 Spacer()
-                                Text(model.settings.direction == .toApple ? "Live Photo" : "Motion Photo")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }.padding(16)
+                            }.padding(20)
                             Divider()
                             ExportSettingsView(model: model, actions: actions)
                         }
@@ -60,21 +71,15 @@ struct WorkspaceView: View {
     }
 
     private func commandBar(_ layout: WorkspaceLayout) -> some View {
-        HStack(spacing: 10) {
-            Menu {
-                Button("扫描系统照片图库…", action: actions.importPhotos)
-            } label: { Label(layout.compact ? "选择照片" : "选择照片…", systemImage: "plus") }
-            primaryAction: { actions.chooseSources() }
-            .fixedSize().disabled(model.isBusy || model.sharing)
-            .accessibilityIdentifier("import-button")
-            if !layout.compact {
-                Spacer(minLength: 8)
-                Picker("转换方向", selection: direction) {
-                    ForEach(ConversionDirection.allCases, id: \.self) { Text($0.title).tag($0) }
-                }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 360)
-                    .disabled(model.isBusy || model.sharing).accessibilityIdentifier("conversion-direction")
-            }
+        HStack(spacing: 12) {
+            MomentStaysBrandIcon()
+                .frame(width: 32, height: 32)
+                .accessibilityHidden(true)
+            Text("MomentStays").font(.system(size: 15, weight: .semibold))
             Spacer(minLength: 0)
+            if !layout.compact {
+                Text("留住原来的瞬间").font(.callout).foregroundColor(.secondary)
+            }
             Link(destination: UserGuide.url(for: locale)) {
                 Image(systemName: "questionmark.circle")
             }
@@ -86,47 +91,109 @@ struct WorkspaceView: View {
                 else { model.settingsPresented = true }
             } label: { Image(systemName: "sidebar.right") }
             .focused($settingsFocused)
-            .help("导出设置").accessibilityLabel("导出设置")
+            .help("交付设置").accessibilityLabel("交付设置")
             .accessibilityIdentifier("settings-button")
-            if model.isBusy {
-                Button(action: model.stop) { Label(model.phase == .stopping ? "停止中" : "停止", systemImage: "stop.fill") }
-                    .disabled(!model.canStop).recordLayout("primary-action")
-                    .accessibilityIdentifier("stop-button")
-            } else {
-                Button(model.settings.actionTitle, action: actions.start)
-                    .buttonStyle(.borderedProminent).disabled(!model.canStart || model.sharing)
-                    .recordLayout("primary-action").accessibilityIdentifier("convert-button")
-            }
         }
-        .controlSize(.regular)
+        .buttonStyle(.plain)
         .padding(.horizontal, layout.margin).padding(.vertical, 12)
         .recordLayout("command-bar")
     }
 
-    private func sourceSummary(_ layout: WorkspaceLayout, showInspector: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if layout.compact {
-                HStack {
-                    Picker("方向", selection: direction) {
-                        ForEach(ConversionDirection.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }.disabled(model.isBusy || model.sharing)
-                    Spacer(minLength: 0)
+    private var workspaceSidebar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("工作空间").font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.bottom, 10)
+            ForEach(PhotoQueueScope.allCases) { scope in
+                Button { queueScope = scope } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: scope.symbol).frame(width: 18)
+                        Text(scope.title)
+                        Spacer(minLength: 0)
+                        Text("\(model.items.filter { scope.includes($0) }.count)")
+                            .font(.caption).monospacedDigit().foregroundColor(.secondary)
+                    }
+                    .font(.callout.weight(queueScope == scope ? .semibold : .regular))
+                    .padding(.horizontal, 12).padding(.vertical, 11)
+                    .contentShape(Rectangle())
+                    .background(queueScope == scope ? InterfaceStyle.accent.opacity(0.11) : .clear)
+                    .cornerRadius(8)
                 }
-                sourceLine
-                if !showInspector { outputLine }
-            } else {
-                HStack(spacing: 24) {
-                    sourceLine.frame(maxWidth: .infinity, alignment: .leading)
-                    if !showInspector { outputLine.frame(maxWidth: .infinity, alignment: .leading) }
-                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(queueScope == scope ? .isSelected : [])
+                .accessibilityIdentifier("queue-scope-" + scope.rawValue)
             }
-            if !layout.short && !showInspector {
-                Text(model.settings.summary).font(.callout).foregroundColor(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 20)
+            Button(action: actions.recentResults) {
+                Label("最近结果与交付", systemImage: "clock.arrow.circlepath")
+                    .font(.callout)
             }
+            .buttonStyle(.plain).disabled(model.isBusy || model.sharing)
+            .padding(.horizontal, 12).padding(.bottom, 18)
+            Label("本机处理", systemImage: "lock.shield")
+                .font(.caption).foregroundColor(.secondary).padding(.horizontal, 12)
+            Text("照片始终由你掌握")
+                .font(.caption).foregroundColor(.secondary).padding(.horizontal, 12)
         }
-        .padding(.horizontal, layout.margin).padding(.vertical, layout.short ? 10 : 12)
+        .padding(.horizontal, 12).padding(.vertical, 24)
+        .background(InterfaceStyle.canvas)
+        .recordLayout("workspace-sidebar")
+    }
+
+    private func workspaceHeader(_ layout: WorkspaceLayout) -> some View {
+        VStack(alignment: .leading, spacing: layout.short ? 10 : 18) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("让瞬间继续。")
+                        .font(.system(size: layout.short ? 19 : 26, weight: .semibold))
+                    if !layout.short && !layout.compact {
+                        Text("把动态照片带进新的图库。")
+                            .font(.callout).foregroundColor(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+                Menu {
+                    Button("扫描系统照片图库…", action: actions.importPhotos)
+                } label: { Label("添加照片", systemImage: "plus") }
+                primaryAction: { actions.chooseSources() }
+                .fixedSize().disabled(model.isBusy || model.sharing)
+                .accessibilityIdentifier("import-button")
+            }
+            Picker("转换方向", selection: direction) {
+                ForEach(ConversionDirection.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            .disabled(model.isBusy || model.sharing)
+            .accessibilityIdentifier("conversion-direction")
+        }
+        .padding(.horizontal, layout.margin).padding(.top, layout.short ? 12 : 22)
+        .padding(.bottom, layout.short ? 4 : 8)
+        .background(InterfaceStyle.content)
+    }
+
+    private func sourceSummary(_ layout: WorkspaceLayout, showInspector: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sourceLine
+            if !showInspector { outputLine }
+        }
+        .padding(.horizontal, layout.margin).padding(.vertical, layout.short ? 6 : 10)
+        .background(InterfaceStyle.content)
         .recordLayout("source-summary")
+    }
+
+    @ViewBuilder private var primaryAction: some View {
+        if model.isBusy {
+            Button(action: model.stop) {
+                Label(model.phase == .stopping ? "停止中" : "停止", systemImage: "stop.fill")
+            }
+            .disabled(!model.canStop).recordLayout("primary-action")
+            .accessibilityIdentifier("stop-button")
+        } else {
+            Button(queueScope == .all ? model.settings.actionTitle : "转换全部来源", action: actions.start)
+                .help("转换所有已选择的来源；侧栏范围只筛选显示")
+                .buttonStyle(.borderedProminent).tint(InterfaceStyle.accent)
+                .disabled(!model.canStart || model.sharing)
+                .recordLayout("primary-action").accessibilityIdentifier("convert-button")
+        }
     }
 
     private var sourceLine: some View {
@@ -208,7 +275,8 @@ struct WorkspaceView: View {
                         Button("共享结果", action: actions.shareResults).disabled(model.sharing)
                     }
                     Spacer(minLength: 0)
-                    Menu("更多") { secondaryActions }
+                    Menu("更多") { secondaryActions }.fixedSize()
+                    primaryAction
                 }
             } else {
                 HStack(spacing: 8) {
@@ -221,6 +289,7 @@ struct WorkspaceView: View {
                             .disabled(model.sharing).help("共享完整输出文件").accessibilityLabel("共享完整输出文件")
                     }
                     secondaryActions
+                    primaryAction
                 }
             }
             if model.libraryMonitoring {

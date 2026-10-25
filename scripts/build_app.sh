@@ -17,7 +17,7 @@ while [[ $# -gt 0 ]]; do
 done
 sources=(native/MotionLive.swift native/PhotoFormat.swift native/PhotoHEIF.swift native/PhotoHDR.swift native/BatchEngine.swift native/HEIFMetadata.swift native/AndroidHDR.swift native/AndroidExport.swift
   gui/ConversionSettings.swift gui/ConversionService.swift gui/WorkspaceModel.swift gui/DeliveryModels.swift gui/PhotoLibraryService.swift gui/SystemSharingService.swift
-  gui/InterfaceSupport.swift gui/ExportSettingsView.swift gui/PhotoQueueView.swift gui/WorkspaceView.swift gui/ReportView.swift
+  gui/InterfaceSupport.swift gui/ExportSettingsView.swift gui/MotionPreview.swift gui/PhotoTimelineView.swift gui/PhotoQueueView.swift gui/WorkspaceView.swift gui/ReportView.swift
   gui/PhotosLibraryPicker.swift gui/MacPlatformServices.swift gui/UISnapshotSupport.swift gui/AppIconAppearance.swift gui/App.swift)
 binaries=()
 for arch in "${architectures[@]}"; do

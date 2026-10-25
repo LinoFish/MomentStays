@@ -21,6 +21,10 @@ final class UISnapshotSupport {
         guard argument("--ui-snapshot") != nil else { return }
         model.loadPreview(count: Int(argument("--ui-fixtures") ?? "24") ?? 24,
             progressPreview: CommandLine.arguments.contains("--ui-progress-preview"))
+        if let source = argument("--ui-motion-source") {
+            MotionPreviewDiagnostics.source = URL(fileURLWithPath: source)
+            model.loadPreview(count: 1, progressPreview: false)
+        }
         if let destination = argument("--ui-destination"), let value = OutputDestination(rawValue: destination) {
             model.updateSettings { $0.destination = value }
             model.deliverySummary = "转换结果已保留，可在最近结果中重试交付"
@@ -43,9 +47,37 @@ final class UISnapshotSupport {
                 self.model.selection = self.model.items.first?.id
                 self.model.updateSettings { $0.exportDataFiles = false }
                 self.resizeSequence([(390, 540), (640, 600), (959, 640), (960, 640), (1280, 540), (480, 600)], path: path)
-            } else { self.finishSnapshot(path) }
+            } else if CommandLine.arguments.contains("--ui-hover-preview") { self.hoverPreview(path: path) }
+            else { self.finishSnapshot(path) }
         }
     }
+    private func hoverPreview(path: String, remaining: Int = 60, sent: Bool = false) {
+        if MotionPreviewDiagnostics.duration != nil, let content = window.contentView,
+           let target = descendants(content).first(where: { $0.identifier?.rawValue == "motion-timeline-hover" }) {
+            if !sent {
+                let point = target.convert(NSPoint(x: target.bounds.width * 0.8, y: target.bounds.midY), to: nil)
+                if let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) {
+                    target.mouseMoved(with: event)
+                }
+            }
+            if MotionPreviewDiagnostics.frame != nil {
+                if CommandLine.arguments.contains("--ui-hover-exit") {
+                    target.mouseExited(with: NSEvent())
+                }
+                finishSnapshot(path); return
+            }
+            if remaining > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.hoverPreview(path: path, remaining: remaining - 1, sent: true) }
+                return
+            }
+        } else if remaining > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.hoverPreview(path: path, remaining: remaining - 1) }
+            return
+        }
+        finishSnapshot(path)
+    }
+
     private func resize(width: Double, height: Double) {
         var frame = window.frame
         frame.size = NSSize(width: max(390, width), height: max(540, height))
@@ -72,6 +104,10 @@ final class UISnapshotSupport {
             "content_height": bounds.height, "queue_height": queue.height,
             "queue_width": queue.width, "primary_visible": !primary.isEmpty && visible.contains(primary),
             "queue_visible": !queue.isEmpty && visible.contains(queue),
+            "preview_duration": MotionPreviewDiagnostics.duration.map { $0 as Any } ?? NSNull(),
+            "preview_cover": MotionPreviewDiagnostics.cover.map { $0 as Any } ?? NSNull(),
+            "preview_frame": MotionPreviewDiagnostics.frame.map { $0 as Any } ?? NSNull(),
+            "preview_hovering": MotionPreviewDiagnostics.hovering,
             "row_count": model.items.count, "inspector_visible": frames["inspector"] != nil,
             "settings_sheet_visible": window.attachedSheet != nil,
             "native_tables": tables.map { ["rows": $0.numberOfRows, "selected_row": $0.selectedRow,

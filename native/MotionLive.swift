@@ -115,42 +115,25 @@ func waitReady(_ input: AVAssetWriterInput, _ writer: AVAssetWriter) throws {
     }
 }
 
-func movie(_ req: [String: Any]) throws -> [String: Any] {
-    guard let inputPath = req["input"] as? String, let outputPath = req["output"] as? String,
-          let uuid = req["identifier"] as? String else { throw Failure("Missing movie arguments") }
-    if let stillPath = req["still"] as? String {
-        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: stillPath) as CFURL, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
-              let maker = properties[kCGImagePropertyMakerAppleDictionary as String] as? [String: Any],
-              maker["17"] as? String == uuid else {
-            throw Failure("ImageIO could not read back the still ContentIdentifier")
-        }
-    }
-    let asset = AVURLAsset(url: URL(fileURLWithPath: inputPath))
-    // Google Motion Photo permits a secondary image-substitution video track.
-    // The primary motion track precedes that optional track in container order:
-    // https://developer.android.com/media/platform/motion-photo-format
-    // Keep the original high-resolution JPEG as the still, and remux only the
-    // primary motion video plus audio into the single-video Live Photo movie.
-    let videoTracks = asset.tracks(withMediaType: .video)
-    guard let primary = videoTracks.first, videoTracks.count <= 2 else {
-        throw Failure("Motion Photo requires a primary video track and at most one secondary track (found \(videoTracks.count))")
-    }
-    let selection = req["video_track"] as? String ?? "primary"
-    guard ["primary","secondary"].contains(selection) else { throw Failure("未知的视频轨选择") }
-    if selection == "secondary" && videoTracks.count < 2 { throw Failure("原片没有辅助视频轨，请选择主轨") }
-    let chosen = selection == "secondary" ? videoTracks[1] : primary
-    let tracks = [chosen] + asset.tracks(withMediaType: .audio)
-    let infos = try tracks.map { try trackInfo(asset, $0) }
-    guard let video = infos.first, !video.pts.isEmpty else { throw Failure("Video has no samples") }
-    if selection == "secondary" && video.pts.count < 2 {
-        throw Failure("辅助轨只有 \(video.pts.count) 帧，不能作为动态视频；请使用主轨或单独导出辅助轨")
-    }
+struct SourceCoverTiming {
+    let requested: CMTime
+    let mapped: CMTime
+    let domain: String
+    let frameTime: CMTime
+    let frameDuration: CMTime
+    let error: Double
+    let policy: String
+}
+
+// Shared by conversion and read-only preview; never infer a missing cover location.
+func sourceCoverTiming(_ req: [String: Any], video: TrackInfo, selection: String,
+                       primaryInfo: () throws -> TrackInfo) throws -> SourceCoverTiming {
+    guard !video.pts.isEmpty else { throw Failure("Video has no samples") }
     let sorted = zip(video.pts, video.durations).sorted { CMTimeCompare($0.0, $1.0) < 0 }
     let requested: CMTime
     let policy: String
     if let index = req["cover_frame_index"] as? Int {
-        let primaryInfo = selection == "primary" ? video : try trackInfo(asset,primary)
+        let primaryInfo = try primaryInfo()
         let primaryTimes = primaryInfo.pts.sorted { CMTimeCompare($0,$1) < 0 }
         guard primaryTimes.indices.contains(index) else { throw Failure("华为/荣耀原始封面帧号超出视频范围，未推测封面位置") }
         requested = primaryTimes[index]; policy = "source-huawei-frame"
@@ -199,7 +182,44 @@ func movie(_ req: [String: Any]) throws -> [String: Any] {
     }
     let frameTime = sorted[match.0].0
     let frameDuration = try durationAt(match.0)
-    let error = match.3
+    return SourceCoverTiming(requested: requested, mapped: match.1, domain: match.2,
+        frameTime: frameTime, frameDuration: frameDuration, error: match.3, policy: policy)
+}
+
+func movie(_ req: [String: Any]) throws -> [String: Any] {
+    guard let inputPath = req["input"] as? String, let outputPath = req["output"] as? String,
+          let uuid = req["identifier"] as? String else { throw Failure("Missing movie arguments") }
+    if let stillPath = req["still"] as? String {
+        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: stillPath) as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
+              let maker = properties[kCGImagePropertyMakerAppleDictionary as String] as? [String: Any],
+              maker["17"] as? String == uuid else {
+            throw Failure("ImageIO could not read back the still ContentIdentifier")
+        }
+    }
+    let asset = AVURLAsset(url: URL(fileURLWithPath: inputPath))
+    // Google Motion Photo permits a secondary image-substitution video track.
+    // The primary motion track precedes that optional track in container order:
+    // https://developer.android.com/media/platform/motion-photo-format
+    // Keep the original high-resolution JPEG as the still, and remux only the
+    // primary motion video plus audio into the single-video Live Photo movie.
+    let videoTracks = asset.tracks(withMediaType: .video)
+    guard let primary = videoTracks.first, videoTracks.count <= 2 else {
+        throw Failure("Motion Photo requires a primary video track and at most one secondary track (found \(videoTracks.count))")
+    }
+    let selection = req["video_track"] as? String ?? "primary"
+    guard ["primary","secondary"].contains(selection) else { throw Failure("未知的视频轨选择") }
+    if selection == "secondary" && videoTracks.count < 2 { throw Failure("原片没有辅助视频轨，请选择主轨") }
+    let chosen = selection == "secondary" ? videoTracks[1] : primary
+    let tracks = [chosen] + asset.tracks(withMediaType: .audio)
+    let infos = try tracks.map { try trackInfo(asset, $0) }
+    guard let video = infos.first, !video.pts.isEmpty else { throw Failure("Video has no samples") }
+    if selection == "secondary" && video.pts.count < 2 {
+        throw Failure("辅助轨只有 \(video.pts.count) 帧，不能作为动态视频；请使用主轨或单独导出辅助轨")
+    }
+    let cover = try sourceCoverTiming(req, video: video, selection: selection,
+        primaryInfo: { selection == "primary" ? video : try trackInfo(asset, primary) })
+    let frameTime = cover.frameTime, frameDuration = cover.frameDuration
     // Session starts at zero, without shifting source PTS. Refuse negative visible PTS.
     guard infos.allSatisfy({ $0.pts.allSatisfy { seconds($0) >= 0 } }) else {
         throw Failure("Negative media sample PTS requires explicit edit-list handling; original retained")
@@ -304,11 +324,11 @@ func movie(_ req: [String: Any]) throws -> [String: Any] {
         ($0.key as? String) == "com.apple.quicktime.content.identifier"
     }?.stringValue
     guard identifier == uuid else { throw Failure("Output content identifier verification failed") }
-    return ["requested_seconds": seconds(requested), "mapped_source_seconds": seconds(match.1),
-            "timestamp_domain": match.2, "cover_seconds": seconds(covers[0].0),
+    return ["requested_seconds": seconds(cover.requested), "mapped_source_seconds": seconds(cover.mapped),
+            "timestamp_domain": cover.domain, "cover_seconds": seconds(covers[0].0),
             "source_frame_duration_seconds": seconds(frameDuration),
-            "cover_duration_seconds": seconds(covers[0].1), "snap_error_seconds": error,
-            "timing_policy": policy, "tracks": trackReports, "identifier": uuid,
+            "cover_duration_seconds": seconds(covers[0].1), "snap_error_seconds": cover.error,
+            "timing_policy": cover.policy, "tracks": trackReports, "identifier": uuid,
             "source_video_track_count": videoTracks.count, "primary_source_track_id": primary.trackID,
             "secondary_source_track_ids": videoTracks.dropFirst().map { $0.trackID },
             "video_selection_policy": selection == "primary" ? "google-primary-first" : "explicit-secondary",

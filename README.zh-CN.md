@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.0.2</strong>
+  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.1.0</strong>
 </p>
 
 # MomentStays — 安卓动态照片转苹果实况照片（Live Photo）工具
