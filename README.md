@@ -215,6 +215,18 @@ Google-compatible Motion Photo JPEGs, supported Samsung (including SEF and valid
 
 Yes. MomentStays is GPL-3.0-only open source, runs entirely on your Mac, and never uploads your photos.
 
+## Acknowledgements
+
+Thanks to these projects for their references and tools:
+
+- Motion-photo formats: [MotionTrans](https://github.com/Huakira/MotionTrans), [Live Photo Box](https://github.com/LengxiQwQ/live-photo-box), [ExifTool](https://github.com/exiftool/exiftool), [motionphoto](https://github.com/doodspav/motionphoto).
+- HDR and HEIC research: [OpenHarmony](https://github.com/openharmony/multimedia_image_framework), [libheif](https://github.com/strukturag/libheif), [libultrahdr](https://github.com/google/libultrahdr).
+- Compatibility samples: [MotionPhotoSamples](https://github.com/NightMean/MotionPhotoSamples).
+- Packaging and documentation: [ds_store](https://github.com/dmgbuild/ds_store), [mac_alias](https://github.com/dmgbuild/mac_alias), [dmgbuild](https://github.com/dmgbuild/dmgbuild), [Chromium](https://chromium.googlesource.com/chromium/src/+/main/chrome/installer/mac/generate_dsstore.py), [Python-Markdown](https://github.com/Python-Markdown/markdown).
+- Interface prototyping: [huashu-design](https://github.com/alchaincyf/huashu-design).
+
+See [third-party notices](THIRD_PARTY_NOTICES.md) for usage details.
+
 ## License
 
 The original source code, documentation, and artwork are licensed under the **GNU General Public License, version 3 only**. Commercial use is allowed. When distributing covered derivative works, provide their corresponding source under the GPL and meet the license's redistribution requirements.

@@ -219,6 +219,18 @@ Google 兼容的动态照片 JPEG、三星（包括 SEF 和已验证的 HEIC 布
 
 免费开源（GPL-3.0-only），所有转换都在你的 Mac 本地完成，不上传照片。
 
+## 致谢
+
+感谢以下项目提供的参考与工具：
+
+- 动态照片格式：[MotionTrans](https://github.com/Huakira/MotionTrans)、[Live Photo Box](https://github.com/LengxiQwQ/live-photo-box)、[ExifTool](https://github.com/exiftool/exiftool)、[motionphoto](https://github.com/doodspav/motionphoto)。
+- HDR 与 HEIC 研究：[OpenHarmony](https://github.com/openharmony/multimedia_image_framework)、[libheif](https://github.com/strukturag/libheif)、[libultrahdr](https://github.com/google/libultrahdr)。
+- 兼容测试样片：[MotionPhotoSamples](https://github.com/NightMean/MotionPhotoSamples)。
+- 打包与文档工具：[ds_store](https://github.com/dmgbuild/ds_store)、[mac_alias](https://github.com/dmgbuild/mac_alias)、[dmgbuild](https://github.com/dmgbuild/dmgbuild)、[Chromium](https://chromium.googlesource.com/chromium/src/+/main/chrome/installer/mac/generate_dsstore.py)、[Python-Markdown](https://github.com/Python-Markdown/markdown)。
+- 界面原型设计：[huashu-design](https://github.com/alchaincyf/huashu-design)。
+
+具体用途见[第三方说明](THIRD_PARTY_NOTICES.md)。
+
 ## 开源协议
 
 项目原创源代码、文档与视觉素材采用 **GNU General Public License 第 3 版，仅该版本**。允许商业使用；分发受 GPL 覆盖的派生作品时，需要按 GPL 提供对应源码并满足再分发要求。
