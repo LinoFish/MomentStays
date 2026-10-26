@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.1.0</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.2.0</strong>
 </p>
 
 # MomentStays — Android Motion Photo ↔ Apple Live Photo Converter for macOS
@@ -124,8 +124,11 @@ bash scripts/build_app.sh --universal
 To produce a DMG, ZIP, and checksum list from the built app:
 
 ```bash
+python3 -m pip install --target .build/dmg-tools -r packaging/dmg-requirements.txt
 bash scripts/make_dmg.sh
 ```
+
+The DMG uses only the app icon, Applications link and a drag arrow. The user guide is available from the app; licenses are inside the app bundle. These Python tools are needed only for packaging; app users do not need them.
 
 Builds stay in local `dist/`. Current runtime validation is based on Intel/macOS 12; ARM hardware remains to be validated. The app uses ad-hoc signing without Developer ID signing or Apple notarization, so a downloaded copy may require approval in macOS security settings.
 

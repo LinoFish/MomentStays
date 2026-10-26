@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.1.0</strong>
+  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.2.0</strong>
 </p>
 
 # MomentStays — 安卓动态照片转苹果实况照片（Live Photo）工具
@@ -126,8 +126,11 @@ bash scripts/build_app.sh --universal
 需要安装包时，从已构建应用生成 DMG、ZIP 与校验和：
 
 ```bash
+python3 -m pip install --target .build/dmg-tools -r packaging/dmg-requirements.txt
 bash scripts/make_dmg.sh
 ```
+
+DMG 仅显示应用、Applications 链接与拖拽箭头。手册从应用内打开，许可文件位于应用包内。Python 工具仅用于打包，使用应用无需安装。
 
 构建产物保存在本地 `dist/`。当前运行验证基于 Intel/macOS 12，ARM 真机尚待验证。应用采用 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，网络下载后可能需要在系统安全设置中允许打开。
 

@@ -1,9 +1,9 @@
 # MomentStays 使用手册
 
-> 适用版本：MomentStays 1.1.0（macOS 12 或更高版本）
+> 适用版本：MomentStays 1.2.0（macOS 12 或更高版本）
 > 本手册介绍图形界面（App）的全部功能，以及附带的命令行工具。英文版见 [USER_GUIDE.md](USER_GUIDE.md)。
 
-> 本手册跟随 `main` 分支的最新源码。高清候选封面选择与多照片导出需要从当前源码构建，已发布的 1.1.0 安装包尚未包含这些新选项。
+> 高清候选封面选择与多照片导出从 1.2.0 起包含在安装包中，较早版本的安装包没有这些选项。
 
 MomentStays 在 Mac 上把 Android 动态照片（Motion Photo）转换成 Apple 实况照片（Live Photo），也能反向转换。全过程遵循三条原则：
 
@@ -35,6 +35,8 @@ MomentStays 在 Mac 上把 Android 动态照片（Motion Photo）转换成 Apple
 ---
 
 ## 1. 快速上手
+
+打开 DMG，将 MomentStays 拖入右侧的 Applications，再从「应用程序」启动。安装窗口仅显示应用与 Applications 链接，以箭头示意拖拽方向。手册通过应用内帮助按钮打开，许可文件保存在应用包内。
 
 1. 打开 MomentStays，点「添加照片」，或把文件直接拖进队列；也可以从菜单选择「扫描系统照片图库…」直接从「照片」图库取图。
 2. 确认转换方向：**安卓 → 苹果实况**（默认）或**苹果实况 → 安卓**。

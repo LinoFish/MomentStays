@@ -1,9 +1,9 @@
 # MomentStays User Guide
 
-> Applies to MomentStays 1.1.0 (macOS 12 or later).
+> Applies to MomentStays 1.2.0 (macOS 12 or later).
 > 中文版见 [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md).
 
-> This guide follows the latest source on `main`. High-resolution cover selection and candidate-photo export require a build from current source; the published 1.1.0 installer does not include these new options.
+> High-resolution cover selection and candidate-photo export are included from version 1.2.0. Earlier installers do not include these options.
 
 MomentStays converts Android Motion Photos into Apple Live Photos on your Mac — and back again. Everything follows three rules:
 
@@ -35,6 +35,8 @@ All conversion and verification happen locally on your Mac. Nothing is uploaded.
 ---
 
 ## 1. Quick start
+
+Open the DMG and drag MomentStays into Applications, then launch it from Applications. The installer shows only the application and Applications link, with an arrow indicating the drag direction. Open the guide from the app's help button; license files are inside the app bundle.
 
 1. Open MomentStays and click **Add Photos**, drag files into the queue, or pick **Scan Photos Library…** from the source menu.
 2. Confirm the direction: **Android → Apple Live Photo** (default) or **Apple Live Photo → Android**.

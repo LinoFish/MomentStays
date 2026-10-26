@@ -16,7 +16,9 @@ Links to format specifications, research projects, and reference samples are ref
 
 ## Distributing a binary
 
-The application build copies `LICENSE`, `COPYRIGHT`, and this file into the app's Resources directory. The DMG packager also places them beside the application.
+The application build copies `LICENSE`, `COPYRIGHT`, and this file into the app's Resources directory. The DMG contains that signed application and an Applications link; notices remain inside the application bundle.
+
+The DMG build uses the MIT-licensed [ds_store](https://github.com/dmgbuild/ds_store) and [mac_alias](https://github.com/dmgbuild/mac_alias) Python packages to generate Finder layout metadata. These are build tools only; their Python code is not bundled in the application or installer.
 
 When conveying a covered binary, provide the corresponding source through a method permitted by GPLv3 section 6. Use the source that actually corresponds to that build, including build/install scripts and the required notices. If offering a binary download, provide recipients equivalent access to its corresponding source as required by that section. A private repository URL alone does not provide source access to recipients who cannot access it.
 
