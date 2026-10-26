@@ -127,7 +127,8 @@ final class DeliveryStore {
         if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
     }
     static func key(source: URL, origin: LibraryOrigin?, settings: ConversionSettings) throws -> String {
-        var values = settings.options.json
+        var options = settings.options; options.coverIndex = settings.coverIndex(for:source)
+        var values = options.json
         values["delivery_revision"] = "1.3.0"
         if let origin = origin {
             values["asset"] = origin.assetID; values["version"] = origin.version; values["edited"] = origin.edited
@@ -137,21 +138,37 @@ final class DeliveryStore {
     static func collect(_ outcome: BatchOutcome, settings: ConversionSettings, origins: [String: LibraryOrigin]) throws -> [DeliveredFile] {
         let entries = outcome.reportData["files"] as? [[String: Any]] ?? []
         let bySource = Dictionary(origins.map { (NativeBatch.normalized(URL(fileURLWithPath: $0.key)).path, $0.value) }, uniquingKeysWith: { first, _ in first })
-        return try entries.compactMap { entry in
+        return try entries.flatMap { entry -> [DeliveredFile] in
             guard ["converted", "resumed"].contains(entry["status"] as? String ?? ""),
-                  let source = entry["source"] as? String, let path = entry["output"] as? String else { return nil }
+                  let source = entry["source"] as? String, let path = entry["output"] as? String else { return [] }
             let input = URL(fileURLWithPath: source), folder = URL(fileURLWithPath: path)
             let files: [URL]
             if settings.direction == .toAndroid {
                 let ext = settings.container == .heic ? "heic" : "jpg"
                 files = [folder.appendingPathComponent(input.deletingPathExtension().lastPathComponent + ".MP." + ext)]
             } else {
-                guard settings.exportMode != .auxiliaryOnly else { return nil }
-                files = [folder.appendingPathComponent(input.lastPathComponent), folder.appendingPathComponent(input.deletingPathExtension().lastPathComponent + ".mov")]
+                guard settings.exportMode != .auxiliaryOnly else { return [] }
+                var options = settings.options; options.coverIndex = settings.coverIndex(for:input)
+                let names = entry["output_files"] as? [String:String] ?? NativeBatch.expectedNames(input,options:options)
+                guard let still = names["still"], let movie = names["video"] else { throw Failure("缺少实况照片输出信息") }
+                files = [folder.appendingPathComponent(still),folder.appendingPathComponent(movie)]
             }
             guard files.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else { throw Failure("转换输出不完整，未交付：\(input.lastPathComponent)") }
-            return DeliveredFile(source: source, folder: path, files: files.map(\.path),
-                key: try key(source: input, origin: bySource[NativeBatch.normalized(input).path], settings: settings), origin: bySource[NativeBatch.normalized(input).path], hashes: try Dictionary(uniqueKeysWithValues: files.map { ($0.path, try NativeBatch.hashFile($0)) }))
+            let origin = bySource[NativeBatch.normalized(input).path]
+            let baseKey = try key(source:input,origin:origin,settings:settings)
+            var result = [DeliveredFile(source:source,folder:path,files:files.map(\.path),key:baseKey,origin:origin,
+                hashes:try Dictionary(uniqueKeysWithValues:files.map { ($0.path,try NativeBatch.hashFile($0)) }))]
+            if settings.direction == .toApple && settings.exportMode == .withCandidates {
+                let names = entry["output_files"] as? [String:String] ?? [:]
+                for role in names.keys.sorted() where NativeBatch.isCandidatePhotoRole(role) {
+                    let photo = folder.appendingPathComponent(names[role]!)
+                    var resources = [photo]
+                    if let video = names[NativeBatch.candidateVideoRole(role)] { resources.append(folder.appendingPathComponent(video)) }
+                    result.append(DeliveredFile(source:source,folder:path,files:resources.map(\.path),key:sha(Data((baseKey + "|" + role).utf8)),
+                        origin:origin,hashes:try Dictionary(uniqueKeysWithValues:resources.map { ($0.path,try NativeBatch.hashFile($0)) })))
+                }
+            }
+            return result
         }
     }
     func stageShare(_ task: inout DeliveryTask, token: StopToken? = nil) throws -> [URL] {

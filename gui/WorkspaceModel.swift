@@ -132,6 +132,16 @@ final class WorkspaceModel: ObservableObject {
     var motionCount: Int { items.filter { $0.isMotion }.count }
     var issueCount: Int { items.filter { [.inspect, .failed].contains($0.state) || ($0.isMotion && $0.cover == "未记录") }.count }
 
+    func selectCover(_ index: Int?, for source: URL) {
+        guard !isBusy, !sharing, settings.direction == .toApple, index == nil || index! >= 0 else { return }
+        updateSettings {
+            var choices = $0.coverSelections ?? [:]
+            choices[NativeBatch.normalized(source).path] = index
+            $0.coverSelections = choices.isEmpty ? nil : choices
+            if index != nil { $0.track = .primary }
+        }
+    }
+
     func updateSettings(_ change: (inout ConversionSettings) -> Void) {
         guard !isBusy, !sharing else { return }
         var next = settings; change(&next); next.normalize()
@@ -148,6 +158,7 @@ final class WorkspaceModel: ObservableObject {
         let base = NativeBatch.root(NativeBatch.normalized(first))
         output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction == .toAndroid ? " Motion Photos" : " Live Photos"))
         items = []; selection = nil; report = nil
+        settings.coverSelections = nil
         rescan()
     }
 

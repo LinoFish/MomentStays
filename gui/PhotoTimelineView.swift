@@ -11,6 +11,12 @@ private final class MotionPreviewController: ObservableObject {
     @Published var frame: CGImage?
     @Published var frameTime: Double?
     @Published var hoverFraction: Double?
+    @Published var candidates: [PreviewCoverCandidate] = []
+    @Published var candidateImage: CGImage?
+    @Published var candidateStatus = "正在读取高清候选…"
+    private var originalCoverTime: Double?
+    private var selectedCover: Int?
+    private var candidateGeneration = UUID()
     private var session: MotionPreviewSession?
     private var token = StopToken()
     private var generation = UUID()
@@ -19,8 +25,9 @@ private final class MotionPreviewController: ObservableObject {
     private static let loader = DispatchQueue(label: "MomentStays.preview-prepare", qos: .utility)
     private static let renderer = DispatchQueue(label: "MomentStays.preview-frames", qos: .userInitiated)
 
-    func prepare(source: URL, direction: String, domain: String, demo: Bool) {
+    func prepare(source: URL, direction: String, domain: String, demo: Bool, selectedCover: Int?) {
         cancel()
+        self.selectedCover = selectedCover
         duration = nil; coverTime = nil; message = "正在读取视频…"
         if demo {
             duration = 3; coverTime = 0.4; message = "示意时间线，没有实际视频"
@@ -34,11 +41,46 @@ private final class MotionPreviewController: ObservableObject {
                 switch result {
                 case .success(let session):
                     self.session = session; self.duration = session.duration; self.coverTime = session.coverTime
+                    self.originalCoverTime = session.coverTime; self.candidates = session.candidates
+                    self.candidateStatus = session.candidateIssue ?? (session.candidates.isEmpty ? "原片没有辅助高清候选" : "封面使用所选照片，动态保持主运动轨")
                     #if UI_DIAGNOSTICS
                     MotionPreviewDiagnostics.duration = session.duration; MotionPreviewDiagnostics.cover = session.coverTime
+                    MotionPreviewDiagnostics.candidateCount = session.candidates.count
                     #endif
                     self.message = session.coverIssue ?? "悬浮预览原始动态主轨；琥珀标记为封面位置"
-                case .failure(let error): self.message = error.localizedDescription
+                    self.selectCover(self.selectedCover)
+                case .failure(let error): self.message = error.localizedDescription; self.candidateStatus = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func selectCover(_ index: Int?) {
+        selectedCover = index; candidateImage = nil; candidateGeneration = UUID()
+        guard let index = index else { coverTime = originalCoverTime; return }
+        guard let session = session else { return }
+        let choice = candidates.first { $0.index == index }
+        coverTime = choice?.time
+        #if UI_DIAGNOSTICS
+        MotionPreviewDiagnostics.cover = coverTime
+        MotionPreviewDiagnostics.candidateImageLoaded = false
+        #endif
+        guard let choice = choice, choice.issue == nil else {
+            candidateStatus = choice?.issue ?? "所选高清候选不存在；请选择原始照片或其他候选"
+            return
+        }
+        let id = generation, candidateID = candidateGeneration
+        Self.renderer.async { [weak self] in
+            let result = Result { try session.candidateFrame(index) }
+            DispatchQueue.main.async {
+                guard let self = self, self.generation == id, self.candidateGeneration == candidateID else { return }
+                switch result {
+                case .success(let image):
+                    self.candidateImage = image; self.candidateStatus = "已选择高清候选；动态仍使用主运动轨"
+                    #if UI_DIAGNOSTICS
+                    MotionPreviewDiagnostics.candidateImageLoaded = true
+                    #endif
+                case .failure(let error): self.candidateStatus = error.localizedDescription
                 }
             }
         }
@@ -88,6 +130,8 @@ private final class MotionPreviewController: ObservableObject {
     func cancel() {
         token.cancel(); token = StopToken(); generation = UUID()
         session = nil; frame = nil; frameTime = nil; hoverFraction = nil
+        candidates = []; candidateImage = nil; originalCoverTime = nil; candidateGeneration = UUID()
+        candidateStatus = "正在读取高清候选…"
         scheduled = false; rendering = false
     }
 
@@ -101,6 +145,10 @@ struct PhotoMotionPreview: View {
     let isDemo: Bool
     let height: CGFloat
     let select: () -> Void
+    var selectedCover: Int? = nil
+    var chooseCover: (Int?) -> Void = { _ in }
+    var allowsCoverSelection = false
+    var showsCandidateStatus = false
     @StateObject private var controller = MotionPreviewController()
     private var key: String { item.id + "|" + direction + "|" + timeDomain }
     private var previewSource: URL {
@@ -122,7 +170,7 @@ struct PhotoMotionPreview: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 PhotoThumbnail(source: previewSource, isPreview: usesDemo)
-                if let frame = controller.frame {
+                if let frame = controller.frame ?? controller.candidateImage {
                     GeometryReader { geometry in
                         Image(decorative: frame, scale: 1).resizable().scaledToFill()
                             .frame(width: geometry.size.width, height: geometry.size.height).clipped()
@@ -139,14 +187,37 @@ struct PhotoMotionPreview: View {
             }
             .frame(height: height).clipped().contentShape(Rectangle()).onTapGesture(perform: select)
             if item.isMotion { timeline.padding(.horizontal, 10).padding(.vertical, 6) }
+            if item.isMotion && direction == "to-apple" {
+                if !controller.candidates.isEmpty || selectedCover != nil { coverMenu.padding(.horizontal,10).padding(.bottom,8) }
+                if showsCandidateStatus { Text(controller.candidateStatus).font(.callout).foregroundColor(.secondary).padding(10) }
+            }
         }
         .onAppear { prepare() }
         .onChange(of: key) { _ in prepare() }
+        .onChange(of: selectedCover) { controller.selectCover($0) }
         .onDisappear { controller.cancel() }
     }
 
     private func prepare() {
-        if item.isMotion { controller.prepare(source: previewSource, direction: direction, domain: timeDomain, demo: usesDemo) }
+        if item.isMotion { controller.prepare(source: previewSource, direction: direction, domain: timeDomain, demo: usesDemo, selectedCover:selectedCover) }
+    }
+
+    private var coverMenu: some View {
+        Menu {
+            Button { chooseCover(nil) } label: {
+                Label("原始照片",systemImage:selectedCover == nil ? "checkmark":"photo")
+            }
+            ForEach(controller.candidates) { choice in
+                Button { chooseCover(choice.index) } label: {
+                    Label(choice.title,systemImage:selectedCover == choice.index ? "checkmark":"photo")
+                }.disabled(choice.issue != nil).help(choice.issue ?? "使用该高清画面作为导出封面")
+            }
+        } label: {
+            Text(selectedCover.map { "封面：高清候选 \($0 + 1)" } ?? "封面：原始照片").font(.caption)
+        }
+        .disabled(!allowsCoverSelection)
+        .accessibilityIdentifier("cover-candidate-picker")
+        .help(controller.candidateStatus)
     }
 
     private var timeline: some View {

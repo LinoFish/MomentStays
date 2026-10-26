@@ -37,12 +37,13 @@ enum VideoTrack: String, SettingsChoice {
 }
 
 enum ExportMode: String, SettingsChoice {
-    case livePhoto = "livephoto", withAuxiliary = "livephoto+auxiliary", auxiliaryOnly = "auxiliary-only"
+    case livePhoto = "livephoto", withAuxiliary = "livephoto+auxiliary", auxiliaryOnly = "auxiliary-only", withCandidates = "livephoto+candidates"
     var title: String {
         switch self {
         case .livePhoto: return "仅 Live Photo"
         case .withAuxiliary: return "Live Photo ＋ 辅助轨"
         case .auxiliaryOnly: return "仅导出辅助轨"
+        case .withCandidates: return "Live Photo ＋ 高清候选照片"
         }
     }
 }
@@ -50,6 +51,11 @@ enum ExportMode: String, SettingsChoice {
 enum MissingTimePolicy: String, SettingsChoice {
     case error, midpoint
     var title: String { self == .error ? "报告错误（推荐）" : "使用视频中点" }
+}
+
+enum CandidateDelivery: String, SettingsChoice {
+    case staticPhotos = "static", livePhotos = "livephoto"
+    var title: String { self == .livePhotos ? "每张都导出为 Live Photo" : "主照片实况，其余静态照片" }
 }
 
 enum CoverTimeDomain: String, SettingsChoice {
@@ -102,11 +108,17 @@ struct ConversionSettings: Equatable, Codable {
     var missingTime: MissingTimePolicy = .error
     var timeDomain: CoverTimeDomain = .auto
     var repairAuxiliaryDuration = false
+    // Optional for compatibility with task histories saved before cover selection.
+    var coverSelections: [String:Int]?
+    var candidateDelivery: CandidateDelivery?
+
+    func coverIndex(for source: URL) -> Int? { coverSelections?[NativeBatch.normalized(source).path] }
 
     mutating func normalize() {
         if direction == .toAndroid && destination.importsPhotos { destination = .folder }
         if direction == .toApple && destination.shares { destination = .folder }
         if exportMode == .auxiliaryOnly && direction == .toApple && destination.importsPhotos { destination = .folder }
+        if exportMode == .withCandidates || !(coverSelections ?? [:]).isEmpty { track = .primary }
         if albumTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { albumTitle = "MomentStays 转换结果" }
         if !vendor.supportsHEIC { container = .jpeg }
         imageQuality = min(1, max(0.01, imageQuality.isFinite ? imageQuality : 0.95))
@@ -118,6 +130,8 @@ struct ConversionSettings: Equatable, Codable {
             timeDomain: timeDomain.rawValue, videoTrack: track.rawValue, outputMode: exportMode.rawValue,
             repairAuxiliaryDuration: repairAuxiliaryDuration, exportDataFiles: exportDataFiles)
         result.direction = direction.rawValue
+        result.coverSelections = exportMode == .auxiliaryOnly ? [:] : coverSelections ?? [:]
+        result.candidateDelivery = (candidateDelivery ?? .staticPhotos).rawValue
         result.android = AndroidOptions(vendor: vendor.rawValue, container: container.rawValue,
             hdr: container == .heic ? "preserve" : "ultra", imageQuality: imageQuality,
             gainQuality: gainQuality, preserveJPEG: preserveJPEG)
@@ -125,7 +139,11 @@ struct ConversionSettings: Equatable, Codable {
     }
 
     var summary: String {
-        direction == .toAndroid ? "\(vendor.title) · \(container == .heic ? "HEIC 原编码" : "JPEG")" : "\(track.title) · \(exportMode.title)"
+        if direction == .toAndroid { return "\(vendor.title) · \(container == .heic ? "HEIC 原编码" : "JPEG")" }
+        var parts = [track.title,exportMode.title]
+        if exportMode == .withCandidates { parts.append((candidateDelivery ?? .staticPhotos).title) }
+        if !(coverSelections ?? [:]).isEmpty && exportMode != .auxiliaryOnly { parts.append("已选择高清候选封面") }
+        return parts.joined(separator:" · ")
     }
 
     var destinations: [OutputDestination] {

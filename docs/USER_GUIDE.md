@@ -3,10 +3,12 @@
 > Applies to MomentStays 1.1.0 (macOS 12 or later).
 > 中文版见 [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md).
 
+> This guide follows the latest source on `main`. High-resolution cover selection and candidate-photo export require a build from current source; the published 1.1.0 installer does not include these new options.
+
 MomentStays converts Android Motion Photos into Apple Live Photos on your Mac — and back again. Everything follows three rules:
 
 1. **The cover frame stays** — the moment you picked remains the cover, aligned to the real frame on the media timeline.
-2. **Nothing is re-encoded** — video and audio are remuxed only and verified sample by sample, so quality is never lost.
+2. **Video and audio are not re-encoded** — they are remuxed only and verified sample by sample, so their quality is never lost. Image-format conversion and candidate-frame export can require image encoding.
 3. **HDR is preserved honestly** — gain maps that can be kept are kept intact; anything unsupported is reported, never faked.
 
 All conversion and verification happen locally on your Mac. Nothing is uploaded.
@@ -169,7 +171,7 @@ Some Motion Photos carry **two** video tracks in their embedded video: the **pri
 
 Do not confuse it with two other things: the MPF auxiliary *images* inside a JPEG (gain maps etc. — that's what the manifest field `auxiliary_sha256` refers to) and HEIC auxiliary data. "Auxiliary track" here always means the **video** track.
 
-### 7.2 Three export modes
+### 7.2 Export modes
 
 Under Export Settings → Output content (Android → Apple only):
 
@@ -178,8 +180,9 @@ Under Export Settings → Output content (Android → Apple only):
 | Live Photo only (default) | Build the Live Photo from the selected track |
 | Live Photo + auxiliary track | Additionally saves the auxiliary track as a separate file, `<name>.auxiliary.mov`. Keep it apart from the Live Photo pair |
 | Auxiliary track only | Exports just the auxiliary track as a standalone MOV (result folder suffix `.auxiliary-export`). No Live Photo, no audio; destination is forced to folder |
+| Live Photo + high-resolution candidate photos | Exports the selected Live Photo cover and the remaining covers as separate photos, with an all-Live-Photo or mixed delivery option |
 
-If the source has no auxiliary track, these operations report that clearly instead of skipping silently.
+Without an auxiliary track, standalone auxiliary-video operations report an error. Candidate-photo mode still exports the original Live Photo and reports that there are no additional candidates.
 
 ### 7.3 Using the auxiliary track as the motion video — strict conditions
 
@@ -207,6 +210,25 @@ Some auxiliary tracks declare a duration of 0 for their only frame, so the syste
 - If the layout cannot be strictly validated, the repair is refused.
 - The repair is recorded in the manifest (`duration_repair`: method, original and repaired durations, `sample_pts_unchanged`) and surfaced as a warning in the results.
 - It only affects standalone auxiliary exports; the switch is disabled in Live-Photo-only mode.
+
+### 7.6 Selecting a high-resolution cover
+
+Use the cover menu on a photo card to switch between the original still and auxiliary high-resolution candidates. In list view, right-click and choose the cover-selection command. Each photo keeps its own selection; selections cannot change during conversion.
+
+Selecting a candidate replaces the still and moves the Live Photo marker to that candidate's time. Continuous motion always comes from the primary video track. Google high-resolution frame metadata takes precedence over the auxiliary sample PTS. A candidate whose time cannot map onto the primary video cannot become a Live Photo cover.
+
+Candidates are decoded to JPEG with the video transform applied. The original cover's HDR gain map is not reused. Zero-duration samples are repaired only in a private decode copy; originals and exported primary-video timing stay intact. This is a decoded image export, not a lossless copy of a photo bitstream.
+
+### 7.7 Two candidate-photo delivery options
+
+After selecting the candidate-photo export mode, choose either:
+
+- **Every photo as a Live Photo:** the original still and each auxiliary candidate receive their own identifier, cover marker and complete primary motion video. This uses more storage.
+- **Main photo live, remaining photos still:** only the selected main cover has a paired video. Other candidates are independent JPEG/HEIC images. Selecting an auxiliary cover also preserves the original still as a separate image.
+
+Candidate files use names such as `.candidate-001.jpg`; an additional original cover uses `.original`. All-live mode creates matching MOVs. Photos-library delivery creates separate assets rather than hiding candidates in `alternatePhoto`. Library writes occur only when a library destination is selected.
+
+Candidate JPEGs carry their relative video time and candidate index. Optional JSON manifests also record selection, decoding and pairing details. HDR preservation for arbitrary auxiliary-video formats has not been verified.
 
 ## 8. Photos library: recognition, import, and monitoring
 
@@ -384,4 +406,4 @@ Parsing is strict by design: Motion Photo detection relies on GCamera XMP and co
 
 ---
 
-*This guide is based on the MomentStays 1.0.1 product, design, and validation documents and on the application's source behavior. If the guide and an in-app message disagree, the in-app message and the result report win.*
+*This guide follows the current MomentStays source, product documentation and validation scope. If the guide and an in-app message disagree, the in-app message and the result report win.*

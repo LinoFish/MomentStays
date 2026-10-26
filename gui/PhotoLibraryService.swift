@@ -203,26 +203,29 @@ final class PhotoLibraryService {
             if token.isCancelled { break }
             progress("导入相册 \(index + 1) / \(task.results.count)")
             do {
+                let standalone = task.settings.exportMode == .withCandidates && file.files.count == 1
+                guard standalone || file.files.count == 2 else { throw Failure("缺少完整实况配对") }
                 var record = store.records()[file.key]
                 var asset: PHAsset?
                 if let id = record?.assetID { asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject }
                 let shouldCreate = try LibraryImportPolicy.shouldCreate(record, assetExists: asset != nil)
                 if shouldCreate {
                     try file.verify()
-                    guard file.files.count == 2 else { throw Failure("缺少完整实况配对") }
-                    let still = URL(fileURLWithPath: file.files[0]), movie = URL(fileURLWithPath: file.files[1])
-                    let paired = try AndroidExport.pair(still)
-                    guard paired.movie.standardizedFileURL == movie.standardizedFileURL else { throw Failure("配对视频不匹配") }
+                    let still = URL(fileURLWithPath: file.files[0])
+                    let movie = standalone ? nil : URL(fileURLWithPath:file.files[1])
+                    if let movie = movie {
+                        let paired = try AndroidExport.pair(still)
+                        guard paired.movie.standardizedFileURL == movie.standardizedFileURL else { throw Failure("配对视频不匹配") }
+                    }
                     if PhotoHEIF.matches(Array(try Data(contentsOf: still))) { _ = try PhotoHEIF.layout(Array(Data(contentsOf: still))) }
                     else { guard try MLJPEG.staticOnly(Array(Data(contentsOf: still))) == Array(Data(contentsOf: still)) else { throw Failure("静态图片仍含嵌入视频或额外载荷") } }
                     var pending = LibraryImportRecord(key: file.key, state: "pending")
                     try store.save(pending)
-                    let fallback = Self.fileMetadata(still)
+                    let fallback = Self.fileMetadata(URL(fileURLWithPath:file.source))
                     do {
                         try change {
                             let request = PHAssetCreationRequest.forAsset()
                             let imageOptions = PHAssetResourceCreationOptions(); imageOptions.originalFilename = still.lastPathComponent; imageOptions.shouldMoveFile = false
-                            let movieOptions = PHAssetResourceCreationOptions(); movieOptions.originalFilename = movie.lastPathComponent; movieOptions.shouldMoveFile = false
                             request.creationDate = file.origin?.created ?? fallback.0
                             if let lat = file.origin?.latitude, let lon = file.origin?.longitude { request.location = CLLocation(latitude: lat, longitude: lon) }
                             else { request.location = fallback.1 }
@@ -236,7 +239,10 @@ final class PhotoLibraryService {
                             do { try store.save(pending) }
                             catch { pending.message = error.localizedDescription; return }
                             request.addResource(with: .photo, fileURL: still, options: imageOptions)
-                            request.addResource(with: .pairedVideo, fileURL: movie, options: movieOptions)
+                            if let movie = movie {
+                                let movieOptions = PHAssetResourceCreationOptions(); movieOptions.originalFilename = movie.lastPathComponent; movieOptions.shouldMoveFile = false
+                                request.addResource(with:.pairedVideo,fileURL:movie,options:movieOptions)
+                            }
                         }
                     } catch {
                         pending.state = "pending"; pending.assetID = nil; pending.message = error.localizedDescription
@@ -247,11 +253,14 @@ final class PhotoLibraryService {
                     }
                     asset = created; pending.state = "created"; try store.save(pending); record = pending; imported += 1
                 } else { existing += 1 }
-                guard let asset = asset, asset.mediaSubtypes.contains(.photoLive) else { throw Failure("入库结果未识别为 Live Photo") }
+                guard let asset = asset, standalone || asset.mediaSubtypes.contains(.photoLive) else { throw Failure("入库结果未识别为 Live Photo") }
                 let resources = PHAssetResource.assetResources(for: asset)
-                guard resources.contains(where: { $0.type == .photo }) && resources.contains(where: { $0.type == .pairedVideo }),
-                      resources.first(where: { $0.type == .photo })?.originalFilename == URL(fileURLWithPath: file.files[0]).lastPathComponent,
-                      resources.first(where: { $0.type == .pairedVideo })?.originalFilename == URL(fileURLWithPath: file.files[1]).lastPathComponent else { throw Failure("入库结果的配对资源或文件名未通过校验") }
+                guard let photoResource = resources.first(where: { $0.type == .photo }),
+                      photoResource.originalFilename.caseInsensitiveCompare(URL(fileURLWithPath:file.files[0]).lastPathComponent) == .orderedSame else { throw Failure("入库照片资源未通过校验") }
+                if !standalone {
+                    guard let videoResource = resources.first(where:{ $0.type == .pairedVideo }),
+                          videoResource.originalFilename.caseInsensitiveCompare(URL(fileURLWithPath:file.files[1]).lastPathComponent) == .orderedSame else { throw Failure("入库配对视频资源未通过校验") }
+                }
                 if let expected = file.origin?.created, abs((asset.creationDate ?? .distantPast).timeIntervalSince(expected)) > 1 { throw Failure("入库拍摄时间不一致") }
                 if let lat = file.origin?.latitude, let lon = file.origin?.longitude {
                     guard let loc = asset.location, abs(loc.coordinate.latitude - lat) < 0.00001, abs(loc.coordinate.longitude - lon) < 0.00001 else { throw Failure("入库位置不一致") }

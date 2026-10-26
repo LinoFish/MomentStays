@@ -497,10 +497,10 @@ enum MotionVideoMetadata {
         }
         return result
     }
-    static func timestamp(_ data: [UInt8]) throws -> Int? {
+    static func imageSamples(_ data: [UInt8]) throws -> [Range<Int>] {
         let top = try boxes(data,0,data.count)
-        guard let moov = top.first(where: { $0.type == "moov" }) else { return nil }
-        var times: [Int] = []
+        guard let moov = top.first(where: { $0.type == "moov" }) else { return [] }
+        var samples: [Range<Int>] = []
         for track in try boxes(data,moov.payload,moov.end) where track.type == "trak" {
             let mdia = try child(data,track,"mdia"), handler = try child(data,mdia,"hdlr")
             guard handler.end - handler.payload >= 12,
@@ -525,19 +525,49 @@ enum MotionVideoMetadata {
                   top.contains(where: { $0.type == "mdat" && offset >= $0.payload && offset + size <= $0.end }) else {
                 throw Failure("Google 封面样本超出媒体数据范围")
             }
-            let roots = try descriptors(data,offset,offset + size)
+            samples.append(offset..<offset + size)
+        }
+        return samples
+    }
+    struct ImageTimes: Equatable {
+        let primary: Int?
+        let highResolution: [Int?]
+    }
+    static func imageTimes(_ data: [UInt8]) throws -> ImageTimes? {
+        var times: [ImageTimes] = []
+        for sample in try imageSamples(data) {
+            let roots = try descriptors(data,sample.lowerBound,sample.upperBound)
             guard roots.count == 1, roots[0].tag == 0xc0 else { throw Failure("Google 封面根描述符无效") }
             let scores = try descriptors(data,roots[0].payload,roots[0].end).filter { $0.tag == 0xc1 }
             guard scores.count == 1, scores[0].end - scores[0].payload >= 4 else { throw Failure("Google 封面评分描述符无效") }
-            let frames = try descriptors(data,scores[0].payload + 4,scores[0].end).filter { $0.tag == 0xc3 }
+            let children = try descriptors(data,scores[0].payload + 4,scores[0].end)
+            let frames = children.filter { $0.tag == 0xc3 }
             guard frames.count == 1, frames[0].end - frames[0].payload == 12 else { throw Failure("Google 原始封面时间描述符无效") }
             let raw = try Binary.read(data,frames[0].payload + 4,8)
             let signed = Int64(bitPattern:raw)
-            if signed >= 0 { times.append(Int(signed)) }
+            var high: [Int?] = []
+            let tracks = children.filter { $0.tag == 0xc2 }
+            guard tracks.count <= 1 else { throw Failure("Google 高清候选时间描述符重复") }
+            if let track = tracks.first {
+                guard track.end - track.payload >= 4 else { throw Failure("Google 高清候选时间描述符被截断") }
+                let count = try Binary.int(data,track.payload,4)
+                let entries = try descriptors(data,track.payload + 4,track.end)
+                guard entries.count == count, entries.allSatisfy({ $0.tag == 0xc3 && $0.end - $0.payload == 12 }) else {
+                    throw Failure("Google 高清候选帧数与时间描述符不一致")
+                }
+                for entry in entries {
+                    let value = Int64(bitPattern:try Binary.read(data,entry.payload + 4,8))
+                    high.append(value >= 0 ? Int(value) : nil)
+                }
+                let known = high.compactMap { $0 }
+                guard zip(known,known.dropFirst()).allSatisfy({ $0 <= $1 }) else { throw Failure("Google 高清候选时间未按顺序排列") }
+            }
+            times.append(ImageTimes(primary:signed >= 0 ? Int(signed) : nil,highResolution:high))
         }
-        guard Set(times).count <= 1 else { throw Failure("视频中的原始封面时间冲突") }
+        guard times.allSatisfy({ $0 == times.first }) else { throw Failure("视频中的封面时间描述符冲突") }
         return times.first
     }
+    static func timestamp(_ data: [UInt8]) throws -> Int? { try imageTimes(data)?.primary }
 }
 
 // Vendor container facts are independently implemented from the public SEF

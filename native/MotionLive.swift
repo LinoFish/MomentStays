@@ -139,7 +139,8 @@ func sourceCoverTiming(_ req: [String: Any], video: TrackInfo, selection: String
         requested = primaryTimes[index]; policy = "source-huawei-frame"
     } else if let us = req["timestamp_us"] as? NSNumber, us.int64Value >= 0 {
         requested = CMTime(value: us.int64Value, timescale: 1_000_000)
-        policy = req["timestamp_source"] as? String == "video-metadata" ? "source-video-metadata" : "source-xmp"
+        let source = req["timestamp_source"] as? String
+        policy = source == "high-res-candidate" ? "selected-high-res-candidate" : source == "video-metadata" ? "source-video-metadata" : "source-xmp"
     } else if req["missing_time"] as? String == "midpoint" {
         requested = CMTimeAdd(sorted.first!.0, CMTimeMultiplyByFloat64(CMTimeSubtract(sorted.last!.0, sorted.first!.0), multiplier: 0.5))
         policy = "explicit-midpoint"

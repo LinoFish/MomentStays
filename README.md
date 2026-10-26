@@ -99,6 +99,8 @@ Some validated private static extensions can be retained as opaque data. Retaini
 
 Batch processing includes progress, cancellation, verified resume, skip/overwrite decisions, optional JSON manifests/reports, and separate auxiliary-track export. A single-frame auxiliary track is never stretched into fabricated motion.
 
+Each photo can use an auxiliary high-resolution frame as its cover while keeping primary-track motion. Candidate-photo mode exports every cover as a separate Live Photo, or keeps only the main photo live and exports the rest as stills. Library delivery creates separate assets for these candidates.
+
 Vendor support applies to the layouts the parser can validate, not every device or firmware. See the [format scope](docs/product/双向转换与移动布局.md) (Chinese).
 
 ## Build & run

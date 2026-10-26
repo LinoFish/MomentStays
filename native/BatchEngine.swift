@@ -12,8 +12,17 @@ struct ConversionOptions {
     var outputMode = "livephoto"
     var repairAuxiliaryDuration = false
     var exportDataFiles = true
-    var json: [String:Any] { if direction == "to-android" { return ["direction":direction,"android":android.json,"time_domain":timeDomain,"export_data_files":exportDataFiles] }; return ["legacy_hdr": legacyHDR ? "auto" : "preserve", "missing_time": missingTime, "time_domain": timeDomain,
-        "video_track":videoTrack,"output_mode":outputMode,"repair_auxiliary_duration":outputMode != "livephoto" && repairAuxiliaryDuration,"export_data_files":exportDataFiles] }
+    var coverIndex: Int?
+    var coverSelections: [String:Int] = [:]
+    var candidateDelivery = "static"
+    var json: [String:Any] {
+        if direction == "to-android" { return ["direction":direction,"android":android.json,"time_domain":timeDomain,"export_data_files":exportDataFiles] }
+        var result: [String:Any] = ["legacy_hdr": legacyHDR ? "auto" : "preserve", "missing_time": missingTime, "time_domain": timeDomain,
+            "video_track":videoTrack,"output_mode":outputMode,"repair_auxiliary_duration":outputMode != "livephoto" && repairAuxiliaryDuration,"export_data_files":exportDataFiles]
+        if let index = coverIndex { result["cover_candidate_index"] = index }
+        if outputMode == "livephoto+candidates" && candidateDelivery != "static" { result["candidate_delivery"] = candidateDelivery }
+        return result
+    }
 }
 
 enum ExistingOutputDecision { case skip, overwrite, cancel }
@@ -53,7 +62,7 @@ struct BatchOutcome {
 }
 
 enum NativeBatch {
-    static let revision = "gui-native-1.1.4"
+    static let revision = "gui-native-1.1.5"
     static func normalized(_ url: URL) -> URL { url.standardizedFileURL.resolvingSymlinksInPath() }
     static func root(_ url: URL) -> URL {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true ? url : url.deletingLastPathComponent()
@@ -157,14 +166,22 @@ enum NativeBatch {
               manifest["timing"] is [String:Any], manifest["hdr"] is [String:Any] else { throw Failure("已有输出的校验清单无效") }
         let names = manifest["output_files"] as? [String:String] ?? ["still":"photo.jpg","video":"photo.mov"]
         let keys = Set(names.keys)
-        guard [Set(["still","video"]),Set(["still","video","auxiliary"]),Set(["auxiliary"]),Set(["motionphoto"])].contains(keys),
+        let extraRoles = keys.subtracting(["still","video"])
+        let photoRoles = extraRoles.filter { isCandidatePhotoRole($0) }
+        let allowedExtras = Set(photoRoles.flatMap { role -> [String] in
+            let video = candidateVideoRole(role)
+            return keys.contains(video) ? [role,video] : [role]
+        })
+        let candidateSet = keys.isSuperset(of:["still","video"]) && !photoRoles.isEmpty && extraRoles == allowedExtras
+        guard ([Set(["still","video"]),Set(["still","video","auxiliary"]),Set(["auxiliary"]),Set(["motionphoto"])].contains(keys) || candidateSet),
               Set(hashes.keys) == Set(names.values), hashes.count == names.count,
               names.values.allSatisfy({ !$0.isEmpty && !$0.contains("/") && !$0.contains("\0") && $0 != "." && $0 != ".." }) else {
             throw Failure("已有输出的配对文件名无效")
         }
         for (role,name) in names {
             let ext = URL(fileURLWithPath:name).pathExtension.lowercased()
-            guard ["still","motionphoto"].contains(role) ? ["jpg","jpeg","heic","heif"].contains(ext) : ext == "mov" else { throw Failure("输出文件扩展名无效") }
+            let isImage = ["still","motionphoto"].contains(role) || isCandidatePhotoRole(role)
+            guard isImage ? ["jpg","jpeg","heic","heif"].contains(ext) : ext == "mov" else { throw Failure("输出文件扩展名无效") }
             guard try hashFile(folder.appendingPathComponent(name)) == hashes[name] else { throw Failure("已有输出校验失败：\(name)") }
         }
         return manifest
@@ -172,9 +189,16 @@ enum NativeBatch {
     static func outputNames(_ source: URL) -> [String:String] {
         ["still":source.lastPathComponent,"video":source.deletingPathExtension().lastPathComponent + ".mov"]
     }
+    static func isCandidatePhotoRole(_ role: String) -> Bool {
+        role == "original" || (role.hasPrefix("candidate_") && Int(role.dropFirst(10)).map { $0 >= 0 } == true)
+    }
+    static func candidateVideoRole(_ photoRole: String) -> String {
+        photoRole == "original" ? "original_video" : "candidate_video_" + photoRole.dropFirst(10)
+    }
     static func expectedNames(_ source: URL, options: ConversionOptions) -> [String:String] {
         var names = options.outputMode == "auxiliary-only" ? [:] : outputNames(source)
-        if options.outputMode != "livephoto" { names["auxiliary"] = source.deletingPathExtension().lastPathComponent + ".auxiliary.mov" }
+        if options.coverIndex != nil { names["still"] = source.deletingPathExtension().lastPathComponent + ".jpg" }
+        if ["livephoto+auxiliary","auxiliary-only"].contains(options.outputMode) { names["auxiliary"] = source.deletingPathExtension().lastPathComponent + ".auxiliary.mov" }
         return names
     }
     static func publish(_ stage: URL, target: URL, source: URL, sourceHash: String, token: StopToken, overwrite: Bool = false, exportDataFiles: Bool = true) throws {
@@ -216,7 +240,12 @@ enum NativeBatch {
         guard status == 0 else { throw Failure("无法恢复输出文件名；原结果已保留：\(String(cString:strerror(errno)))") }
     }
     static func convert(source: URL, target: URL, options: ConversionOptions, token: StopToken, overwrite: Bool = false) throws -> [String:Any] {
-        guard ["primary","secondary"].contains(options.videoTrack), ["livephoto","livephoto+auxiliary","auxiliary-only"].contains(options.outputMode) else { throw Failure("轨道或导出模式无效") }
+        var options = options
+        if let index = options.coverSelections[normalized(source).path] { options.coverIndex = index }
+        guard ["primary","secondary"].contains(options.videoTrack), ["livephoto","livephoto+auxiliary","auxiliary-only","livephoto+candidates"].contains(options.outputMode) else { throw Failure("轨道或导出模式无效") }
+        guard options.coverIndex == nil || options.outputMode != "auxiliary-only" else { throw Failure("仅导出辅助轨时不能更换照片封面") }
+        guard (options.coverIndex == nil && options.outputMode != "livephoto+candidates") || options.videoTrack == "primary" else { throw Failure("高清候选封面需搭配主运动轨") }
+        guard ["static","livephoto"].contains(options.candidateDelivery) else { throw Failure("候选照片的交付格式无效") }
         let fm = FileManager.default
         let sourceHash = try hashFile(source)
         if !overwrite && fm.fileExists(atPath: target.path) {
@@ -227,7 +256,7 @@ enum NativeBatch {
             if previous["repair_auxiliary_duration"] == nil { previous["repair_auxiliary_duration"] = false }
             if previous["export_data_files"] == nil { previous["export_data_files"] = true }
             if manifest["source_sha256"] as? String == sourceHash,
-               [revision,"gui-native-1.1.3","gui-native-1.1.2","gui-native-1.1.1","gui-native-1.1.0","gui-native-1.0.6","gui-native-1.0.5","gui-native-1.0.4","gui-native-1.0.3"].contains(manifest["implementation"] as? String ?? ""),
+               [revision,"gui-native-1.1.4","gui-native-1.1.3","gui-native-1.1.2","gui-native-1.1.1","gui-native-1.1.0","gui-native-1.0.6","gui-native-1.0.5","gui-native-1.0.4","gui-native-1.0.3"].contains(manifest["implementation"] as? String ?? ""),
                (previous as NSDictionary).isEqual(to:options.json) {
                 if manifest["implementation"] as? String != revision && options.outputMode != "auxiliary-only" {
                     let original = try PhotoFormat.parse(Array(Data(contentsOf:source)))
@@ -236,17 +265,20 @@ enum NativeBatch {
                         throw Failure("旧版本输出未保留荣耀私有 HDR 静态扩展，请在界面选择覆盖后重新转换")
                     }
                 }
-                if manifest["output_files"] as? [String:String] != expectedNames(source,options:options) {
+                let storedNames = manifest["output_files"] as? [String:String] ?? [:]
+                let wanted = expectedNames(source,options:options)
+                let namesMatch = options.outputMode == "livephoto+candidates" ? wanted.allSatisfy { storedNames[$0.key] == $0.value } : storedNames == wanted
+                if !namesMatch {
                     guard options.outputMode == "livephoto" else { throw Failure("已有输出文件名与所选模式不同，请使用新的输出位置") }
                     try restoreNames(target,source:source,manifest:manifest,token:token)
-                    return ["status":"resumed", "source":source.path, "output":target.path, "detail":"已恢复原始文件名，图片和视频未重新编码"]
+                    return ["status":"resumed", "source":source.path, "output":target.path, "output_files":wanted, "detail":"已恢复原始文件名，图片和视频未重新编码"]
                 }
-                return ["status":"resumed", "source":source.path, "output":target.path, "detail":"已验证，跳过重复转换"]
+                return ["status":"resumed", "source":source.path, "output":target.path, "output_files":storedNames, "detail":"已验证，跳过重复转换"]
             }
             throw Failure("同名输出已存在且内容或设置不同；未覆盖，请选择新的输出目录")
         }
         let photo = try PhotoFormat.parse(Array(Data(contentsOf: source)))
-        if options.outputMode != "auxiliary-only" && photo.timestamp == nil && photo.coverFrame == nil && options.missingTime == "error" { throw Failure("原片没有有效封面时间戳或封面帧号，未使用推测位置") }
+        if options.outputMode != "auxiliary-only" && options.coverIndex == nil && photo.timestamp == nil && photo.coverFrame == nil && options.missingTime == "error" { throw Failure("原片没有有效封面时间戳或封面帧号，未使用推测位置") }
         if token.isCancelled { throw Failure("已停止") }
         try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         let stage = target.deletingLastPathComponent().appendingPathComponent(".motionlive-" + UUID().uuidString)
@@ -256,7 +288,13 @@ enum NativeBatch {
         try fm.createDirectory(at: work, withIntermediateDirectories: false)
         let sourceVideo = work.appendingPathComponent("source.mp4")
         try Data(photo.video).write(to:sourceVideo)
-        let names = expectedNames(source,options:options)
+        var names = expectedNames(source,options:options)
+        let wantsCandidates = options.coverIndex != nil || options.outputMode == "livephoto+candidates"
+        let candidateSession = try wantsCandidates ? CoverCandidateSession.prepare(video:photo.video,folder:work) : nil
+        if let index = options.coverIndex {
+            guard let session = candidateSession else { throw Failure("原片没有辅助高清候选，请使用原始封面") }
+            _ = try session.candidate(index)
+        }
         var auxiliary: [String:Any]? = nil
         if let auxiliaryName = names["auxiliary"] {
             let auxiliaryURL = stage.appendingPathComponent(auxiliaryName)
@@ -286,6 +324,12 @@ enum NativeBatch {
             return ["status":"converted","source":source.path,"output":target.path,"detail":"辅助轨已单独导出：\(auxiliary!["width"]!) × \(auxiliary!["height"]!)，\(auxiliary!["frames"]!) 帧，\(auxiliary!["duration_seconds"]!) 秒；无音频，未重新编码" + (auxiliary?["duration_repair"] == nil ? "" : "；已按设置修复零时长，画面数据未改变"),"auxiliary_video":auxiliary!]
         }
         var image = photo.still
+        var selectedCandidate: [String:Any]?
+        if let index = options.coverIndex, let session = candidateSession {
+            let selected = work.appendingPathComponent("selected-cover.jpg")
+            selectedCandidate = try session.writeJPEG(index,to:selected)
+            image = Array(try Data(contentsOf:selected))
+        }
         var hdr: [String:Any] = ["input":photo.ultra ? "ultra-hdr" : "legacy-or-sdr", "status":"preserved", "reason":"Ultra HDR 主图及增益图原样保留"]
         let isHEIC = PhotoHEIF.matches(image)
         if !isHEIC && !photo.ultra, try PhotoHDR.hasISO(image) { hdr["input"] = "iso-hdr" }
@@ -302,7 +346,10 @@ enum NativeBatch {
         if isHEIC {
             hdr = ["input":"heic", "status":"preserved", "reason":"HEIC 图像编码、色彩与方向属性原样保留；未新增或转换 HDR"]
         }
-        if !isHEIC && !photo.ultra && honorHDR == nil {
+        if options.coverIndex != nil {
+            hdr = ["input":"auxiliary-video","status":"decoded-sdr","reason":"辅助高清帧已解码为 JPEG 封面；主运动轨保持原编码，未复制原封面的 HDR 增益图"]
+        }
+        if options.coverIndex == nil && !isHEIC && !photo.ultra && honorHDR == nil {
             hdr["status"] = "unchanged"
             hdr["reason"] = "旧版 HDR 转换已关闭"
             if options.legacyHDR {
@@ -335,18 +382,64 @@ enum NativeBatch {
         let still = try PhotoFormat.liveStill(image, uuid: uuid)
         guard try PhotoHDR.honorPrivate(still) == honorHDR else { throw Failure("荣耀私有 HDR 静态扩展字节校验失败") }
         guard try (isHEIC ? (PhotoHEIF.layout(still).boxes.allSatisfy { !["mpvd","moov"].contains($0.type) }) : MLJPEG.staticOnly(still) == still) else { throw Failure("导出静态图片仍包含图片范围之外的数据") }
-        guard try PhotoFormat.codingHash(still) == PhotoFormat.codingHash(photo.still) else { throw Failure("静态主图压缩数据发生变化") }
+        guard try PhotoFormat.codingHash(still) == PhotoFormat.codingHash(image) else { throw Failure("静态主图压缩数据发生变化") }
         let jpg = stage.appendingPathComponent(names["still"]!), mov = stage.appendingPathComponent(names["video"]!)
         try Data(still).write(to:jpg)
         var request: [String:Any] = ["input":sourceVideo.path,"output":mov.path,"still":jpg.path,"identifier":uuid,
             "missing_time":options.missingTime,"time_domain":options.timeDomain,"video_track":options.videoTrack]
-        if let timestamp = photo.timestamp { request["timestamp_us"] = timestamp }
-        if let frame = photo.coverFrame { request["cover_frame_index"] = frame }
-        if photo.timestampTag == "MP4:motionphoto-image-meta" {
+        if let index = options.coverIndex, let candidate = try candidateSession?.candidate(index) {
+            request["timestamp_us"] = candidate.timestampUs
+            request["time_domain"] = "presentation"
+            request["timestamp_source"] = "high-res-candidate"
+        } else {
+            if let timestamp = photo.timestamp { request["timestamp_us"] = timestamp }
+            if let frame = photo.coverFrame { request["cover_frame_index"] = frame }
+        }
+        if options.coverIndex == nil && photo.timestampTag == "MP4:motionphoto-image-meta" {
             request["timestamp_source"] = "video-metadata"
             warnings.append("主 XMP 缺失；已从内嵌视频元数据恢复原始封面时间")
         }
         let timing = try movie(request)
+        var candidatePhotos: [[String:Any]] = []
+        if options.outputMode == "livephoto+candidates" {
+            let stem = source.deletingPathExtension().lastPathComponent
+            func pairCandidate(role: String, name: String, timestamp: Int?, frame: Int?, domain: String) throws -> [String:Any]? {
+                guard options.candidateDelivery == "livephoto" else { return nil }
+                if token.isCancelled { throw Failure("已停止") }
+                let stillURL = stage.appendingPathComponent(name)
+                let id = UUID().uuidString
+                let bytes = try PhotoFormat.liveStill(Array(Data(contentsOf:stillURL)),uuid:id)
+                try Data(bytes).write(to:stillURL)
+                let movieName = URL(fileURLWithPath:name).deletingPathExtension().lastPathComponent + ".mov"
+                var request: [String:Any] = ["input":sourceVideo.path,"output":stage.appendingPathComponent(movieName).path,
+                    "still":stillURL.path,"identifier":id,"missing_time":options.missingTime,"time_domain":domain,"video_track":"primary"]
+                if let timestamp = timestamp { request["timestamp_us"] = timestamp }
+                if let frame = frame { request["cover_frame_index"] = frame }
+                if role != "original" { request["timestamp_source"] = "high-res-candidate" }
+                let timing = try movie(request)
+                names[candidateVideoRole(role)] = movieName
+                return timing
+            }
+            if options.coverIndex != nil {
+                let name = stem + ".original." + source.pathExtension
+                let original = try PhotoFormat.liveStill(photo.still,uuid:uuid,updateIdentifier:false)
+                try Data(original).write(to:stage.appendingPathComponent(name))
+                names["original"] = name
+                var info: [String:Any] = ["role":"original","file":name,"encoding":"original-photo-preserved"]
+                if let timing = try pairCandidate(role:"original",name:name,timestamp:photo.timestamp,frame:photo.coverFrame,domain:options.timeDomain) { info["timing"] = timing }
+                candidatePhotos.append(info)
+            }
+            for candidate in candidateSession?.candidates ?? [] where candidate.index != options.coverIndex {
+                if token.isCancelled { throw Failure("已停止") }
+                let role = "candidate_\(candidate.index)", name = stem + String(format:".candidate-%03d.jpg",candidate.index + 1)
+                var info = try candidateSession!.writeJPEG(candidate.index,to:stage.appendingPathComponent(name))
+                info["role"] = role; info["file"] = name
+                names[role] = name; candidatePhotos.append(info)
+                if let timing = try pairCandidate(role:role,name:name,timestamp:candidate.timestampUs,frame:nil,domain:"presentation") {
+                    candidatePhotos[candidatePhotos.count - 1]["timing"] = timing
+                }
+            }
+        }
         if let date = try source.resourceValues(forKeys:[.contentModificationDateKey]).contentModificationDate {
             for url in [jpg,mov] { try fm.setAttributes([.modificationDate:date], ofItemAtPath:url.path) }
         }
@@ -361,10 +454,14 @@ enum NativeBatch {
             "timing":timing,"hdr":hdr,"warnings":warnings,"primary_coding_sha256":try PhotoFormat.codingHash(still),
             "auxiliary_sha256":try PhotoFormat.auxiliaryHashes(still),"output_sha256":hashes]
         if let auxiliary = auxiliary { manifest["auxiliary_video"] = auxiliary }
+        if let selectedCandidate = selectedCandidate { manifest["selected_cover"] = selectedCandidate }
+        if options.outputMode == "livephoto+candidates" { manifest["candidate_photos"] = candidatePhotos }
         try json(manifest,to:stage.appendingPathComponent("manifest.json"))
         try publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles)
         return ["status":"converted","source":source.path,"output":target.path,"timing":timing,"hdr":hdr,"warnings":warnings,
-            "detail":warnings.isEmpty ? (hdr["reason"] as? String ?? "已转换并校验") : warnings.joined(separator:"；")]
+            "output_files":names,
+            "detail":(warnings.isEmpty ? (hdr["reason"] as? String ?? "已转换并校验") : warnings.joined(separator:"；")) +
+                (options.outputMode == "livephoto+candidates" ? "；另存 \(candidatePhotos.count) 张" + (options.candidateDelivery == "livephoto" ? "独立实况照片" : "独立高清静态照片") : "")]
     }
     static func run(source: URL, output: URL, options: ConversionOptions, token: StopToken,
                     progress: (BatchProgress)->Void) throws -> BatchOutcome {

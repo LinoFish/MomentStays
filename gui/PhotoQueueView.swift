@@ -9,6 +9,7 @@ struct PhotoQueueView: View {
     @Binding var scope: PhotoQueueScope
     let showsScopePicker: Bool
     @State private var prefersGrid = true
+    @State private var coverEditor: PhotoQueueItem?
 
     private var visibleItems: [PhotoQueueItem] { model.items.filter { scope.includes($0) } }
     @State private var dropTargeted = false
@@ -55,6 +56,20 @@ struct PhotoQueueView: View {
             }
             .background(InterfaceStyle.content)
         }
+        .sheet(item:$coverEditor) { item in
+            VStack(alignment:.leading,spacing:12) {
+                HStack {
+                    Text("选择封面").font(.headline)
+                    Spacer()
+                    Button("完成") { coverEditor = nil }.keyboardShortcut(.defaultAction)
+                }
+                Text(item.name).lineLimit(1).truncationMode(.middle)
+                PhotoMotionPreview(item:item,direction:model.settings.direction.rawValue,timeDomain:model.settings.timeDomain.rawValue,
+                    isDemo:model.isPreview,height:300,select:{},selectedCover:model.settings.coverIndex(for:item.source),
+                    chooseCover:{ model.selectCover($0,for:item.source) },allowsCoverSelection:!model.isBusy && !model.sharing,
+                    showsCandidateStatus:true)
+            }.padding(20).frame(width:480)
+        }
     }
 
     private func heading(_ layout: QueueLayout) -> some View {
@@ -95,7 +110,9 @@ struct PhotoQueueView: View {
         VStack(alignment: .leading, spacing: 0) {
             PhotoMotionPreview(item: item, direction: model.settings.direction.rawValue,
                 timeDomain: model.settings.timeDomain.rawValue, isDemo: model.isPreview,
-                height: short ? 100 : 130, select: { model.selection = item.id })
+                height: short ? 100 : 130, select: { model.selection = item.id },
+                selectedCover:model.settings.direction == .toApple ? model.settings.coverIndex(for:item.source) : nil,chooseCover:{ model.selectCover($0,for:item.source) },
+                allowsCoverSelection:!model.isBusy && !model.sharing && model.settings.exportMode != .auxiliaryOnly)
             Button { model.selection = item.id } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(item.name).font(.callout.weight(.medium)).lineLimit(1).truncationMode(.middle)
@@ -117,6 +134,10 @@ struct PhotoQueueView: View {
     }
 
     @ViewBuilder private func itemActions(_ item: PhotoQueueItem) -> some View {
+        if item.isMotion && model.settings.direction == .toApple {
+            Button("选择高清候选封面…") { model.selection = item.id; coverEditor = item }
+                .disabled(model.isBusy || model.sharing || model.settings.exportMode == .auxiliaryOnly)
+        }
         Button("复制文件路径") { actions.copy(item.source.path) }
         Button("显示原片") { actions.reveal(item.source) }
         Button("复制详情") { actions.copy(item.detail) }

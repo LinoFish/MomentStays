@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from tests.test_formats import motion
 
-native = ["MotionLive", "PhotoFormat", "PhotoHEIF", "PhotoHDR", "BatchEngine", "HEIFMetadata", "AndroidHDR", "AndroidExport"]
+native = ["MotionLive", "PhotoFormat", "PhotoHEIF", "PhotoHDR", "BatchEngine", "CoverCandidates", "HEIFMetadata", "AndroidHDR", "AndroidExport"]
 sources = [str(ROOT / "native" / (name + ".swift")) for name in native]
 sources += [str(ROOT / "gui" / (name + ".swift")) for name in ["ConversionSettings", "ConversionService", "WorkspaceModel", "DeliveryModels", "PhotoLibraryService"]]
 sources.append(str(ROOT / "tests/WorkspaceModelTests.swift"))

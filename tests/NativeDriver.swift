@@ -8,6 +8,16 @@ struct NativeDriver {
                   let mode = req["mode"] as? String else { throw Failure("Missing request") }
             let inputs = (req["inputs"] as? [String] ?? (req["input"] as? String).map { [$0] } ?? []).map { URL(fileURLWithPath:$0) }
             switch mode {
+            case "cover-candidates":
+                let photo = try PhotoFormat.parse(Array(Data(contentsOf:inputs[0])))
+                let folder = URL(fileURLWithPath:req["output"] as! String)
+                try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+                let session = try CoverCandidateSession.prepare(video:photo.video,folder:folder)
+                var result: [String:Any] = ["candidates":session?.candidates.map { $0.json } ?? []]
+                if let index = req["index"] as? Int, let session = session {
+                    result["image"] = try session.writeJPEG(index,to:folder.appendingPathComponent("candidate.jpg"))
+                }
+                try emit(result)
             case "fixture": try emit(fixture(req))
             case "android-assemble":
                 let photo = try PhotoFormat.parse(Array(Data(contentsOf:inputs[0])))
@@ -39,6 +49,9 @@ struct NativeDriver {
                 var options = ConversionOptions(legacyHDR:req["legacy_hdr"] as? Bool ?? true,
                     missingTime:req["missing_time"] as? String ?? "error",timeDomain:req["time_domain"] as? String ?? "auto",videoTrack:req["video_track"] as? String ?? "primary",outputMode:req["output_mode"] as? String ?? "livephoto",repairAuxiliaryDuration:req["repair_auxiliary_duration"] as? Bool ?? false,exportDataFiles:req["export_data_files"] as? Bool ?? true)
                 options.direction = req["direction"] as? String ?? "to-apple"
+                options.coverIndex = req["cover_candidate_index"] as? Int
+                options.candidateDelivery = req["candidate_delivery"] as? String ?? "static"
+                options.coverSelections = req["cover_selections"] as? [String:Int] ?? [:]
                 options.android = AndroidOptions(vendor:req["vendor"] as? String ?? "google",container:req["container"] as? String ?? "jpeg",hdr:"ultra",imageQuality:req["image_quality"] as? Double ?? 0.95,gainQuality:req["gain_quality"] as? Double ?? 0.95,preserveJPEG:req["preserve_jpeg"] as? Bool ?? true)
                 let resolver: ((URL,URL)->ExistingOutputDecision)? = (req["existing_output"] as? String).map { policy in
                     { _,_ in policy == "overwrite" ? .overwrite : policy == "skip" ? .skip : .cancel }

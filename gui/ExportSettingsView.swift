@@ -57,7 +57,7 @@ struct ExportSettingsView: View {
                         if model.settings.direction == .toApple {
                             Toggle("允许修复辅助轨的零时长", isOn: binding(\.repairAuxiliaryDuration))
                                 .disabled(model.settings.exportMode == .livePhoto)
-                            note("仅影响独立导出的辅助轨；修复会记录在清单中，默认关闭。")
+                            note("仅影响独立辅助视频。高清候选照片所需的解码修复只在临时副本中进行。")
                         }
                         note("自动模式检查封面位置，遇到歧义会报告错误。仅在了解原片时间轴时修改。")
                     }.padding(.top, 10)
@@ -76,14 +76,28 @@ struct ExportSettingsView: View {
         VStack(alignment: .leading, spacing: 20) {
             settingsGroup("输出内容") {
                 choice("导出模式", selection: binding(\.exportMode))
+                if model.settings.exportMode == .withCandidates {
+                    choice("候选照片的格式",selection:Binding(
+                        get:{ model.settings.candidateDelivery ?? .staticPhotos },
+                        set:{ value in model.updateSettings { $0.candidateDelivery = value } }))
+                }
                 choice("视频轨道", selection: binding(\.track))
-                    .disabled(model.settings.exportMode == .auxiliaryOnly)
+                    .disabled(model.settings.exportMode == .auxiliaryOnly || model.settings.exportMode == .withCandidates || !(model.settings.coverSelections ?? [:]).isEmpty)
                 if model.settings.exportMode == .auxiliaryOnly {
                     note("仅导出独立辅助视频；不生成 Live Photo，不含音频。")
                 } else if model.settings.track == .secondary {
                     note("辅助轨可能只有一帧，不能代替连续动态视频。")
                 } else if model.settings.exportMode == .withAuxiliary {
                     note("辅助轨另存为 .auxiliary.mov，请与实况配对分开保存。")
+                } else if model.settings.exportMode == .withCandidates {
+                    if model.settings.candidateDelivery == .livePhotos {
+                        note("每个高清封面配对一份主运动视频，并使用对应封面时间；导入图库后是多张实况照片，会占用更多空间。")
+                    } else {
+                        note("主照片保持实况，其余高清封面另存为静态照片；导入图库后会显示为多张照片。")
+                    }
+                }
+                if model.settings.exportMode != .auxiliaryOnly {
+                    note("在照片卡片的「封面」菜单选择高清候选；列表中可右键打开封面选择。候选帧会解码为 JPEG，不沿用原封面的 HDR 增益图。")
                 }
             }
             Divider()

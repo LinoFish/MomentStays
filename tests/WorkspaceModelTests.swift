@@ -82,6 +82,34 @@ struct WorkspaceModelTests {
         let collected = try DeliveryStore.collect(synthetic, settings: ConversionSettings(), origins: [aliasPhoto.path: origin])
         check(collected.first?.origin == origin && collected.first?.hashes.count == 2, "canonical paths preserve library identity and output hashes")
         try collected[0].verify()
+        let candidate = originalPhoto.deletingLastPathComponent().appendingPathComponent("candidate.jpg")
+        let candidateMovie = candidate.deletingPathExtension().appendingPathExtension("mov")
+        try Data([7,8,9]).write(to:candidate); try Data([10,11,12]).write(to:candidateMovie)
+        var candidateSettings = ConversionSettings(); candidateSettings.exportMode = .withCandidates
+        var names = ["still":originalPhoto.lastPathComponent,"video":movie.lastPathComponent,"candidate_0":candidate.lastPathComponent]
+        func candidatesOutcome() -> BatchOutcome {
+            BatchOutcome(counts:["converted":1],report:nil,reportData:["files":[["source":originalPhoto.path,
+                "output":originalPhoto.deletingLastPathComponent().path,"status":"converted","output_files":names]]],cancelled:false)
+        }
+        let mixed = try DeliveryStore.collect(candidatesOutcome(),settings:candidateSettings,origins:[:])
+        check(mixed.count == 2 && mixed[0].files.count == 2 && mixed[1].files.count == 1,"mixed mode delivers a Live Photo and a separate static image")
+        candidateSettings.candidateDelivery = .livePhotos; names["candidate_video_0"] = candidateMovie.lastPathComponent
+        let allLive = try DeliveryStore.collect(candidatesOutcome(),settings:candidateSettings,origins:[:])
+        check(allLive.count == 2 && allLive.allSatisfy { $0.files.count == 2 },"all-live mode keeps each candidate's complete pair")
+        check(Set(allLive.map(\.key)).count == 2 && mixed[1].key != allLive[1].key,"candidate roles and delivery modes have independent dedup keys")
+        for file in allLive { try file.verify() }
+        var encoded = try JSONSerialization.jsonObject(with:JSONEncoder().encode(candidateSettings)) as! [String:Any]
+        encoded.removeValue(forKey:"candidateDelivery"); encoded.removeValue(forKey:"coverSelections")
+        let legacy = try JSONDecoder().decode(ConversionSettings.self,from:JSONSerialization.data(withJSONObject:encoded))
+        check(legacy.candidateDelivery == nil && legacy.coverSelections == nil,"older task settings remain readable")
+        let beforeCover = try DeliveryStore.key(source:originalPhoto,origin:nil,settings:candidateSettings)
+        candidateSettings.coverSelections = [originalPhoto.path:0]
+        let afterCover = try DeliveryStore.key(source:originalPhoto,origin:nil,settings:candidateSettings)
+        candidateSettings.coverSelections?[candidate.path] = 1
+        let unrelatedCover = try DeliveryStore.key(source:originalPhoto,origin:nil,settings:candidateSettings)
+        check(beforeCover != afterCover && afterCover == unrelatedCover,"dedup tracks this photo's cover, independently of other queue selections")
+        candidateSettings.exportMode = .auxiliaryOnly
+        check(candidateSettings.options.coverSelections.isEmpty,"standalone auxiliary export ignores saved photo cover selections")
         let pending = LibraryImportRecord(key: "key", state: "pending")
         let newCreates = try LibraryImportPolicy.shouldCreate(nil, assetExists: false)
         check(newCreates, "new source may create")

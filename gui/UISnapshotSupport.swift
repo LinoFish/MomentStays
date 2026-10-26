@@ -25,6 +25,12 @@ final class UISnapshotSupport {
             MotionPreviewDiagnostics.source = URL(fileURLWithPath: source)
             model.loadPreview(count: 1, progressPreview: false)
         }
+        if let index = argument("--ui-cover-index").flatMap(Int.init), let item = model.items.first {
+            model.selectCover(index,for:item.source)
+        }
+        if let delivery = argument("--ui-candidate-delivery").flatMap(CandidateDelivery.init(rawValue:)) {
+            model.updateSettings { $0.exportMode = .withCandidates; $0.candidateDelivery = delivery }
+        }
         if let destination = argument("--ui-destination"), let value = OutputDestination(rawValue: destination) {
             model.updateSettings { $0.destination = value }
             model.deliverySummary = "转换结果已保留，可在最近结果中重试交付"
@@ -47,9 +53,14 @@ final class UISnapshotSupport {
                 self.model.selection = self.model.items.first?.id
                 self.model.updateSettings { $0.exportDataFiles = false }
                 self.resizeSequence([(390, 540), (640, 600), (959, 640), (960, 640), (1280, 540), (480, 600)], path: path)
-            } else if CommandLine.arguments.contains("--ui-hover-preview") { self.hoverPreview(path: path) }
+            } else if self.argument("--ui-cover-index") != nil { self.candidatePreview(path:path) }
+            else if CommandLine.arguments.contains("--ui-hover-preview") { self.hoverPreview(path: path) }
             else { self.finishSnapshot(path) }
         }
+    }
+    private func candidatePreview(path: String, remaining: Int = 100) {
+        if MotionPreviewDiagnostics.candidateImageLoaded || remaining == 0 { finishSnapshot(path); return }
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.1) { self.candidatePreview(path:path,remaining:remaining - 1) }
     }
     private func hoverPreview(path: String, remaining: Int = 60, sent: Bool = false) {
         if MotionPreviewDiagnostics.duration != nil, let content = window.contentView,
@@ -108,6 +119,8 @@ final class UISnapshotSupport {
             "preview_cover": MotionPreviewDiagnostics.cover.map { $0 as Any } ?? NSNull(),
             "preview_frame": MotionPreviewDiagnostics.frame.map { $0 as Any } ?? NSNull(),
             "preview_hovering": MotionPreviewDiagnostics.hovering,
+            "candidate_count": MotionPreviewDiagnostics.candidateCount,
+            "candidate_image_loaded": MotionPreviewDiagnostics.candidateImageLoaded,
             "row_count": model.items.count, "inspector_visible": frames["inspector"] != nil,
             "settings_sheet_visible": window.attachedSheet != nil,
             "native_tables": tables.map { ["rows": $0.numberOfRows, "selected_row": $0.selectedRow,

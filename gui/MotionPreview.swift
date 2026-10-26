@@ -2,19 +2,33 @@ import Foundation
 import AVFoundation
 import CoreGraphics
 
+struct PreviewCoverCandidate: Identifiable {
+    let index: Int
+    let timestampUs: Int
+    let time: Double?
+    let issue: String?
+    var id: Int { index }
+    var title: String { String(format:"高清候选 %d · %.3f s",index + 1,Double(timestampUs) / 1e6) }
+}
+
 // A session owns only its extracted preview cache. Originals and paired MOVs are read-only.
 final class MotionPreviewSession {
     let duration: Double
     let coverTime: Double?
     let coverIssue: String?
     let frameTimes: [Double]
+    let candidates: [PreviewCoverCandidate]
+    let candidateIssue: String?
+    private let candidateSession: CoverCandidateSession?
     private let generator: AVAssetImageGenerator
     private let temporaryFolder: URL?
 
     private init(composition: AVComposition, duration: Double, cover: Double?, issue: String?,
-                 frames: [Double], temporaryFolder: URL?) {
+                 frames: [Double], temporaryFolder: URL?, candidates: [PreviewCoverCandidate],
+                 candidateSession: CoverCandidateSession?, candidateIssue: String?) {
         self.duration = duration; coverTime = cover; coverIssue = issue
         frameTimes = frames; self.temporaryFolder = temporaryFolder
+        self.candidates = candidates; self.candidateSession = candidateSession; self.candidateIssue = candidateIssue
         generator = AVAssetImageGenerator(asset: composition)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 640, height: 640)
@@ -97,11 +111,33 @@ final class MotionPreviewSession {
             let resolved = try sourceCoverTiming(request, video: info, selection: "primary", primaryInfo: { info })
             cover = try offset(resolved.frameTime)
         } catch { issue = error.localizedDescription }
+        var candidateSession: CoverCandidateSession?, choices: [PreviewCoverCandidate] = [], candidateIssue: String?
+        if direction == "to-apple", let folder = folder, asset.tracks(withMediaType:.video).count > 1 {
+            do {
+                candidateSession = try CoverCandidateSession.prepare(video:Array(Data(contentsOf:movie)),folder:folder)
+                for candidate in candidateSession?.candidates ?? [] {
+                    do {
+                        let resolved = try sourceCoverTiming(["timestamp_us":candidate.timestampUs,"time_domain":"presentation"],
+                            video:info,selection:"primary",primaryInfo:{ info })
+                        choices.append(PreviewCoverCandidate(index:candidate.index,timestampUs:candidate.timestampUs,
+                            time:try offset(resolved.frameTime),issue:nil))
+                    } catch {
+                        choices.append(PreviewCoverCandidate(index:candidate.index,timestampUs:candidate.timestampUs,time:nil,issue:error.localizedDescription))
+                    }
+                }
+            } catch { candidateIssue = error.localizedDescription }
+        }
         try check(token)
         let session = MotionPreviewSession(composition: composition, duration: duration, cover: cover,
-            issue: issue, frames: frames, temporaryFolder: folder)
+            issue: issue, frames: frames, temporaryFolder: folder,candidates:choices,
+            candidateSession:candidateSession,candidateIssue:candidateIssue)
         ownsFolder = false
         return session
+    }
+
+    func candidateFrame(_ index: Int) throws -> CGImage {
+        guard let session = candidateSession else { throw Failure("原片没有辅助高清候选") }
+        return try session.image(index,maximumSize:640)
     }
 
     // Snap to a real source sample, including the last frame when the pointer reaches 100%.
@@ -136,5 +172,7 @@ enum MotionPreviewDiagnostics {
     static var cover: Double?
     static var frame: Double?
     static var hovering = false
+    static var candidateCount = 0
+    static var candidateImageLoaded = false
 }
 #endif
