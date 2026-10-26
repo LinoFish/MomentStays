@@ -1,6 +1,6 @@
 # SwiftUI 主界面实现
 
-当前版本 1.0，最低 macOS 12，使用 Command Line Tools 构建。SwiftUI 工作区复用原生媒体引擎，平台服务负责图库读取、Live Photo 入册与系统共享。个人素材与生成报告保存在忽略提交的本地目录。
+当前版本 1.1.0，最低 macOS 12，使用 Command Line Tools 构建。SwiftUI 工作区复用原生媒体引擎，平台服务负责图库读取、Live Photo 入册与系统共享。个人素材与生成报告保存在忽略提交的本地目录。
 
 ## 当前界面
 

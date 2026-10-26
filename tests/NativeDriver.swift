@@ -9,6 +9,16 @@ struct NativeDriver {
             let inputs = (req["inputs"] as? [String] ?? (req["input"] as? String).map { [$0] } ?? []).map { URL(fileURLWithPath:$0) }
             switch mode {
             case "fixture": try emit(fixture(req))
+            case "android-assemble":
+                let photo = try PhotoFormat.parse(Array(Data(contentsOf:inputs[0])))
+                let options = AndroidOptions(vendor:req["vendor"] as? String ?? "honor")
+                let output = try AndroidExport.assemble(still:photo.still,video:photo.video,options:options,
+                    time:req["time_us"] as? Int ?? 400000,frame:req["frame"] as? Int ?? 12)
+                try Data(output).write(to:URL(fileURLWithPath:req["output"] as! String))
+                let decoded = try PhotoFormat.parse(output)
+                try emit(["format":decoded.format,"timestamp_us":decoded.timestamp.map { $0 as Any } ?? NSNull(),
+                    "cover_frame":decoded.coverFrame.map { $0 as Any } ?? NSNull(),
+                    "video_sha256":sha(Data(decoded.video)),"coding_hash":try PhotoFormat.codingHash(decoded.still)])
             case "android-still":
                 let options = AndroidOptions(vendor:"google",container:req["container"] as? String ?? "jpeg",hdr:"ultra",imageQuality:req["image_quality"] as? Double ?? 0.95,gainQuality:req["gain_quality"] as? Double ?? 0.95,preserveJPEG:req["preserve_jpeg"] as? Bool ?? true)
                 let (still,hdr) = try AndroidHDR.prepare(inputs[0],options:options)

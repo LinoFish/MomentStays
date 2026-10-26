@@ -1,4 +1,5 @@
 import Foundation
+import Photos
 
 private final class ControlledService: ConversionServing {
     struct Scan {
@@ -118,6 +119,21 @@ struct WorkspaceModelTests {
     }
 
     static func main() throws {
+        // Evaluate fetch predicates without requesting permission or accessing a real library.
+        for direction in ConversionDirection.allCases {
+            let scope = LibraryScope(direction: direction, version: .original, networkAllowed: false)
+            let options = PhotoLibraryService.fetchOptions(scope)
+            let image = PHAssetMediaType.image.rawValue, live = PHAssetMediaSubtype.photoLive.rawValue
+            check(options.fetchLimit == 0, "library scan has no result limit")
+            check(options.includeAssetSourceTypes == [.typeUserLibrary, .typeCloudShared, .typeiTunesSynced],
+                "both scan directions include user, shared-album and synced assets")
+            for subtype in [UInt(0), live, live | PHAssetMediaSubtype.photoHDR.rawValue] {
+                check(options.predicate!.evaluate(with: ["mediaType": image, "mediaSubtypes": subtype]) == (direction == .toApple || subtype & live != 0),
+                    "Android original inspection includes Live Photo assets; reverse requires Live Photo")
+            }
+            check(!options.predicate!.evaluate(with: ["mediaType": PHAssetMediaType.video.rawValue, "mediaSubtypes": live]),
+                "standalone videos are excluded from photo scanning")
+        }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("motionlive-model-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("input"), withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }

@@ -92,6 +92,20 @@ with tempfile.TemporaryDirectory(prefix='motionlive-reverse-') as folder:
             if vendor == 'google':
                 resumed = batch(pair,output,direction='to-android',vendor=vendor)
                 assert resumed['counts']['resumed'] == 1,resumed
+            if vendor == 'honor':
+                assert manifest['motion_layout'] == 'google-compatible'
+                assert raw.endswith(photo.video)  # never select the LIVE_ playback path
+                resumed = batch(pair,output,direction='to-android',vendor=vendor)
+                assert resumed['counts']['resumed'] == 1,resumed
+                # Old Honor manifests must not silently reuse the private layout.
+                manifest.pop('motion_layout')
+                next(output.rglob('manifest.json')).write_text(json.dumps(manifest))
+                refused = call(mode='batch',input=str(pair),output=str(output),direction='to-android',vendor=vendor)
+                assert refused['counts']['failed'] == 1 and refused['counts']['resumed'] == 0,refused
+                error = json.loads(Path(refused['report']).read_text())['files'][0]['error']
+                assert '旧版私有尾标' in error,error
+                upgraded = batch(pair,output,direction='to-android',vendor=vendor,existing_output='overwrite')
+                assert upgraded['counts']['converted'] == 1,upgraded
             print('PASS reverse',vendor,'HDR' if legacy else 'SDR')
         assert hashlib.sha256(pair.read_bytes()).hexdigest() == before
         if not legacy:

@@ -15,7 +15,7 @@ from tests.test_formats import motion
 
 native = ["MotionLive", "PhotoFormat", "PhotoHEIF", "PhotoHDR", "BatchEngine", "HEIFMetadata", "AndroidHDR", "AndroidExport"]
 sources = [str(ROOT / "native" / (name + ".swift")) for name in native]
-sources += [str(ROOT / "gui" / (name + ".swift")) for name in ["ConversionSettings", "ConversionService", "WorkspaceModel", "DeliveryModels"]]
+sources += [str(ROOT / "gui" / (name + ".swift")) for name in ["ConversionSettings", "ConversionService", "WorkspaceModel", "DeliveryModels", "PhotoLibraryService"]]
 sources.append(str(ROOT / "tests/WorkspaceModelTests.swift"))
 binary = ROOT / ".build/gui/workspace-tests"
 binary.parent.mkdir(parents=True, exist_ok=True)

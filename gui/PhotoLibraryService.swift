@@ -36,17 +36,29 @@ final class PhotoLibraryService {
         if status == .notDetermined { PHPhotoLibrary.requestAuthorization(for: .readWrite, handler: finish) }
         else { finish(status) }
     }
-    static func albums() -> [PHAssetCollection] {
+    static func albums(writableOnly: Bool = true) -> [PHAssetCollection] {
         let values = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
         var result: [PHAssetCollection] = []
-        values.enumerateObjects { album, _, _ in if album.canPerform(.addContent) { result.append(album) } }
+        values.enumerateObjects { album, _, _ in if !writableOnly || album.canPerform(.addContent) { result.append(album) } }
         return result.sorted { ($0.localizedTitle ?? "") < ($1.localizedTitle ?? "") }
     }
-    static func fetch(_ scope: LibraryScope) -> PHFetchResult<PHAsset> {
+    static func fetchOptions(_ scope: LibraryScope) -> PHFetchOptions {
         let options = PHFetchOptions()
-        let live = PHAssetMediaSubtype.photoLive.rawValue
-        options.predicate = NSPredicate(format: "mediaType == %d AND (mediaSubtypes & %d) \(scope.direction == .toAndroid ? "!=" : "==") 0", PHAssetMediaType.image.rawValue, live)
+        // fetchAssets(with:) otherwise defaults to user-library assets only.
+        options.includeAssetSourceTypes = [.typeUserLibrary, .typeCloudShared, .typeiTunesSynced]
+        if scope.direction == .toAndroid {
+            options.predicate = NSPredicate(format: "mediaType == %d AND (mediaSubtypes & %d) != 0",
+                PHAssetMediaType.image.rawValue, PHAssetMediaSubtype.photoLive.rawValue)
+        } else {
+            // A Photos subtype is not proof that the original lacks embedded Android video.
+            // Inspect all images; export() parses the selected original and skips non-motion files.
+            options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        }
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        return options
+    }
+    static func fetch(_ scope: LibraryScope) -> PHFetchResult<PHAsset> {
+        let options = fetchOptions(scope)
         if let id = scope.albumID, let album = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [id], options: nil).firstObject {
             return PHAsset.fetchAssets(in: album, options: options)
         }

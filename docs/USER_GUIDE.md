@@ -214,6 +214,8 @@ MomentStays talks to the Photos library only through the public PhotoKit API —
 
 ### 8.1 Scanning and recognition
 
+- Queries include personal-library, shared-album and synced sources. Read-only albums can be selected as input; output albums must remain writable. The picker shows the system library's visible image count, the current direction/album candidate count and authorization status separately. If counts differ substantially, inspect Photos → Settings → General: a disabled “Use as System Photo Library” button means the open library is already the system library. An enabled button means it is another library. Do not switch libraries solely to diagnose counts, as this can affect iCloud syncing.
+- Android → Apple enumerates all visible images in the selected scope, including images Photos marks as Live Photos, then inspects their original resources. The pending inspection count is not the number of confirmed Motion Photos. Apple → Android lists only Live Photos. Videos and hidden items are outside this image list, so its count can differ from the total in Photos.
 - Scanning can be scoped to a chosen album. Progress distinguishes scanning assets, reading originals, and identifying formats.
 - Identification parses the actual originals (vendor markers, XMP, container structure, video boundaries) — never just the file extension, filename, or an HDR flag. Plain stills are skipped without counting as failures; items marked as motion photos whose video is gone show a specific reason instead of a guess.
 - Results are annotated with vendor, motion type, original/edited status, HDR status, and whether the original must be downloaded from iCloud.
@@ -338,7 +340,7 @@ Requirements: Python 3.9+, macOS 12+, Xcode Command Line Tools. The first run co
 ./motion-live convert ~/Photos/incoming -o ~/Photos/converted
 
 # 3) Verify an existing result against its recorded checksums
-./motion-live verify ~/Photos/converted/IMG_0001.jpg.livephoto
+./motion-live verify ~/Photos/converted/sample.jpg.livephoto
 ```
 
 `convert` options:

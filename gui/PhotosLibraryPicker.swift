@@ -6,6 +6,7 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
     private var sheet: NSWindow!
     private let table = NSTableView()
     private let message = NSTextField(labelWithString: "仅访问系统图库；选择范围后扫描。原片不会被修改。")
+    private let libraryInfo = NSTextField(wrappingLabelWithString: "")
     private let importButton = NSButton(title: "读取所选", target: nil, action: nil)
     private let cancelButton = NSButton(title: "取消", target: nil, action: nil)
     private let allButton = NSButton(title: "扫描范围内全部", target: nil, action: nil)
@@ -49,7 +50,7 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
         sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         sheet.title = direction == .toAndroid ? "系统图库 · Apple 实况" : "系统图库 · 识别安卓动态照片"
         sheet.minSize = NSSize(width: 366, height: 430)
-        albums = PhotoLibraryService.albums(); albumPopup.addItem(withTitle: "整个系统照片图库")
+        albums = PhotoLibraryService.albums(writableOnly: false); albumPopup.addItem(withTitle: "整个系统照片图库")
         albumPopup.addItems(withTitles: albums.map { $0.localizedTitle ?? "未命名相册" })
         albumPopup.target = self; albumPopup.action = #selector(changeScope)
         versionPopup.addItems(withTitles: LibraryVersion.allCases.map(\.title)); versionPopup.selectItem(at: selectedScope.version == .original ? 0 : 1)
@@ -70,11 +71,13 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
         let gap = NSView(); gap.setContentHuggingPriority(.init(1), for: .horizontal)
         let buttons = NSStackView(views: [cancelButton, gap, allButton, importButton]); buttons.orientation = .horizontal
         message.font = .systemFont(ofSize: 11); message.maximumNumberOfLines = 2; message.lineBreakMode = .byTruncatingMiddle
-        let content = NSStackView(views: [albumPopup, versionPopup, message, scroll, network, monitor, buttons])
+        libraryInfo.font = .systemFont(ofSize: 11); libraryInfo.isSelectable = true
+        libraryInfo.setContentCompressionResistancePriority(.required, for: .vertical)
+        let content = NSStackView(views: [albumPopup, versionPopup, libraryInfo, message, scroll, network, monitor, buttons])
         content.orientation = .vertical; content.spacing = 8; content.alignment = .leading; content.translatesAutoresizingMaskIntoConstraints = false
         sheet.contentView!.addSubview(content)
         NSLayoutConstraint.activate([content.topAnchor.constraint(equalTo: sheet.contentView!.topAnchor, constant: 12), content.bottomAnchor.constraint(equalTo: sheet.contentView!.bottomAnchor, constant: -12), content.leadingAnchor.constraint(equalTo: sheet.contentView!.leadingAnchor, constant: 12), content.trailingAnchor.constraint(equalTo: sheet.contentView!.trailingAnchor, constant: -12)])
-        for view in [albumPopup, versionPopup, message, scroll, buttons] { view.translatesAutoresizingMaskIntoConstraints = false; view.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true }
+        for view in [albumPopup, versionPopup, libraryInfo, message, scroll, buttons] { view.translatesAutoresizingMaskIntoConstraints = false; view.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true }
         scroll.setContentHuggingPriority(.init(1), for: .vertical)
         changeScope(); parent.beginSheet(sheet)
     }
@@ -84,7 +87,16 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
         selectedScope.version = versionPopup.indexOfSelectedItem == 1 ? .edited : .original
         assets = PhotoLibraryService.fetch(selectedScope); table.reloadData(); importButton.isEnabled = false
         allButton.isEnabled = assets.count > 0
-        message.stringValue = "\(assets.count) 张候选 · 安卓动态需读取原始文件识别；云端文件仅在允许后下载。"
+        var allImagesScope = selectedScope; allImagesScope.albumID = nil; allImagesScope.direction = .toApple
+        let imageCount = selectedScope.albumID == nil && direction == .toApple ? assets.count : PhotoLibraryService.fetch(allImagesScope).count
+        let permission = PHPhotoLibrary.authorizationStatus(for: .readWrite) == .limited ? "部分访问" : "完全访问"
+        libraryInfo.stringValue = "系统图库可见图片 \(imageCount) 张 · 本方向/范围候选 \(assets.count) 张 · \(permission)\n含个人图库、共享相簿与同步来源。数量不符请核对「照片 → 设置 → 通用」当前是否为系统照片图库。"
+        libraryInfo.toolTip = libraryInfo.stringValue
+        if direction == .toApple {
+            message.stringValue = "\(assets.count) 张待检查照片（含 Live Photo）· 读取原片后识别安卓动态，非安卓动态原片跳过。云端原件需允许下载。"
+        } else {
+            message.stringValue = "\(assets.count) 张 Apple 实况候选 · 当前仅列 Live Photo，扫描安卓动态请切换为「安卓 → 苹果实况」。云端原件需允许下载。"
+        }
     }
     func numberOfRows(in tableView: NSTableView) -> Int { assets?.count ?? 0 }
     func tableView(_ tableView: NSTableView, viewFor column: NSTableColumn?, row: Int) -> NSView? {

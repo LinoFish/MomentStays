@@ -204,7 +204,11 @@ enum AndroidExport {
         let start = image.count + (heic ? 8 : 0)
         let tail = options.vendor == "samsung" ? try samsungSEF(videoStart:start,length:video.count) : []
         if heic { return image + Binary.bytes(8 + video.count + tail.count,4) + Binary.string("mpvd") + video + tail }
-        if ["huawei","honor"].contains(options.vendor) {
+        // Honor Gallery plays the LIVE_ layout differently from the standard
+        // XMP layout: a rotated Apple still/video pair can turn during playback.
+        // Use its working Google-compatible path without altering either image
+        // orientation or the video transform / compressed samples.
+        if options.vendor == "huawei" {
             func field(_ text:String) throws -> [UInt8] { guard text.utf8.count <= 20 else { throw Failure("厂商尾标数值超限") }; return Binary.string(text) + [UInt8](repeating:32,count:20 - text.utf8.count) }
             return image + video + (try field("v2_f\(frame)") + field("0:0") + field("LIVE_\(video.count + 20)"))
         }
@@ -221,6 +225,9 @@ extension AndroidExport {
         if !overwrite && fm.fileExists(atPath:target.path) {
             let previous = try NativeBatch.verify(target)
             guard previous["implementation"] as? String == "reverse-native-1.2.1" else { throw Failure("已有输出使用旧版 HDR 封装，请选择覆盖以修复") }
+            if config.vendor == "honor" {
+                guard previous["motion_layout"] as? String == "google-compatible" else { throw Failure("已有荣耀输出使用旧版私有尾标，可能导致视频方向错误；请选择覆盖以修复") }
+            }
             guard previous["source_sha256"] as? String == sourceHash, let previousOptions = previous["options"] as? [String:Any], (previousOptions as NSDictionary).isEqual(to:options.json),
                   let oldMovie = previous["paired_video_source"] as? String, let oldHash = previous["paired_video_sha256"] as? String, try NativeBatch.hashFile(URL(fileURLWithPath:oldMovie)) == oldHash else { throw Failure("已有输出的输入或设置不同，请选择覆盖或跳过") }
             return ["status":"resumed","source":source.path,"output":target.path,"detail":"已验证安卓动态照片，跳过重复转换"]
@@ -239,15 +246,17 @@ extension AndroidExport {
         let result = try assemble(still:still,video:video,options:config,time:time,frame:paired.frame)
         let decoded = try PhotoFormat.parse(result)
         guard decoded.video == video, try PhotoFormat.codingHash(decoded.still) == PhotoFormat.codingHash(still) else { throw Failure("安卓封装读回校验失败：图像或视频数据不同") }
-        if ["huawei","honor"].contains(config.vendor) { guard decoded.coverFrame == paired.frame else { throw Failure("厂商封面帧号校验失败") } }
+        if config.vendor == "huawei" { guard decoded.coverFrame == paired.frame else { throw Failure("厂商封面帧号校验失败") } }
         else { guard decoded.timestamp == time else { throw Failure("安卓封面时间校验失败") } }
         let name = source.deletingPathExtension().lastPathComponent + ".MP." + (config.container == "heic" ? "heic" : "jpg")
         let file = stage.appendingPathComponent(name); try Data(result).write(to:file)
         if let date = try source.resourceValues(forKeys:[.contentModificationDateKey]).contentModificationDate { try fm.setAttributes([.modificationDate:date],ofItemAtPath:file.path) }
         timing["source_still_image_time_seconds"] = seconds(paired.cover); timing["cover_timestamp_us"] = time; timing["cover_frame_index"] = paired.frame
-        let warnings = config.container == "heic" ? ["HEIC 原始 HDR 编码已保留；目标安卓厂商对 Apple 私有 HDR 的显示兼容性需真机验证"] : ["厂商封装已通过本地解析校验；不同手机固件识别与 HDR 显示仍需真机验证"]
+        var warnings = config.container == "heic" ? ["HEIC 原始 HDR 编码已保留；目标安卓厂商对 Apple 私有 HDR 的显示兼容性需真机验证"] : ["厂商封装已通过本地解析校验；不同手机固件识别与 HDR 显示仍需真机验证"]
+        if config.vendor == "honor" { warnings.append("荣耀使用 Google 兼容动态封装，避免 LIVE_ 私有尾标触发视频旋转；保留原始视频方向与封面时间") }
         let manifest: [String:Any] = ["version":"1.2.1","implementation":"reverse-native-1.2.1","source":source.path,"source_sha256":sourceHash,
             "paired_video_source":paired.movie.path,"paired_video_sha256":videoHash,"options":options.json,"identifier":paired.identifier,
+            "motion_layout":config.vendor == "honor" ? "google-compatible" : config.vendor,
             "output_files":["motionphoto":name],"output_sha256":[name:sha(Data(result))],"timing":timing,"hdr":hdr,"warnings":warnings]
         try NativeBatch.json(manifest,to:stage.appendingPathComponent("manifest.json"))
         guard try NativeBatch.hashFile(paired.movie) == videoHash else { throw Failure("配对视频在转换期间发生变化，未发布") }
