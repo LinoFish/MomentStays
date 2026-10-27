@@ -26,6 +26,13 @@ func hex(_ digest: SHA256.Digest) -> String {
     return String(decoding: chars, as: UTF8.self)
 }
 func sha(_ data: Data) -> String { hex(SHA256.hash(data: data)) }
+// Feed one slice of a larger buffer into a running hash without copying it.
+func hashRange(_ hash: inout SHA256, _ d: [UInt8], _ range: Range<Int>) {
+    d.withUnsafeBufferPointer { buf in
+        guard let base = buf.baseAddress else { return }
+        hash.update(bufferPointer: UnsafeRawBufferPointer(start: UnsafeRawPointer(base + range.lowerBound), count: range.count))
+    }
+}
 func seconds(_ t: CMTime) -> Double { CMTimeGetSeconds(t) }
 func textItem(_ key: String, _ value: String) -> AVMetadataItem {
     let item = AVMutableMetadataItem()
@@ -411,9 +418,17 @@ func legacyGain(_ req: [String: Any]) throws -> [String: Any] {
         return UInt8(max(0, min(255, (log2(1 + (headroom - 1) * linear) / stops * 255).rounded())))
     }
     var pixels = [UInt8](repeating: 0, count: width * height)
-    raw.withUnsafeBytes { ptr in
-        let bytes = ptr.bindMemory(to: UInt8.self)
-        for y in 0..<height { for x in 0..<width { pixels[y * width + x] = lookup[Int(bytes[y * stride + x])] } }
+    // Identical lookup math; raw pointers only remove per-pixel bounds
+    // checks. Bounds were validated above (stride >= width, count >= height * stride).
+    raw.withUnsafeBytes { rawPtr in
+        let bytes = rawPtr.bindMemory(to: UInt8.self)
+        pixels.withUnsafeMutableBufferPointer { out in
+            guard let src = bytes.baseAddress, let dst = out.baseAddress else { return }
+            for y in 0..<height {
+                let row = src + y * stride, target = dst + y * width
+                for x in 0..<width { target[x] = lookup[Int(row[x])] }
+            }
+        }
     }
     guard let provider = CGDataProvider(data: Data(pixels) as CFData),
           let converted = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8,

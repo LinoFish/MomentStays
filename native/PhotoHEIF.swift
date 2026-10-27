@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 // Bounded HEIF item parsing. No pixel decode/encode: existing image items,
 // properties, grids, thumbnails and references remain byte-for-byte intact.
@@ -117,11 +118,16 @@ enum PhotoHEIF {
         return MLJPEG.exif + tiff
     }
     static func codingHash(_ data: [UInt8]) throws -> String {
+        // Same byte sequence as before, hashed in place: the old version
+        // concatenated every image item into one copy first.
         let value = try layout(data)
-        var bytes: [UInt8] = []
+        var hash = SHA256()
         for item in value.items.sorted(by: { $0.id < $1.id }) where !["Exif","mime"].contains(item.type) {
-            let payload = Self.bytes(data,item)
-            bytes += Binary.bytes(item.id,4) + Binary.string(item.type) + Binary.bytes(payload.count,8) + payload
+            let count = item.ranges.reduce(0) { $0 + $1.count }
+            Binary.bytes(item.id,4).withUnsafeBytes { hash.update(bufferPointer: $0) }
+            Binary.string(item.type).withUnsafeBytes { hash.update(bufferPointer: $0) }
+            Binary.bytes(count,8).withUnsafeBytes { hash.update(bufferPointer: $0) }
+            for range in item.ranges { hashRange(&hash, data, range) }
         }
         for box in value.children where ["iprp","iref","pitm"].contains(box.type) {
             if box.type == "iref" {
@@ -129,12 +135,12 @@ enum PhotoHEIF {
                 let refs = try MotionVideoMetadata.boxes(data,box.payload + 4,box.end).filter { $0.type != "cdsc" }
                 // Metadata descriptions do not change the image coding graph.
                 if !refs.isEmpty {
-                    bytes += data[box.payload..<box.payload + 4]
-                    for ref in refs { bytes += data[(ref.payload - 8)..<ref.end] }
+                    hashRange(&hash, data, box.payload..<box.payload + 4)
+                    for ref in refs { hashRange(&hash, data, (ref.payload - 8)..<ref.end) }
                 }
-            } else { bytes += data[box.payload..<box.end] }
+            } else { hashRange(&hash, data, box.payload..<box.end) }
         }
-        return sha(Data(bytes))
+        return hex(hash.finalize())
     }
     static func parse(_ data: [UInt8]) throws -> NativeMotionPhoto {
         // Samsung SEF mpv2 contains an absolute pointer, not an EOF length.

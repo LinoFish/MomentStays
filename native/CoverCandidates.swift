@@ -83,12 +83,15 @@ final class CoverCandidateSession {
 
     func writeJPEG(_ index: Int, to url: URL) throws -> [String:Any] {
         let choice = try candidate(index), image = try self.image(index)
-        guard let destination = CGImageDestinationCreateWithURL(url as CFURL,"public.jpeg" as CFString,1,nil) else { throw Failure("无法创建候选照片") }
+        // Encode in memory, then write once: the old version wrote the file,
+        // read it back whole, and wrote it again just to insert one XMP segment.
+        let encodedData = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(encodedData as CFMutableData,"public.jpeg" as CFString,1,nil) else { throw Failure("无法创建候选照片") }
         // The pixels already include the video track transform. Do not copy an
         // unrelated still's orientation, gain map, or Apple pairing identifier.
         CGImageDestinationAddImage(destination,image,[kCGImageDestinationLossyCompressionQuality:1.0] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw Failure("候选照片编码失败") }
-        let encoded = Array(try Data(contentsOf:url))
+        let encoded = Array(encodedData as Data)
         let xmp = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"\(MLXMP.rdf)\"><rdf:Description xmlns:MomentStays=\"urn:momentstays:cover:1.0\" MomentStays:CandidatePresentationTimestampUs=\"\(choice.timestampUs)\" MomentStays:CandidateIndex=\"\(choice.index)\"/></rdf:RDF></x:xmpmeta>"
         let tagged = Array(encoded.prefix(2)) + (try MLJPEG.app(225,MLXMP.header + Binary.string(xmp))) + Array(encoded.dropFirst(2))
         try Data(tagged).write(to:url,options:.atomic)
