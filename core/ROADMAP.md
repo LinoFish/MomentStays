@@ -1,7 +1,19 @@
 # rust-core roadmap
 
-Goal: a cross-platform core (Windows/Linux/macOS CLI first, then optional use from
-the Swift app via a C ABI) that produces byte-identical results to the Swift engine.
+Goal: a cross-platform, high-performance core (Windows/Linux/macOS CLI first, then optional
+use from the Swift app via a C ABI) that produces byte-identical results to the Swift engine.
+
+Android target (user requirement, 2026-10-27): the same core will power a future Android app that
+converts between Android vendor formats (Google / Samsung / Huawei-Honor / OPPO / vivo, both ways),
+so keep the core free of Apple assumptions: one neutral model (still image ranges, video range,
+cover time or frame, HDR parts, vendor extras), separate readers and writers per vendor.
+
+Performance rules (user requirement, 2026-10-27)
+- Never copy a whole file: read inputs with mmap, parse borrowed `&[u8]`, return ranges/`Cow`.
+- One pass per file: parse once, reuse the result for verify + extract (no re-read/re-parse).
+- Hash incrementally over ranges; no temporary buffers for hashing.
+- Batch work runs in parallel across files (bounded thread pool), output order stays stable.
+- Every perf change lands with a number from `cargo bench`/the bench CLI, before and after.
 
 Rules for every step
 - Work only on branch `rust-core`; never change `main` or the Swift app.
@@ -17,11 +29,27 @@ Rules for every step
       7 vendor tests, Python parity script (16 fixtures, 0 mismatches). (2026-10-27)
 
 ## Next (in order)
-1. [ ] Fixture tests: Ultra HDR (MPF + hdrgm:Version, in primary and in gain-map XMP),
+1. [x] Fixture tests: Ultra HDR (MPF + hdrgm:Version, in primary and in gain-map XMP),
        Extended XMP split across segments (+ missing/bad GUID), Honor EHDR tail kept by static-only,
        OPPO VideoLength / MediaDataOffset, vivo marker, MicroVideoOffset legacy.
-2. [ ] Google recovered path: file with XMP stripped + MP4 `mett` motionphoto-image-meta track;
+2. [x] Google recovered path: file with XMP stripped + MP4 `mett` motionphoto-image-meta track;
        high-res candidate times; conflicting descriptors rejected.
+P1. [ ] Bench harness: `momentstays-core bench <dir|synthetic>` timing parse/hash/extract per file
+       (synthetic 10 MB / 50 MB / 200 MB Motion Photos), report MB/s; record baseline here.
+P2. [ ] Zero-copy I/O: mmap inputs (memmap2), `MotionPhoto.still` as `Cow` (borrow when no MPF rewrite
+       or Honor tail), extract writes slices directly; streaming SHA-256 over ranges.
+P3. [ ] Parallel batch: `inspect`/`extract` accept many files/dirs, rayon pool (default = cores),
+       JSON Lines output in input order.
+P4. [ ] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan, fewer XML parses, no per-segment Vec).
+A1. [ ] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
+       cover: Time(us) | Frame(n), source vendor, preserved vendor XMP } built by every reader.
+A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
+       `cdylib` + UniFFI (or JNI) Kotlin bindings, smoke test calling parse from Kotlin.
+A3. [ ] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
+       Samsung SEF (JPEG + HEIC mpvd), Huawei/Honor LIVE_ tail, OPPO, vivo; video bytes never re-encoded.
+A4. [ ] Cover conversion between time and frame index (Huawei uses frames) via the MP4 sample-table
+       reader (item 7); refuse rather than guess when timing is ambiguous.
+A5. [ ] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
 3. [ ] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
        iloc v0/v1/v2, idat storage.
 4. [ ] Scan parity: port `PhotoVendor.identify` labels and HDR classification
@@ -42,4 +70,5 @@ Rules for every step
 - Run `scripts/check_rust_core.py --swift ... --samples <real photos>` once M1 lands.
 
 ## Log
+- 2026-10-27: items 1-2 done (22 fixture tests: Ultra HDR, Extended XMP, Honor EHDR, OPPO, vivo, legacy, recovered cover). Added performance track P1-P4 and Android track A1-A5.
 - 2026-10-27: branch created, M1 landed.
