@@ -28,19 +28,27 @@ Rules for every step
       Samsung/Google HEIC parse, HEIF coding hash, `inspect`/`extract` CLI,
       7 vendor tests, Python parity script (16 fixtures, 0 mismatches). (2026-10-27)
 
+## Baseline (2026-10-27, Linux sandbox, 2 vCPU, no SHA-NI; `momentstays-core bench`)
+| input | parse | inspect (parse + 3 SHA-256) |
+|---|---|---|
+| 4+8 MB | 9.1 → 2.7 ms | 61 → 51 ms |
+| 10+40 MB | 27.3 → 5.6 ms | 218 → 184 ms |
+| 12+188 MB | 29.0 → 6.8 ms | 706 → 629 ms |
+Inspect is now bound by software SHA-256 here; Apple Silicon / SHA-NI CPUs use hardware SHA via `sha2`.
+
 ## Next (in order)
 1. [x] Fixture tests: Ultra HDR (MPF + hdrgm:Version, in primary and in gain-map XMP),
        Extended XMP split across segments (+ missing/bad GUID), Honor EHDR tail kept by static-only,
        OPPO VideoLength / MediaDataOffset, vivo marker, MicroVideoOffset legacy.
 2. [x] Google recovered path: file with XMP stripped + MP4 `mett` motionphoto-image-meta track;
        high-res candidate times; conflicting descriptors rejected.
-P1. [ ] Bench harness: `momentstays-core bench <dir|synthetic>` timing parse/hash/extract per file
+P1. [x] Bench harness: `momentstays-core bench <dir|synthetic>` timing parse/hash/extract per file
        (synthetic 10 MB / 50 MB / 200 MB Motion Photos), report MB/s; record baseline here.
-P2. [ ] Zero-copy I/O: mmap inputs (memmap2), `MotionPhoto.still` as `Cow` (borrow when no MPF rewrite
+P2. [~] Zero-copy I/O: mmap inputs (memmap2) DONE; remaining: `MotionPhoto.still` as `Cow` (borrow when no MPF rewrite
        or Honor tail), extract writes slices directly; streaming SHA-256 over ranges.
-P3. [ ] Parallel batch: `inspect`/`extract` accept many files/dirs, rayon pool (default = cores),
+P3. [x] Parallel batch: `inspect`/`extract` accept many files/dirs, rayon pool (default = cores),
        JSON Lines output in input order.
-P4. [ ] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan, fewer XML parses, no per-segment Vec).
+P4. [~] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3-4x faster; fewer XML parses, no per-segment Vec).
 A1. [ ] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
        cover: Time(us) | Frame(n), source vendor, preserved vendor XMP } built by every reader.
 A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
@@ -70,5 +78,6 @@ A5. [ ] Round-trip matrix tests: every vendor → every vendor → parse back, c
 - Run `scripts/check_rust_core.py --swift ... --samples <real photos>` once M1 lands.
 
 ## Log
+- 2026-10-27: P1 bench CLI + synthetic generator, P3 parallel `inspect -j N <file|dir>` (JSON Lines, input order), mmap inputs, memchr JPEG scan.
 - 2026-10-27: items 1-2 done (22 fixture tests: Ultra HDR, Extended XMP, Honor EHDR, OPPO, vivo, legacy, recovered cover). Added performance track P1-P4 and Android track A1-A5.
 - 2026-10-27: branch created, M1 landed.
