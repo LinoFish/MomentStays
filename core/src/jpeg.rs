@@ -40,7 +40,7 @@ pub fn segments(d: &[u8]) -> Result<Vec<Segment>> {
         pos = end;
         if marker == 218 {
             while pos < d.len() {
-                let at = match d[pos..].iter().position(|&b| b == 255) {
+                let at = match memchr::memchr(255, &d[pos..]) {
                     Some(i) => pos + i,
                     None => return fail("JPEG 扫描数据未结束"),
                 };
