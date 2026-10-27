@@ -125,11 +125,16 @@ enum MLJPEG {
         throw Failure("缺少 JPEG 结束标记")
     }
     static func codingHash(_ d: [UInt8]) throws -> String {
-        var bytes: [UInt8] = []
+        // Hash each kept segment range in place. Concatenating them first
+        // would copy the whole compressed image on every verification.
+        var hash = SHA256()
         for segment in try segments(d) where !(224...239).contains(segment.marker) && segment.marker != 254 {
-            bytes += d[segment.start..<segment.end]
+            try d.withUnsafeBufferPointer { buf in
+                guard let base = buf.baseAddress else { throw Failure("无法读取图片压缩数据") }
+                hash.update(bufferPointer: UnsafeRawBufferPointer(start: UnsafeRawPointer(base + segment.start), count: segment.end - segment.start))
+            }
         }
-        return sha(Data(bytes))
+        return hex(hash.finalize())
     }
     static func app(_ marker: UInt8, _ payload: [UInt8]) throws -> [UInt8] {
         guard payload.count + 2 <= 65535 else { throw Failure("JPEG 元数据段超过 64 KiB，无法安全写入") }
@@ -259,9 +264,10 @@ enum MLJPEG {
     // Only marker-delimited JPEG images belong in a still. Rebuild MPF image
     // ranges instead of retaining padding, vendor trailers or appended media.
     static func imageRanges(_ data: [UInt8]) throws -> [Range<Int>] {
-        let primaryEnd = try segments(data).last!.end
+        let segs = try segments(data)
+        let primaryEnd = segs.last!.end
         var ranges = [0..<primaryEnd]
-        let indexes = try segments(data).filter { $0.marker == 226 && $0.payload.starts(with:mpf) }
+        let indexes = segs.filter { $0.marker == 226 && $0.payload.starts(with:mpf) }
         guard indexes.count <= 1 else { throw Failure("JPEG 包含多个 MPF 索引") }
         if let s = indexes.first {
             let t = try MLTIFF(Array(s.payload.dropFirst(4))), fields = try t.root().0
