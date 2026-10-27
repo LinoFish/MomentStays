@@ -35,6 +35,7 @@ pub fn hex(b: &[u8]) -> String {
 }
 pub fn sha256_hex(b: &[u8]) -> String { use sha2::Digest; hex(&sha2::Sha256::digest(b)) }
 
+pub mod bench;
 pub use format::{parse, MotionPhoto};
 
 /// JSON summary used by the CLI and the parity checks. Keys shared with
