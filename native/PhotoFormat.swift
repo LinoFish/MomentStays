@@ -129,10 +129,7 @@ enum MLJPEG {
         // would copy the whole compressed image on every verification.
         var hash = SHA256()
         for segment in try segments(d) where !(224...239).contains(segment.marker) && segment.marker != 254 {
-            try d.withUnsafeBufferPointer { buf in
-                guard let base = buf.baseAddress else { throw Failure("无法读取图片压缩数据") }
-                hash.update(bufferPointer: UnsafeRawBufferPointer(start: UnsafeRawPointer(base + segment.start), count: segment.end - segment.start))
-            }
+            hashRange(&hash, d, segment.start..<segment.end)
         }
         return hex(hash.finalize())
     }

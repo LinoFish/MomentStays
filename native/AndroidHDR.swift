@@ -116,7 +116,19 @@ enum AndroidHDR {
             return UInt8(max(0,min(255,(log2(1 + (headroom - 1) * linear) / stops * 255).rounded())))
         }
         var pixels = [UInt8](repeating:0,count:width * height)
-        for y in 0..<height { for x in 0..<width { pixels[y * width + x] = lookup[Int(raw[y * stride + x])] } }
+        // Identical lookup math; raw pointers only remove per-pixel bounds
+        // checks (Data subscript included one per pixel). Bounds were
+        // validated above (stride >= width, count / stride >= height).
+        raw.withUnsafeBytes { rawPtr in
+            let bytes = rawPtr.bindMemory(to: UInt8.self)
+            pixels.withUnsafeMutableBufferPointer { out in
+                guard let src = bytes.baseAddress, let dst = out.baseAddress else { return }
+                for y in 0..<height {
+                    let row = src + y * stride, target = dst + y * width
+                    for x in 0..<width { target[x] = lookup[Int(row[x])] }
+                }
+            }
+        }
         guard let provider = CGDataProvider(data:Data(pixels) as CFData), let gain = CGImage(width:width,height:height,bitsPerComponent:8,bitsPerPixel:8,bytesPerRow:width,space:CGColorSpaceCreateDeviceGray(),bitmapInfo:[],provider:provider,decode:nil,shouldInterpolate:false,intent:.defaultIntent) else { throw Failure("无法生成增益图") }
         return try PhotoHDR.ultra(base,gainJPEG:jpeg(gain,quality:quality),stops:stops)
     }
