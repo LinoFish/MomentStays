@@ -14,11 +14,14 @@ the `rust-core` branch and does **not** change the macOS app.
 cd core
 cargo build --release
 ./target/release/momentstays-core inspect photo.jpg            # JSON summary
+./target/release/momentstays-core inspect -j 8 ~/Photos/       # whole folder in parallel, JSON Lines
+./target/release/momentstays-core bench                        # synthetic throughput (or pass files)
 ./target/release/momentstays-core extract photo.jpg --still s.jpg --video v.mp4
 cargo test --release
 ```
 
-Works on macOS, Linux and Windows.
+Works on macOS, Linux and Windows; Android builds are on the roadmap. Inputs are memory-mapped,
+never copied whole.
 
 ## Parity
 
