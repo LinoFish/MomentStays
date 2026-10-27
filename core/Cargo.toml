@@ -1,0 +1,25 @@
+[package]
+name = "momentstays-core"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Cross-platform Motion Photo container parser for MomentStays (byte-level, no pixel decode)"
+publish = false
+
+[lib]
+name = "momentstays_core"
+crate-type = ["rlib", "staticlib"]
+
+[[bin]]
+name = "momentstays-core"
+path = "src/bin/momentstays-core.rs"
+
+[dependencies]
+sha2 = "0.10"
+md-5 = "0.10"
+roxmltree = "0.20"
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
