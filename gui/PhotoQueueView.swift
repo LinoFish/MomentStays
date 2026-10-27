@@ -7,11 +7,10 @@ struct PhotoQueueView: View {
     let actions: WorkspaceActions
     let short: Bool
     @Binding var scope: PhotoQueueScope
-    let showsScopePicker: Bool
     @State private var prefersGrid = true
     @State private var coverEditor: PhotoQueueItem?
 
-    private var visibleItems: [PhotoQueueItem] { model.items.filter { scope.includes($0) } }
+    private var visibleItems: [PhotoQueueItem] { model.items.filter { scope.includes($0,settings:model.settings) } }
     @State private var dropTargeted = false
 
     var body: some View {
@@ -20,41 +19,26 @@ struct PhotoQueueView: View {
             VStack(spacing: 0) {
                 heading(layout)
                 if !prefersGrid && !layout.twoLines && !visibleItems.isEmpty { columnHeadings(layout) }
-                ZStack {
-                    if prefersGrid && !layout.twoLines {
-                        ScrollView {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 14)], spacing: 16) {
-                                ForEach(visibleItems) { item in
-                                    photoCard(item)
-                                }
-                            }
-                            .padding(18)
+                Group {
+                    if model.previewVisible && geometry.size.width >= 800 {
+                        HSplitView {
+                            browser(layout).frame(minWidth:260,idealWidth:440)
+                            focusedPreview.frame(minWidth:330)
                         }
-                        .accessibilityIdentifier("photo-queue")
-                    } else {
-                        List(selection: $model.selection) {
-                            ForEach(visibleItems) { item in
-                                row(item, layout: layout).tag(item.id)
-                                    .listRowInsets(EdgeInsets(top: layout.twoLines ? 7 : 4, leading: 12, bottom: layout.twoLines ? 7 : 4, trailing: 12))
-                                    .contextMenu { itemActions(item) }
-                            }
-                        }
-                        .listStyle(.plain)
-                        .environment(\.defaultMinListRowHeight, layout.twoLines ? 50 : 32)
-                        .accessibilityIdentifier("photo-queue")
-                    }
-                    if visibleItems.isEmpty { emptyState }
+                    } else if model.previewVisible { focusedPreview }
+                    else { browser(layout) }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth:.infinity,maxHeight:.infinity)
                 .recordLayout("queue-list")
-                .overlay(Rectangle().stroke(dropTargeted ? Color.accentColor : .clear, lineWidth: 2))
+                .overlay(Rectangle().stroke(dropTargeted ? InterfaceStyle.accent : .clear, lineWidth: 2))
                 .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
                     guard !model.isBusy, !model.sharing else { return false }
                     return actions.acceptDrop(providers, false)
                 }
-                if let item = model.selectedItem, scope.includes(item) { detail(item) }
+                if let item = model.selectedItem, scope.includes(item,settings:model.settings) { detail(item) }
             }
             .background(InterfaceStyle.content)
+            .recordLayout("queue-scope-" + scope.rawValue)
         }
         .sheet(item:$coverEditor) { item in
             VStack(alignment:.leading,spacing:12) {
@@ -72,54 +56,100 @@ struct PhotoQueueView: View {
         }
     }
 
-    private func heading(_ layout: QueueLayout) -> some View {
-        HStack(spacing: 12) {
-            if showsScopePicker {
-                Picker("照片范围", selection: $scope) {
-                    ForEach(PhotoQueueScope.allCases) { Text($0.title).tag($0) }
+    private func browser(_ layout: QueueLayout) -> some View {
+        ZStack {
+            if prefersGrid && !layout.twoLines {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 14)], spacing: 16) {
+                        ForEach(visibleItems) { item in
+                            photoCard(item)
+                        }
+                    }
+                    .padding(18)
                 }
-                .labelsHidden().fixedSize()
+                .accessibilityIdentifier("photo-queue")
             } else {
-                Text(scope.title).font(.system(size: 14, weight: .semibold))
-            }
-            Text("\(visibleItems.count) 张").foregroundColor(.secondary).monospacedDigit()
-            if !layout.twoLines && model.issueCount > 0 {
-                Label("\(model.issueCount) 项需检查", systemImage: "exclamationmark.triangle")
-                    .foregroundColor(.orange).font(.callout)
-            }
-            Spacer(minLength: 0)
-            if !layout.twoLines {
-                Button { prefersGrid.toggle() } label: {
-                    Image(systemName: prefersGrid ? "list.bullet" : "square.grid.2x2")
+                List(selection: $model.selection) {
+                    ForEach(visibleItems) { item in
+                        row(item, layout: layout).tag(item.id)
+                            .listRowInsets(EdgeInsets(top: layout.twoLines ? 7 : 4, leading: 12, bottom: layout.twoLines ? 7 : 4, trailing: 12))
+                            .contextMenu { itemActions(item) }
+                    }
                 }
-                .help(prefersGrid ? "切换为列表" : "切换为缩略图")
-                .accessibilityLabel(prefersGrid ? "切换为列表" : "切换为缩略图")
-                .accessibilityIdentifier("queue-view-toggle")
+                .listStyle(.plain)
+                .environment(\.defaultMinListRowHeight, layout.twoLines ? 50 : 32)
+                .accessibilityIdentifier("photo-queue")
             }
-            Button { model.rescan() } label: {
-                if layout.twoLines { Image(systemName: "arrow.clockwise") }
-                else { Label("重新扫描", systemImage: "arrow.clockwise") }
-            }
-            .disabled(!model.canRescan)
-            .help("重新扫描当前来源").accessibilityLabel("重新扫描")
+            if visibleItems.isEmpty { emptyState }
         }
-        .font(.callout).padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    private var focusedPreview: some View {
+        ScrollView {
+            if let item = model.selectedItem ?? visibleItems.first {
+                VStack(alignment:.leading,spacing:12) {
+                    Text(item.name).font(.headline).lineLimit(2)
+                    if model.isBusy {
+                        PhotoThumbnail(source:item.source,isPreview:model.isPreview).frame(height:260)
+                        Text("任务进行中，完成后可预览动态画面").foregroundColor(.secondary)
+                    } else {
+                        PhotoMotionPreview(item:item,direction:model.settings.direction.rawValue,
+                            timeDomain:model.settings.timeDomain.rawValue,isDemo:model.isPreview,height:300,
+                            select:{ model.selection = item.id },selectedCover:model.settings.coverIndex(for:item.source),
+                            chooseCover:{ model.selectCover($0,for:item.source) },allowsCoverSelection:!model.sharing && model.settings.exportMode != .auxiliaryOnly,
+                            showsCandidateStatus:true).id(item.id)
+                    }
+                    PhotoStatusLabel(state:model.category(item))
+                    Text(item.detail).font(.callout).textSelection(.enabled)
+                }.padding(16)
+            } else { Text("选择照片后可查看预览").foregroundColor(.secondary).padding(24) }
+        }.frame(maxWidth:.infinity,maxHeight:.infinity).recordLayout("preview")
+    }
+
+    private func heading(_ layout: QueueLayout) -> some View {
+        VStack(alignment:.leading,spacing:short ? 6 : 10) {
+            HStack(spacing:8) {
+                Text("照片").font(.headline)
+                Text("\(model.items.count) 张").foregroundColor(.secondary).monospacedDigit()
+                Spacer(minLength:0)
+                Button { model.previewVisible.toggle() } label: {
+                    Label(model.previewVisible ? "收起预览" : "预览",systemImage:"sidebar.right")
+                }.keyboardShortcut("p",modifiers:[.command,.option]).accessibilityIdentifier("preview-button")
+                Button { prefersGrid.toggle() } label: { Image(systemName:prefersGrid ? "list.bullet" : "square.grid.2x2") }
+                    .help("切换网格或列表").accessibilityLabel("切换网格或列表").accessibilityIdentifier("queue-view-toggle")
+                Button { model.rescan() } label: { Image(systemName:"arrow.clockwise") }
+                    .disabled(!model.canRescan).help("重新扫描").accessibilityLabel("重新扫描")
+            }
+            LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:6),count:layout.width < 560 ? 3 : 5),spacing:6) {
+                ForEach(PhotoQueueScope.allCases) { value in scopeButton(value) }
+            }.recordLayout("queue-scopes")
+        }.padding(.horizontal,12).padding(.vertical,short ? 8 : 10)
+    }
+
+    @ViewBuilder private func scopeButton(_ value: PhotoQueueScope) -> some View {
+        let button = Button { scope = value } label: {
+            Text("\(value.title) \(model.items.filter { value.includes($0,settings:model.settings) }.count)")
+                .font(.callout).lineLimit(1).frame(maxWidth:.infinity)
+        }
+        .accessibilityAddTraits(scope == value ? .isSelected : [])
+        .accessibilityIdentifier("queue-scope-" + value.rawValue)
+        if scope == value { button.buttonStyle(.borderedProminent).foregroundColor(InterfaceStyle.accentForeground) }
+        else { button }
     }
 
     private func photoCard(_ item: PhotoQueueItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            PhotoMotionPreview(item: item, direction: model.settings.direction.rawValue,
-                timeDomain: model.settings.timeDomain.rawValue, isDemo: model.isPreview,
-                height: short ? 100 : 130, select: { model.selection = item.id },
-                selectedCover:model.settings.direction == .toApple ? model.settings.coverIndex(for:item.source) : nil,chooseCover:{ model.selectCover($0,for:item.source) },
-                allowsCoverSelection:!model.isBusy && !model.sharing && model.settings.exportMode != .auxiliaryOnly)
+            PhotoThumbnail(source:item.source,isPreview:model.isPreview)
+                .frame(height:short ? 100 : 130).clipped().contentShape(Rectangle())
+                .onTapGesture { model.selection = item.id }
+
             Button { model.selection = item.id } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(item.name).font(.callout.weight(.medium)).lineLimit(1).truncationMode(.middle)
                     HStack(spacing: 6) {
                         Text(item.hdr).font(.caption).foregroundColor(.secondary).lineLimit(1)
                         Spacer(minLength: 0)
-                        PhotoStatusLabel(state: item.state)
+                        PhotoStatusLabel(state:model.category(item))
                     }
                 }.padding(10).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }
@@ -162,7 +192,7 @@ struct PhotoQueueView: View {
                 HStack(spacing: 8) {
                     Text(item.hdr + (layout.width >= 440 ? " · 封面 " + item.cover : "")).foregroundColor(.secondary).lineLimit(1)
                     Spacer(minLength: 0)
-                    PhotoStatusLabel(state: item.state)
+                    PhotoStatusLabel(state:model.category(item))
                 }.font(.callout)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -172,7 +202,7 @@ struct PhotoQueueView: View {
             HStack(spacing: 12) {
                 Label {
                     Text(item.name).lineLimit(1).truncationMode(.middle)
-                } icon: { Image(systemName: "livephoto").foregroundColor(.secondary) }
+                } icon: { Image(systemName:item.row.confirmedStatic ? "photo" : "livephoto").foregroundColor(.secondary) }
                 .frame(maxWidth: .infinity, alignment: .leading).help(item.source.path)
                 Text(item.hdr).foregroundColor(.secondary).lineLimit(1)
                     .frame(width: 118, alignment: .leading).help(item.hdr)
@@ -180,7 +210,7 @@ struct PhotoQueueView: View {
                     Text(item.cover).foregroundColor(.secondary).lineLimit(1).monospacedDigit()
                         .frame(width: 106, alignment: .leading).help(item.cover)
                 }
-                PhotoStatusLabel(state: item.state).frame(width: 92, alignment: .leading)
+                PhotoStatusLabel(state:model.category(item)).frame(width: 92, alignment: .leading)
             }
             .font(.callout)
             .accessibilityElement(children: .combine)
@@ -191,9 +221,9 @@ struct PhotoQueueView: View {
     private var emptyState: some View {
         VStack(spacing: short ? 10 : 16) {
             if !short { MomentStaysBrandIcon().frame(width: 56, height: 56) }
-            Text(model.phase == .scanning ? "正在识别照片…" : model.items.isEmpty ? "照片会显示在这里" : "此范围暂无照片")
+            Text(model.phase == .scanning ? "正在识别照片…" : scope.emptyTitle)
                 .font(.system(size: 16, weight: .semibold))
-            Text(model.phase == .scanning ? "扫描完成后显示文件与格式信息" : model.items.isEmpty ? "点击「添加照片」，或将文件拖入此处" : "选择「全部照片」查看完整队列；转换仍使用全部来源")
+            Text(model.phase == .scanning ? "正在分批显示已识别照片" : model.items.isEmpty ? "点击「添加照片」，或将文件拖入此处" : "选择「全部」查看完整队列；转换仍使用全部来源")
                 .font(.callout).foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
         }

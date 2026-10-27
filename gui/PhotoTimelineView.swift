@@ -177,7 +177,7 @@ struct PhotoMotionPreview: View {
                     }.accessibilityHidden(true)
                 }
                 HStack {
-                    Text(item.isMotion ? "动态照片" : "静态照片")
+                    Text(item.isMotion ? "动态照片" : item.row.confirmedStatic ? "静态照片" : "需检查")
                     Spacer(minLength: 0)
                     if controller.frame != nil, let time = controller.frameTime { Text(String(format: "预览 %.2f s", time)).monospacedDigit() }
                 }
@@ -227,12 +227,12 @@ struct PhotoMotionPreview: View {
                     Capsule().fill(Color.secondary.opacity(0.2)).frame(height: 3)
                     if let duration = controller.duration, duration > 0 {
                         if let cover = controller.coverTime {
-                            RoundedRectangle(cornerRadius: 1).fill(Color(red: 0.94, green: 0.64, blue: 0.24))
+                            RoundedRectangle(cornerRadius: 1).fill(InterfaceStyle.accent)
                                 .frame(width: 3, height: 13)
                                 .offset(x: CGFloat(min(1, max(0, cover / duration))) * max(0, geometry.size.width - 3))
                         }
                         if let fraction = controller.hoverFraction {
-                            Circle().fill(Color.accentColor).frame(width: 8, height: 8)
+                            Circle().fill(InterfaceStyle.accent).frame(width: 8, height: 8)
                                 .offset(x: CGFloat(fraction) * max(0, geometry.size.width - 8))
                         }
                         #if os(macOS)

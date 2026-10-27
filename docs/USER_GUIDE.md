@@ -1,6 +1,6 @@
 # MomentStays User Guide
 
-> Applies to MomentStays 1.2.0 (macOS 12 or later).
+> Applies to MomentStays 1.3.0 (macOS 12 or later).
 > 中文版见 [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md).
 
 > High-resolution cover selection and candidate-photo export are included from version 1.2.0. Earlier installers do not include these options.
@@ -40,7 +40,7 @@ Open the DMG and drag MomentStays into Applications, then launch it from Applica
 
 1. Open MomentStays and click **Add Photos**, drag files into the queue, or pick **Scan Photos Library…** from the source menu.
 2. Confirm the direction: **Android → Apple Live Photo** (default) or **Apple Live Photo → Android**.
-3. Use the right-hand **Delivery Settings** inspector or settings panel to check the destination (folder / Photos library / sharing), target format, and HDR options.
+3. Use **Save to** and **More Options…** in the top toolbar to check the destination (folder / Photos library / sharing), target format, and HDR options.
 4. Click **Start** (⌘Return). Settings are snapshotted when a task starts and locked while it runs.
 5. Review per-photo results in the report. **Recent Results…** lets you retry delivery, reveal files, or open the output folder.
 
@@ -52,13 +52,15 @@ Each photo produces one result folder (see §9 for naming), not loose files.
 
 ### 2.1 The queue
 
-Wide windows have three columns: queue scopes on the left, photos in the center, and delivery settings on the right. Narrow windows collapse the sidebar and inspector; use the queue scope picker and the settings button instead. The interface follows the system appearance and accent color, with the official light/dark brand icon.
+A single workspace groups direction, Add Photos, Save to, and More Options at the top. Persistent categories show counts for Pending, Completed, Static, Needs Review, and All; Pending is selected by default. The preview pane starts closed; toggle it with Preview or ⌥⌘P. Narrow windows adapt the layout, and the interface follows system light/dark appearance with the native system orange accent.
+
+Scanning and conversion use limited parallel processing within a memory budget. Confirmed static photos are counted separately and skipped without advancing the motion-photo conversion progress. Changes to the source list require a new scan.
 
 Switch between thumbnails and a file list; narrow queues use the list automatically. Select a photo to inspect its vendor, path, detected cover time, and HDR information.
 
-Below each motion-photo thumbnail, an **amber marker shows the source cover position**. Hover over the timeline to see the actual video frame and time; move away to restore the still photo. Missing or ambiguous covers are reported, and unreadable video is not replaced with a fabricated preview. Preview reads the original primary motion track and does not change the cover.
+In the preview pane, a **cover marker shows the source cover position** below the photo. Hover over the timeline to see the actual video frame and time; move away to restore the still photo. Missing or ambiguous covers are reported, and unreadable video is not replaced with a fabricated preview. Preview reads the original primary motion track and does not change the cover.
 
-Queue scopes filter the display only: **conversion still processes all selected sources**. Outside the All Photos scope, the action is explicitly labeled to convert all sources. Open past tasks with Recent Results and Delivery.
+Categories filter the display only: **conversion still processes all selected sources**, skipping confirmed static photos. Open past tasks with Recent Results.
 
 ### 2.2 Four ways in
 
@@ -215,7 +217,7 @@ Some auxiliary tracks declare a duration of 0 for their only frame, so the syste
 
 ### 7.6 Selecting a high-resolution cover
 
-Use the cover menu on a photo card to switch between the original still and auxiliary high-resolution candidates. In list view, right-click and choose the cover-selection command. Each photo keeps its own selection; selections cannot change during conversion.
+Use the cover menu in the preview pane to switch between the original still and auxiliary high-resolution candidates. In list view, right-click and choose the cover-selection command. Each photo keeps its own selection; selections cannot change during conversion.
 
 Selecting a candidate replaces the still and moves the Live Photo marker to that candidate's time. Continuous motion always comes from the primary video track. Google high-resolution frame metadata takes precedence over the auxiliary sample PTS. A candidate whose time cannot map onto the primary video cannot become a Live Photo cover.
 
@@ -303,7 +305,7 @@ One result folder per source (stills/MOV default to `photo.jpg` / `photo.mov` in
 
 ## 10. Settings reference
 
-Open via the top-bar **Export Settings** (an inspector on windows ≥960pt wide, otherwise a sheet). Items marked * are Advanced and collapsed by default.
+Open the settings sheet with **More Options…** in the top toolbar. Items marked * are Advanced and collapsed by default.
 
 | Group | Setting | Options / default |
 |---|---|---|

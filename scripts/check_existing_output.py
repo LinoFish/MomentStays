@@ -2,18 +2,24 @@
 """Existing-output decisions and transactional replacement failure protection."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
+import struct
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from tests.test_formats import motion
+BINARY = Path(os.environ.get("MOTIONLIVE_NATIVE_TEST_BINARY", str(ROOT / ".build/gui/native-tests")))
 
 
 def run(source, output, policy=None, **options):
     request = {'mode':'batch','input':str(source),'output':str(output),**options}
     if policy is not None:
         request['existing_output'] = policy
-    p = subprocess.run([str(ROOT/'.build/gui/native-tests')],input=json.dumps(request),text=True,capture_output=True,timeout=180)
+    p = subprocess.run([str(BINARY)],input=json.dumps(request),text=True,capture_output=True,timeout=180)
     assert p.returncode == 0,(p.stdout,p.stderr)
     result = json.loads(p.stdout)
     return result,json.loads(Path(result['report']).read_text())
@@ -24,10 +30,43 @@ def snapshot(folder):
             for p in folder.rglob('*') if p.is_file()}
 
 
+def boxes(data, start=0, end=None):
+    end = len(data) if end is None else end
+    while start < end:
+        size, kind = struct.unpack_from('>I4s', data, start)
+        header = 8
+        if size == 1:
+            size = struct.unpack_from('>Q', data, start + 8)[0]
+            header = 16
+        elif size == 0:
+            size = end - start
+        assert header <= size <= end - start
+        yield kind, start, start + header, start + size
+        start += size
+
+
+def dual_video(data):
+    moov = next(b for b in boxes(data) if b[0] == b'moov')
+    assert moov[3] == len(data)
+    track = next(b for b in boxes(data, moov[2], moov[3]) if b[0] == b'trak')
+    duplicate = bytearray(data[track[1]:track[3]])
+    header = next(b for b in boxes(duplicate, 8) if b[0] == b'tkhd')
+    struct.pack_into('>I', duplicate, header[2] + 12, 99)
+    body = bytearray(data[moov[2]:moov[3]])
+    mvhd = next(b for b in boxes(body) if b[0] == b'mvhd')
+    struct.pack_into('>I', body, mvhd[3] - 4, 100)
+    return data[:moov[1]] + struct.pack('>I4s', len(body) + len(duplicate) + 8, b'moov') + body + duplicate
+
+
 with tempfile.TemporaryDirectory(prefix='motionlive-existing-',dir=ROOT/'.build') as directory:
     root=Path(directory);src=root/'sources';src.mkdir();out=root/'out'
     source=src/'照片.MP.jpg'
-    original=(ROOT/'pictures/sample-motion.MP.jpg').read_bytes()
+    fixture = root / 'fixture'
+    generated = subprocess.run([str(BINARY)], input=json.dumps({'mode':'fixture','folder':str(fixture)}), text=True, capture_output=True, timeout=60)
+    assert generated.returncode == 0, (generated.stdout, generated.stderr)
+    stamp = json.loads(generated.stdout)['cover_us']
+    still, clip = (fixture/'still.jpg').read_bytes(), (fixture/'clip.mp4').read_bytes()
+    original = motion(still,str(stamp),movie=clip)
     source.write_bytes(original)
     result,_=run(source,out);assert result['counts']['converted']==1
     pair=out/(source.name+'.livephoto')
@@ -62,7 +101,7 @@ with tempfile.TemporaryDirectory(prefix='motionlive-existing-',dir=ROOT/'.build'
     print('PASS corrupt or incomplete prior manifest can be skipped or replaced without blocking conversion')
     # A different export layout used to fail before conversion. It now follows
     # the explicit overwrite choice as well, including auxiliary-only outputs.
-    auxiliary=src/'aux.jpg';auxiliary.write_bytes((ROOT/'pictures/sample-sparse.MP.jpg').read_bytes())
+    auxiliary=src/'aux.jpg';auxiliary.write_bytes(motion(still,str(stamp),movie=dual_video(clip)))
     result,_=run(auxiliary,out);assert result['counts']['converted']==1
     result,report=run(auxiliary,out,'overwrite',output_mode='livephoto+auxiliary')
     assert result['counts']['converted']==1,report

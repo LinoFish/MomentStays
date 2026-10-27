@@ -1,5 +1,105 @@
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+
+#if UI_DIAGNOSTICS
+enum SourceMenuDiagnostics {
+    static var opened = false
+    static var titles: [String] = []
+}
+#endif
+
+// Use a system menu anchored to the prominent add button, including for Command-O.
+struct SourceMenuButton: NSViewRepresentable {
+    @Binding var requested: Bool
+    let disabled: Bool
+    let addFiles: () -> Void
+    let addLibrary: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title:"添加照片",target:context.coordinator,action:#selector(Coordinator.openMenu(_:)))
+        button.bezelStyle = .rounded
+        button.controlSize = .regular
+        button.font = .systemFont(ofSize:NSFont.systemFontSize)
+        button.bezelColor = InterfaceStyle.nativeAccent
+        button.contentTintColor = InterfaceStyle.nativeAccentForeground
+        button.attributedTitle = NSAttributedString(string: "添加照片", attributes: [
+            .foregroundColor: InterfaceStyle.nativeAccentForeground,
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        ])
+        button.image = NSImage(systemSymbolName:"plus",accessibilityDescription:nil)?
+            .withSymbolConfiguration(.init(paletteColors: [InterfaceStyle.nativeAccentForeground]))
+        button.imagePosition = .imageLeading
+        button.identifier = NSUserInterfaceItemIdentifier("import-button")
+        button.setAccessibilityIdentifier("import-button")
+        button.setAccessibilityLabel("添加照片")
+        button.toolTip = "添加照片、文件夹或系统照片图库"
+        button.setContentHuggingPriority(.required,for:.horizontal)
+        button.sizeToFit()
+        context.coordinator.menu.delegate = context.coordinator
+        context.coordinator.menu.minimumWidth = 230
+        for (title,symbol,action) in [
+            ("选择照片或文件夹…","folder",#selector(Coordinator.files)),
+            ("扫描系统照片图库…","photo.on.rectangle",#selector(Coordinator.library))
+        ] {
+            let item = NSMenuItem(title:title,action:action,keyEquivalent:"")
+            item.target = context.coordinator
+            item.image = NSImage(systemSymbolName:symbol,accessibilityDescription:nil)
+            context.coordinator.menu.addItem(item)
+        }
+        return button
+    }
+    func updateNSView(_ button: NSButton, context: Context) {
+        button.isEnabled = !disabled
+        context.coordinator.addFiles = addFiles
+        context.coordinator.addLibrary = addLibrary
+        if requested {
+            DispatchQueue.main.async {
+                requested = false
+                if button.isEnabled { button.performClick(nil) }
+            }
+        }
+    }
+    final class Coordinator: NSObject, NSMenuDelegate {
+        let menu = NSMenu()
+        var addFiles: (() -> Void)?
+        var addLibrary: (() -> Void)?
+        @objc func openMenu(_ button: NSButton) {
+            guard button.isEnabled else { return }
+            menu.popUp(positioning:nil,at:NSPoint(x:0,y:button.bounds.minY - 4),in:button)
+        }
+        @objc func files() { addFiles?() }
+        @objc func library() { addLibrary?() }
+        #if UI_DIAGNOSTICS
+        func menuWillOpen(_ menu: NSMenu) {
+            SourceMenuDiagnostics.opened = true
+            SourceMenuDiagnostics.titles = menu.items.map(\.title)
+            if CommandLine.arguments.contains("--ui-source-menu") {
+                let timer = Timer(timeInterval:0.3,repeats:false) { _ in menu.cancelTracking() }
+                RunLoop.main.add(timer,forMode:.common)
+            }
+        }
+        #endif
+    }
+}
+#else
+struct SourceMenuButton: View {
+    @Binding var requested: Bool
+    let disabled: Bool
+    let addFiles: () -> Void
+    let addLibrary: () -> Void
+    var body: some View {
+        Menu {
+            Button("选择照片或文件夹…",action:addFiles)
+            Button("扫描系统照片图库…",action:addLibrary)
+        } label: { Label("添加照片",systemImage:"plus") }
+        .disabled(disabled).accessibilityIdentifier("import-button")
+    }
+}
+#endif
+
 enum UserGuide {
     static func title(for locale: Locale) -> String {
         locale.languageCode == "zh" ? "使用手册" : "User Guide"
@@ -30,8 +130,15 @@ struct WorkspaceActions {
 }
 
 enum InterfaceStyle {
-    // Follow the user's macOS accent preference in both light and dark appearances.
-    static var accent: Color { .accentColor }
+    // System orange is the native semantic accent closest to the brand amber.
+    #if os(macOS)
+    static var nativeAccent: NSColor { .systemOrange }
+    static let nativeAccentForeground = NSColor(srgbRed: 31.0 / 255, green: 41.0 / 255, blue: 51.0 / 255, alpha: 1)
+    static var accent: Color { Color(nsColor: nativeAccent) }
+    #else
+    static var accent: Color { .orange }
+    #endif
+    static var accentForeground: Color { Color(red: 31.0 / 255, green: 41.0 / 255, blue: 51.0 / 255) }
     static var canvas: Color {
         #if os(macOS)
         return Color(nsColor: .windowBackgroundColor)
@@ -123,27 +230,43 @@ struct QueueLayout {
 
 // Scope affects only the presentation; conversions always use the complete source job.
 enum PhotoQueueScope: String, CaseIterable, Identifiable {
-    case all, completed, attention
+    case ready, all, still, completed, attention
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .all: return "全部照片"
+        case .all: return "全部"
+        case .ready: return "待转换"
+        case .still: return "静态照片"
         case .completed: return "已完成"
-        case .attention: return "需处理"
+        case .attention: return "需检查"
         }
     }
     var symbol: String {
         switch self {
         case .all: return "photo.on.rectangle"
+        case .ready: return "circle"
+        case .still: return "photo"
         case .completed: return "checkmark.circle"
         case .attention: return "exclamationmark.circle"
         }
     }
-    func includes(_ item: PhotoQueueItem) -> Bool {
+    var emptyTitle: String {
+        switch self {
+        case .all: return "照片会显示在这里"
+        case .ready: return "暂无待转换照片"
+        case .still: return "当前来源中没有静态照片"
+        case .completed: return "暂无已完成结果"
+        case .attention: return "没有需要检查的照片"
+        }
+    }
+    func includes(_ item: PhotoQueueItem, settings: ConversionSettings = ConversionSettings()) -> Bool {
+        let category = item.category(settings:settings)
         switch self {
         case .all: return true
-        case .completed: return [.converted, .resumed].contains(item.state)
-        case .attention: return [.inspect, .failed].contains(item.state) || (item.isMotion && item.cover == "未记录")
+        case .ready: return category == .ready
+        case .still: return category == .static
+        case .completed: return category == .converted
+        case .attention: return category == .inspect
         }
     }
 }

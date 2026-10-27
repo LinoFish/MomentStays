@@ -68,19 +68,28 @@ enum AndroidExport {
         guard !images.isEmpty else { throw Failure("未找到完整实况照片") }
         return try NativeBatch.selection(images)
     }
-    static func scan(_ sources: [URL], token:StopToken, progress:(Int,Int)->Void) throws -> [ScanRow] {
-        let (base,entries) = try selection(sources); var rows: [ScanRow] = []
-        for (i,url) in entries.enumerated() {
-            if token.isCancelled { break }
-            let rel = try NativeBatch.relative(url,root:base)
+    static func scan(_ sources: [URL], token:StopToken, concurrency:Int? = nil,
+                     rowsReady: (([ScanRow])->Void)? = nil, progress:@escaping (Int,Int)->Void) throws -> [ScanRow] {
+        let (base,entries) = try selection(sources)
+        let relatives = try entries.map { try NativeBatch.relative($0,root:base) }
+        var rows: [Int:ScanRow] = [:], completed = 0
+        var pending: [ScanRow] = [], lastUpdate = Date.distantPast
+        BatchScheduling.perform(files:entries,limit:concurrency ?? BatchScheduling.limit(scanning:true),token:token,work:{ i in
+            let url = entries[i], rel = relatives[i]
             do {
                 let value = try pair(url), props = try properties(url)
                 let hasMap = (props[kCGImagePropertyMakerAppleDictionary as String] as? [String:Any])?["33"] != nil
-                rows.append(ScanRow(source:url,relative:rel,isMotion:true,hdr:hasMap ? "Apple HDR" : "原始图像",cover:String(format:"%.6f 秒",seconds(value.cover)),detail:"实况内容标识匹配；封面来自视频 timed metadata",manufacturer:"苹果",manufacturerDetail:"配对依据：Apple ContentIdentifier"))
-            } catch { rows.append(ScanRow(source:url,relative:rel,isMotion:false,hdr:"—",cover:"—",detail:error.localizedDescription,manufacturer:"苹果 / 待检查")) }
-            progress(i + 1,entries.count)
-        }
-        return rows
+                return ScanRow(source:url,relative:rel,isMotion:true,hdr:hasMap ? "Apple HDR" : "原始图像",cover:String(format:"%.6f 秒",seconds(value.cover)),detail:"实况内容标识匹配；封面来自视频 timed metadata",manufacturer:"苹果",manufacturerDetail:"配对依据：Apple ContentIdentifier")
+            } catch { return ScanRow(source:url,relative:rel,isMotion:false,hdr:"—",cover:"—",detail:error.localizedDescription,manufacturer:"苹果 / 待检查") }
+        },receive:{ i,row in
+            rows[i] = row; completed += 1; pending.append(row)
+            if completed == entries.count || Date().timeIntervalSince(lastUpdate) >= 0.1 {
+                rowsReady?(pending); pending.removeAll(keepingCapacity:true); lastUpdate = Date()
+            }
+            progress(completed,entries.count)
+        })
+        if !pending.isEmpty { rowsReady?(pending) }
+        return rows.keys.sorted().compactMap { rows[$0] }
     }
     static func remux(_ source:URL, to destination:URL, token:StopToken) throws -> [String:Any] {
         let asset = AVURLAsset(url:source), videos = asset.tracks(withMediaType:.video), audios = asset.tracks(withMediaType:.audio)
@@ -217,11 +226,11 @@ enum AndroidExport {
 }
 
 extension AndroidExport {
-    static func convert(source:URL,target:URL,options:ConversionOptions,token:StopToken,overwrite:Bool) throws -> [String:Any] {
+    static func convert(source:URL,target:URL,options:ConversionOptions,token:StopToken,overwrite:Bool,timings:BatchTimings = BatchTimings()) throws -> [String:Any] {
         let config = options.android, fm = FileManager.default
         guard ["google","xiaomi","samsung","huawei","honor","oppo","vivo"].contains(config.vendor), ["jpeg","heic"].contains(config.container) else { throw Failure("安卓目标厂商或容器无效") }
         if config.container == "heic" && !["google","xiaomi","samsung"].contains(config.vendor) { throw Failure("此厂商的 HEIC 动态封装尚无可验证方案；请选择 JPEG") }
-        let sourceHash = try NativeBatch.hashFile(source)
+        let sourceHash = try timings.measure("source_hash") { try NativeBatch.hashFile(source) }
         if !overwrite && fm.fileExists(atPath:target.path) {
             let previous = try NativeBatch.verify(target)
             guard previous["implementation"] as? String == "reverse-native-1.2.1" else { throw Failure("已有输出使用旧版 HDR 封装，请选择覆盖以修复") }
@@ -242,7 +251,7 @@ extension AndroidExport {
         let clip = work.appendingPathComponent("motion.mp4")
         var timing = try remux(paired.movie,to:clip,token:token)
         let video = Array(try Data(contentsOf:clip)), time = Int((seconds(paired.cover) * 1_000_000).rounded())
-        let (still,hdr) = try AndroidHDR.prepare(source,options:config)
+        let (still,hdr) = try timings.measure("image_and_hdr") { try AndroidHDR.prepare(source,options:config) }
         let result = try assemble(still:still,video:video,options:config,time:time,frame:paired.frame)
         let decoded = try PhotoFormat.parse(result)
         guard decoded.video == video, try PhotoFormat.codingHash(decoded.still) == PhotoFormat.codingHash(still) else { throw Failure("安卓封装读回校验失败：图像或视频数据不同") }
@@ -260,7 +269,7 @@ extension AndroidExport {
             "output_files":["motionphoto":name],"output_sha256":[name:sha(Data(result))],"timing":timing,"hdr":hdr,"warnings":warnings]
         try NativeBatch.json(manifest,to:stage.appendingPathComponent("manifest.json"))
         guard try NativeBatch.hashFile(paired.movie) == videoHash else { throw Failure("配对视频在转换期间发生变化，未发布") }
-        try NativeBatch.publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles)
+        try timings.measure("validation_and_publish") { try NativeBatch.publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles) }
         return ["status":"converted","source":source.path,"output":target.path,"detail":"已导出 \(config.vendor) \(config.container.uppercased()) 动态照片；封面 \(Double(time) / 1_000_000) 秒","hdr":hdr,"timing":timing,"warnings":warnings]
     }
 }

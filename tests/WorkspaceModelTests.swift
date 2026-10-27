@@ -4,7 +4,7 @@ import Photos
 private final class ControlledService: ConversionServing {
     struct Scan {
         let sources: [URL]; let direction: ConversionDirection; let token: StopToken
-        let progress: (Int, Int) -> Void; let completion: (Result<[ScanRow], Error>) -> Void
+        let rowsReady: ([ScanRow]) -> Void; let progress: (Int, Int) -> Void; let completion: (Result<[ScanRow], Error>) -> Void
     }
     struct Run {
         let job: ConversionJob; let token: StopToken; let decision: ExistingOutputPresenter
@@ -12,9 +12,9 @@ private final class ControlledService: ConversionServing {
     }
     var scans: [Scan] = []
     var runs: [Run] = []
-    func scan(sources: [URL], direction: ConversionDirection, token: StopToken,
+    func scan(sources: [URL], direction: ConversionDirection, token: StopToken, rowsReady: @escaping ([ScanRow]) -> Void,
               progress: @escaping (Int, Int) -> Void, completion: @escaping (Result<[ScanRow], Error>) -> Void) {
-        scans.append(Scan(sources: sources, direction: direction, token: token, progress: progress, completion: completion))
+        scans.append(Scan(sources: sources, direction: direction, token: token, rowsReady: rowsReady, progress: progress, completion: completion))
     }
     func run(job: ConversionJob, token: StopToken, existingOutput: @escaping ExistingOutputPresenter,
              progress: @escaping (BatchProgress) -> Void, completion: @escaping (Result<BatchOutcome, Error>) -> Void) {
@@ -146,6 +146,59 @@ struct WorkspaceModelTests {
         check(workspace.phase == .stopped && workspace.deliverySummary == "preserved", "stopped delivery retains result status")
     }
 
+    static func batchPlanningChecks(source: URL, root: URL) throws {
+        let folder = root.appendingPathComponent("mixed"), destination = root.appendingPathComponent("mixed-output")
+        try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        let motion = folder.appendingPathComponent("motion.jpg"), still = folder.appendingPathComponent("static.jpg")
+        let data = try Data(contentsOf:source), photo = try PhotoFormat.parse(Array(data))
+        let plainStill = try PhotoFormat.liveStill(photo.still,uuid:"",updateIdentifier:false)
+        try data.write(to:motion); try Data(plainStill).write(to:still)
+        var rows = try NativeBatch.scan(sources:[folder],token:StopToken()) { _,_ in }
+        check(rows.count == 2 && rows.filter(\.confirmedStatic).count == 1,"scan explicitly distinguishes a complete static photo")
+        let staticTarget = destination.appendingPathComponent("static.jpg.livephoto")
+        try FileManager.default.createDirectory(at:staticTarget,withIntermediateDirectories:true)
+        try Data([123]).write(to:staticTarget.appendingPathComponent("sentinel"))
+        var updates: [BatchProgress] = [], decisions: [String] = []
+        let outcome = try NativeBatch.run(sources:[folder],output:destination,options:ConversionOptions(),token:StopToken(),scanRows:rows,
+            existingOutput:{ url,_ in decisions.append(url.lastPathComponent); return .skip }) { updates.append($0) }
+        check(outcome.counts["converted"] == 1 && outcome.counts["skipped"] == 1,"mixed batch converts only motion photos")
+        check(decisions.isEmpty && updates.allSatisfy { $0.total == 1 },"static photo bypasses overwrite decisions and conversion progress")
+        check(try! Data(contentsOf:staticTarget.appendingPathComponent("sentinel")) == Data([123]),"static output is untouched")
+        let files = outcome.reportData["files"] as! [[String:Any]]
+        check(files.map { URL(fileURLWithPath:$0["source"] as! String).lastPathComponent } == ["motion.jpg","static.jpg"],"parallel report retains source order")
+        check(files[1]["conversion_seconds"] == nil && files[1]["output"] == nil,"static photo never enters the converter or allocates output")
+        let unknown = folder.appendingPathComponent("unknown.jpg")
+        try Data(plainStill + [1,2,3]).write(to:unknown)
+        let unknownRow = NativeBatch.scanFile(unknown,relative:"unknown.jpg")
+        check(unknownRow.needsInspection && !unknownRow.confirmedStatic,"unknown trailing payload is not called a static photo")
+        do {
+            _ = try NativeBatch.run(sources:[folder],output:destination,options:ConversionOptions(),token:StopToken(),scanRows:rows) { _ in }
+            check(false,"new source must invalidate the batch snapshot")
+        } catch { check(error.localizedDescription.contains("重新扫描"),"new source requests a rescan") }
+        try FileManager.default.removeItem(at:unknown)
+        try data.write(to:still,options:.atomic)
+        let changed = try NativeBatch.run(sources:[folder],output:root.appendingPathComponent("changed-output"),options:ConversionOptions(),token:StopToken(),scanRows:rows) { _ in }
+        check(changed.counts["converted"] == 2 && changed.counts["skipped"] == 0,"static replaced by motion is identified again")
+        try Data(plainStill).write(to:still,options:.atomic)
+        try FileManager.default.removeItem(at:motion)
+        rows = try NativeBatch.scan(sources:[folder],token:StopToken()) { _,_ in }
+        var options = ConversionOptions(); options.exportDataFiles = false
+        let staticOutput = root.appendingPathComponent("all-static-output")
+        let allStatic = try NativeBatch.run(sources:[folder],output:staticOutput,options:options,token:StopToken(),scanRows:rows) { _ in }
+        check(allStatic.counts["skipped"] == 1 && !FileManager.default.fileExists(atPath:staticOutput.path),"all-static batch creates no output staging or fake conversion")
+        let lock = NSLock(); var active = 0, peak = 0, finished = 0
+        let token = StopToken(), entered = DispatchGroup()
+        entered.enter(); entered.enter()
+        BatchScheduling.perform(files:Array(repeating:still,count:8),limit:2,token:token,work:{ index in
+            lock.lock(); active += 1; peak = max(peak,active); lock.unlock()
+            entered.leave()
+            _ = entered.wait(timeout:.now() + 2)
+            lock.lock(); active -= 1; lock.unlock()
+            return index
+        },receive:{ _,_ in finished += 1; if finished == 1 { token.cancel() } })
+        check(peak == 2 && finished <= 2,"bounded workers overlap and stop dispatching after cancellation")
+    }
+
     static func main() throws {
         // Evaluate fetch predicates without requesting permission or accessing a real library.
         for direction in ConversionDirection.allCases {
@@ -168,6 +221,13 @@ struct WorkspaceModelTests {
         let source = root.appendingPathComponent("input/test.jpg")
         try Data([0]).write(to: source)
         let row = ScanRow(source: source, relative: "test.jpg", isMotion: true, hdr: "Ultra HDR", cover: "0.4 秒", detail: "ready")
+        let staticRow = ScanRow(source:source,relative:"test.jpg",isMotion:false,hdr:"SDR",cover:"—",detail:"static",confirmedStatic:true)
+        check(PhotoQueueItem(staticRow).category(settings:ConversionSettings()) == .static,"confirmed static has its own category")
+        let unknownRow = ScanRow(source:source,relative:"test.jpg",isMotion:false,hdr:"—",cover:"—",detail:PhotoFormat.notMotion)
+        check(PhotoQueueItem(unknownRow).category(settings:ConversionSettings()) == .inspect,"notMotion text alone cannot prove static")
+        let missingRow = ScanRow(source:source,relative:"test.jpg",isMotion:true,hdr:"SDR",cover:"未记录",detail:"missing")
+        var relaxed = ConversionSettings(); relaxed.missingTime = .midpoint
+        check(PhotoQueueItem(missingRow).category(settings:ConversionSettings()) == .inspect && PhotoQueueItem(missingRow).category(settings:relaxed) == .ready,"cover classification follows the selected policy")
         let service = ControlledService(), model = WorkspaceModel(service: ControlledService())
         check(!model.canStart, "empty workspace cannot convert")
         let workspace = WorkspaceModel(service: service)
@@ -183,6 +243,8 @@ struct WorkspaceModelTests {
         check(service.scans.count == 1 && service.scans[0].sources.count == 1, "duplicate sources deduplicate before scan")
         workspace.updateSettings { $0.direction = .toAndroid }
         check(workspace.settings.direction == .toApple, "settings cannot mutate during scan")
+        service.scans[0].rowsReady([row])
+        check(workspace.items.count == 1 && !workspace.canStart,"incremental rows do not allow an incomplete scan to convert")
         service.scans[0].completion(.success([row]))
         check(workspace.canStart && workspace.phase == .ready, "successful scan enables conversion")
         let originalOutput = workspace.output
@@ -217,7 +279,7 @@ struct WorkspaceModelTests {
         check(service.scans.count == 2 && service.scans[1].direction == .toAndroid, "direction change rescans with typed direction")
         service.runs[0].progress(update)
         service.scans[0].completion(.success([]))
-        check(workspace.phase == .scanning && workspace.items.count == 1, "old job callbacks cannot overwrite newer scan")
+        check(workspace.phase == .scanning && workspace.items.isEmpty, "old job callbacks cannot overwrite newer scan")
         service.scans[1].completion(.success([row]))
         check(workspace.selection == source.path, "rescan preserves valid selection")
         let library = workspace.beginLibraryImport()!
@@ -239,6 +301,7 @@ struct WorkspaceModelTests {
         latch.resolve(.overwrite)
 
         if CommandLine.arguments.count > 1 {
+            try batchPlanningChecks(source:URL(fileURLWithPath:CommandLine.arguments[1]),root:root)
             try integration(source: URL(fileURLWithPath: CommandLine.arguments[1]), root: root)
         }
         print("PASS \(checks) workspace state, cancellation and integration checks")

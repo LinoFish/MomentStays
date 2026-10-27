@@ -537,6 +537,7 @@ private struct RecentTasksView: View {
             }
         }
         .background(InterfaceStyle.canvas)
+        .tint(InterfaceStyle.accent).accentColor(InterfaceStyle.accent)
         .frame(minWidth: 350, minHeight: 340)
         .dismissOnEscape(close)
         .alert("清理此任务缓存？", isPresented: $cleanupPresented) {

@@ -7,7 +7,7 @@ enum TaskPhase: String {
 }
 
 enum PhotoState: String, CaseIterable {
-    case ready, inspect, converted, resumed, skipped, failed
+    case ready, inspect, converted, resumed, skipped, failed, `static`
     var title: String {
         switch self {
         case .ready: return "待转换"
@@ -15,6 +15,7 @@ enum PhotoState: String, CaseIterable {
         case .converted: return "已完成"
         case .resumed: return "已有结果"
         case .skipped: return "已跳过"
+        case .static: return "静态照片"
         case .failed: return "失败"
         }
     }
@@ -25,6 +26,7 @@ enum PhotoState: String, CaseIterable {
         case .converted: return "checkmark.circle.fill"
         case .resumed: return "checkmark.circle"
         case .skipped: return "minus.circle"
+        case .static: return "photo"
         case .failed: return "exclamationmark.circle.fill"
         }
     }
@@ -39,6 +41,7 @@ struct PhotoQueueItem: Identifiable {
     let hdr: String
     let cover: String
     let scanDetail: String
+    let row: ScanRow
     let initialState: PhotoState
     var resultState: PhotoState?
     var resultDetail: String?
@@ -47,11 +50,21 @@ struct PhotoQueueItem: Identifiable {
     var state: PhotoState { resultState ?? initialState }
     var detail: String { resultDetail?.isEmpty == false ? resultDetail! : scanDetail }
 
+    func category(settings: ConversionSettings) -> PhotoState {
+        if [.converted,.resumed].contains(state) { return .converted }
+        if state == .static { return .static }
+        if [.inspect,.failed].contains(state) { return .inspect }
+        if isMotion && cover == "未记录" && settings.direction == .toApple && settings.missingTime == .error &&
+            settings.exportMode != .auxiliaryOnly && settings.coverIndex(for:source) == nil { return .inspect }
+        return .ready
+    }
+
     init(_ row: ScanRow) {
+        self.row = row
         source = row.source; relative = row.relative; isMotion = row.isMotion
         manufacturer = row.manufacturer; manufacturerDetail = row.manufacturerDetail
         hdr = row.hdr; cover = row.cover; scanDetail = row.detail
-        initialState = row.isMotion ? .ready : row.needsInspection ? .inspect : .skipped
+        initialState = row.isMotion ? .ready : row.needsInspection ? .inspect : .static
     }
 }
 
@@ -72,12 +85,13 @@ struct ConversionReport {
         url = outcome.report; counts = outcome.counts; cancelled = outcome.cancelled
         entries = ((outcome.reportData["files"] as? [[String: Any]]) ?? []).enumerated().map { index, file in
             ReportEntry(id: index, source: file["source"] as? String ?? "", output: file["output"] as? String,
-                state: PhotoState(rawValue: file["status"] as? String ?? "") ?? .failed,
+                state: file["classification"] as? String == "static" ? .static : PhotoState(rawValue: file["status"] as? String ?? "") ?? .failed,
                 detail: file["detail"] as? String ?? file["error"] as? String ?? "")
         }
     }
     var summary: String {
-        "成功 \(counts["converted", default: 0]) · 已有 \(counts["resumed", default: 0]) · 跳过 \(counts["skipped", default: 0]) · 失败 \(counts["failed", default: 0])"
+        let staticCount = entries.filter { $0.state == .static }.count
+        return "成功 \(counts["converted", default:0]) · 已有 \(counts["resumed", default:0]) · 静态 \(staticCount) · 跳过 \(max(0,counts["skipped", default:0] - staticCount)) · 失败 \(counts["failed", default:0])"
     }
 }
 
@@ -106,7 +120,8 @@ final class WorkspaceModel: ObservableObject {
     @Published var settingsPresented = false
     @Published var advancedExpanded = false
     @Published var detailExpanded = false
-    @Published var inspectorVisible = true
+    @Published var previewVisible = false
+    @Published var sourceMenuRequested = false
     private(set) var isPreview = false
 
     var onConversionFinished: (BatchOutcome, ConversionSettings) -> Void = { _, _ in }
@@ -115,11 +130,12 @@ final class WorkspaceModel: ObservableObject {
     private let service: ConversionServing
     private var token = StopToken()
     private var operation = UUID()
+    private var scanComplete = false
     private var rowIndices: [String: Int] = [:]
 
     init(service: ConversionServing = ConversionService()) { self.service = service }
     var isBusy: Bool { phase.isBusy }
-    var canStart: Bool { !isBusy && !sharing && output != nil && items.contains { $0.isMotion } }
+    var canStart: Bool { !isBusy && !sharing && scanComplete && output != nil && items.contains { $0.isMotion } }
     var canRescan: Bool { !isBusy && !sharing && !sources.isEmpty && !isPreview }
     var outputToOpen: URL? { settings.destination.usesCache ? recentOutput : output }
     var canOpenOutput: Bool {
@@ -130,7 +146,8 @@ final class WorkspaceModel: ObservableObject {
     var canStop: Bool { isBusy && phase != .stopping && !isPreview }
     var selectedItem: PhotoQueueItem? { items.first { $0.id == selection } }
     var motionCount: Int { items.filter { $0.isMotion }.count }
-    var issueCount: Int { items.filter { [.inspect, .failed].contains($0.state) || ($0.isMotion && $0.cover == "未记录") }.count }
+    func category(_ item: PhotoQueueItem) -> PhotoState { item.category(settings:settings) }
+    var issueCount: Int { items.filter { category($0) == .inspect }.count }
 
     func selectCover(_ index: Int?, for source: URL) {
         guard !isBusy, !sharing, settings.direction == .toApple, index == nil || index! >= 0 else { return }
@@ -146,7 +163,12 @@ final class WorkspaceModel: ObservableObject {
         guard !isBusy, !sharing else { return }
         var next = settings; change(&next); next.normalize()
         let directionChanged = next.direction != settings.direction
+        let changed = next.options.json as NSDictionary != settings.options.json as NSDictionary || next.coverSelections != settings.coverSelections
         settings = next
+        if changed {
+            report = nil
+            for index in items.indices { items[index].resultState = nil; items[index].resultDetail = nil }
+        }
         if directionChanged && !sources.isEmpty && !isPreview { rescan() }
     }
 
@@ -170,6 +192,10 @@ final class WorkspaceModel: ObservableObject {
             guard (try? destination.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
                 throw Failure("请选择一个输出文件夹")
             }
+            if output != destination {
+                report = nil
+                for index in items.indices { items[index].resultState = nil; items[index].resultDetail = nil }
+            }
             output = destination
         } catch { errorMessage = error.localizedDescription }
     }
@@ -183,9 +209,12 @@ final class WorkspaceModel: ObservableObject {
     func rescan() {
         guard canRescan else { return }
         let id = begin(.scanning, message: "正在扫描照片…"), currentToken = token
-        report = nil
-        for index in items.indices { items[index].resultState = nil; items[index].resultDetail = nil }
-        service.scan(sources: sources, direction: settings.direction, token: currentToken, progress: { [weak self] index, total in
+        report = nil; scanComplete = false; items = []; rowIndices = [:]
+        service.scan(sources: sources, direction: settings.direction, token: currentToken, rowsReady: { [weak self] rows in
+            guard let self = self, self.operation == id, self.phase == .scanning else { return }
+            self.items.append(contentsOf:rows.map(PhotoQueueItem.init))
+            self.items.sort { $0.relative.localizedStandardCompare($1.relative) == .orderedAscending }
+        }, progress: { [weak self] index, total in
             guard let self = self, self.operation == id, self.phase == .scanning else { return }
             self.status = "正在扫描 \(index) / \(total)"
             self.progress = total > 0 ? Double(index) / Double(total) : nil
@@ -193,11 +222,12 @@ final class WorkspaceModel: ObservableObject {
             guard let self = self, self.operation == id else { return }
             switch result {
             case .success(let rows):
+                self.scanComplete = !currentToken.isCancelled
                 self.items = rows.map(PhotoQueueItem.init)
                 self.rowIndices = Dictionary(self.items.enumerated().map { ($0.element.relative, $0.offset) }, uniquingKeysWith: { first, _ in first })
                 if !self.items.contains(where: { $0.id == self.selection }) { self.selection = nil }
                 self.phase = currentToken.isCancelled ? .stopped : .ready
-                self.status = currentToken.isCancelled ? "扫描已停止，可重新扫描" : self.motionCount > 0 ? "已就绪 · \(self.motionCount) 张可转换" : "未找到支持的动态照片"
+                self.status = currentToken.isCancelled ? "扫描已停止，可重新扫描" : self.motionCount > 0 ? "已就绪 · \(self.motionCount) 张可转换" : "没有待转换的动态照片"
                 self.progress = nil
             case .failure(let error): self.fail(error, cancelled: currentToken.isCancelled)
             }
@@ -209,7 +239,7 @@ final class WorkspaceModel: ObservableObject {
         do { try NativeBatch.validateOutput(sources: sources, output: output) }
         catch { errorMessage = error.localizedDescription; return }
         let capturedSettings = settings
-        let job = ConversionJob(sources: sources, output: output, options: capturedSettings.options)
+        let job = ConversionJob(sources: sources, output: output, options: capturedSettings.options, scanRows: items.map(\.row))
         let id = begin(.converting, message: "正在准备转换…"), currentToken = token
         report = nil; progress = 0
         for index in items.indices { items[index].resultState = nil; items[index].resultDetail = nil }
@@ -224,8 +254,8 @@ final class WorkspaceModel: ObservableObject {
             }
         }, progress: { [weak self] update in
             guard let self = self, self.operation == id else { return }
-            if self.phase != .stopping {
-                self.status = "已处理 \(update.index) / \(update.total)"
+            if self.phase != .stopping && self.phase != .awaitingDecision {
+                self.status = "转换 \(update.index) / \(update.total)；\(self.items.filter { $0.state == .static }.count) 张静态已跳过"
                 self.currentFile = update.relative
             }
             self.progress = Double(update.index) / Double(max(update.total, 1))

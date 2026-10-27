@@ -14,7 +14,7 @@ struct ReportView: View {
                 Text(report.summary).font(.callout).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                 Picker("显示", selection: $filter) {
                     Text("全部").tag("all")
-                    ForEach([PhotoState.converted, .resumed, .skipped, .failed], id: \.self) { Text($0.title).tag($0.rawValue) }
+                    ForEach([PhotoState.converted, .resumed, .static, .skipped, .failed], id: \.self) { Text($0.title).tag($0.rawValue) }
                 }.frame(maxWidth: 240)
             }.padding(16)
             Divider()
@@ -49,6 +49,7 @@ struct ReportView: View {
             }
         }
         .background(InterfaceStyle.canvas)
+        .tint(InterfaceStyle.accent).accentColor(InterfaceStyle.accent)
         .onChange(of: filter) { _ in if !entries.contains(where: { $0.id == selection }) { selection = nil } }
     }
 }

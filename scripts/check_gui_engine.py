@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Cross-check the self-contained Swift GUI engine against the original format tests."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -12,7 +13,7 @@ from motionlive.jpeg import image_hash,mpf_images
 from motionlive.photo import ultra_from_apple
 from tests.test_formats import motion,jpeg
 
-BINARY = ROOT / ".build/gui/native-tests"
+BINARY = Path(os.environ.get("MOTIONLIVE_NATIVE_TEST_BINARY", str(ROOT / ".build/gui/native-tests")))
 
 
 def call(request, ok=True):
@@ -85,6 +86,11 @@ with tempfile.TemporaryDirectory(prefix="motionlive-swift-gui-") as folder:
             count += 1
     # Stop between files; the successful first pair and report remain valid.
     stopped = call({"mode":"batch","input":str(root/"regular"),"output":str(root/"stop-out"),"cancel_after":1})
-    assert stopped["cancelled"] and sum(stopped["counts"].values()) == 1,stopped
+    assert stopped["cancelled"] and stopped["counts"]["skipped"] == 1, stopped
+    stopped_report = json.loads(Path(stopped["report"]).read_text())
+    assert 1 <= stopped_report["performance"]["completed_entries"] <= 2, stopped_report
+    for entry in stopped_report["files"]:
+        if entry["status"] in ("converted", "resumed"):
+            assert Path(entry["output"]).is_dir(), entry
     count += 1
 print("PASS",count,"native GUI engine checks")

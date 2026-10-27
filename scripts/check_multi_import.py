@@ -2,13 +2,14 @@
 """Exercise the same multi-input scan/conversion API used by GUI pick/drop/open."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-BINARY = ROOT / '.build/gui/native-tests'
+BINARY = Path(os.environ.get("MOTIONLIVE_NATIVE_TEST_BINARY", str(ROOT / ".build/gui/native-tests")))
 sys.path.insert(0, str(ROOT))
 from motionlive.photo import parse
 
@@ -48,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix='motionlive-multi-', dir=ROOT / '.build'
     for directory in ('来源 A', '来源 B'):
         pair = output / directory / 'same.MP.jpg.livephoto'
         manifest = json.loads((pair / 'manifest.json').read_text())
-        assert manifest['implementation'] == 'gui-native-1.1.4'
+        assert manifest['implementation'] == 'gui-native-1.1.5'
         assert manifest['source_sha256'] == hashlib.sha256(source_bytes).hexdigest()
         for name, digest in manifest['output_sha256'].items():
             assert hashlib.sha256((pair/name).read_bytes()).hexdigest() == digest

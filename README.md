@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.2.0</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.3.0</strong>
 </p>
 
 # MomentStays — Android Motion Photo ↔ Apple Live Photo Converter for macOS

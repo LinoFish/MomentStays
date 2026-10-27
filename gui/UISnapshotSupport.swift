@@ -37,6 +37,7 @@ final class UISnapshotSupport {
             model.recentTasksAvailable = true; model.shareReady = model.settings.direction == .toAndroid
             model.libraryMonitoring = true; model.librarySummary = "监测所选相册（运行期间）"
         }
+        if CommandLine.arguments.contains("--ui-preview") || CommandLine.arguments.contains("--ui-hover-preview") || argument("--ui-cover-index") != nil { model.previewVisible = true }
         if CommandLine.arguments.contains("--ui-select-first") { model.selection = model.items.first?.id }
         if CommandLine.arguments.contains("--ui-detail") { model.detailExpanded = true }
     }
@@ -46,6 +47,7 @@ final class UISnapshotSupport {
         let height = Double(argument("--ui-height") ?? "700") ?? 700
         resize(width: width, height: height)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            if CommandLine.arguments.contains("--ui-source-menu") { self.model.sourceMenuRequested = true }
             if CommandLine.arguments.contains("--ui-error-preview") { self.model.errorMessage = "示例错误：照片缺少有效封面时间。原片保持不变，可在高级参数中检查时间策略。" }
             if CommandLine.arguments.contains("--ui-report-preview") { self.showReportPreview() }
             if CommandLine.arguments.contains("--ui-expand-settings") { self.model.settingsPresented = true }
@@ -107,11 +109,30 @@ final class UISnapshotSupport {
     }
     private func metrics() -> [String: Any] {
         let bounds = window.contentView?.bounds ?? .zero
-        let visible = CGRect(origin: .zero, size: bounds.size)
+        let visible = CGRect(origin: .zero, size: bounds.size).insetBy(dx:-0.5,dy:-0.5)
         let queue = frames["queue-list"] ?? .zero
         let primary = frames["primary-action"] ?? .zero
         let tables = window.contentView.map { descendants($0).compactMap { $0 as? NSTableView } } ?? []
-        return ["frame_width": window.frame.width, "frame_height": window.frame.height,
+        let buttons = window.contentView.map { descendants($0).compactMap { $0 as? NSButton } } ?? []
+        let sourceButton = buttons.first { $0.identifier?.rawValue == "import-button" }
+        var sourceColor: [Double] = []
+        var systemAccentColor: [Double] = []
+        window.effectiveAppearance.performAsCurrentDrawingAppearance {
+            if let color = NSColor.systemOrange.usingColorSpace(.sRGB) {
+                systemAccentColor = [Double(color.redComponent), Double(color.greenComponent), Double(color.blueComponent)]
+            }
+            if let color = sourceButton?.bezelColor?.usingColorSpace(.sRGB) {
+                sourceColor = [Double(color.redComponent), Double(color.greenComponent), Double(color.blueComponent)]
+            }
+        }
+        return ["source_button_title": sourceButton?.title ?? "", "source_button_color": sourceColor, "system_accent_color": systemAccentColor,
+            "window_controls_visible": [NSWindow.ButtonType.closeButton,.miniaturizeButton,.zoomButton].allSatisfy { window.standardWindowButton($0)?.isHidden == false },
+            "source_menu_opened": SourceMenuDiagnostics.opened,
+            "source_menu_titles": SourceMenuDiagnostics.titles,
+            "queue_scope": frames.keys.first(where: { $0.hasPrefix("queue-scope-") })?.replacingOccurrences(of:"queue-scope-",with:"") ?? "",
+            "titlebar_brand_visible": window.titlebarAccessoryViewControllers.contains { !$0.view.isHidden },
+            "titlebar_absent": !window.styleMask.contains(.titled),
+            "frame_width": window.frame.width, "frame_height": window.frame.height,
             "content_height": bounds.height, "queue_height": queue.height,
             "queue_width": queue.width, "primary_visible": !primary.isEmpty && visible.contains(primary),
             "queue_visible": !queue.isEmpty && visible.contains(queue),

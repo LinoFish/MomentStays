@@ -1,6 +1,11 @@
 import AppKit
 import SwiftUI
 
+final class WorkspaceWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 // macOS host: shared UI and task state live in SwiftUI/model files.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     let model = WorkspaceModel()
@@ -15,8 +20,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if startupArgument("--direction") == "to-android" { model.updateSettings { $0.direction = .toAndroid } }
         buildMenu()
         AppIconAppearance.shared.start()
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 700),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window = WorkspaceWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 700),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        for kind: NSWindow.ButtonType in [.closeButton,.miniaturizeButton,.zoomButton] {
+            window.standardWindowButton(kind)?.isHidden = false
+        }
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        let brand = NSTitlebarAccessoryViewController()
+        brand.view = NSHostingView(rootView:MomentStaysBrandIcon().frame(width:20,height:20).accessibilityHidden(true))
+        brand.view.frame = NSRect(x:0,y:0,width:28,height:24)
+        brand.layoutAttribute = .right
+        window.addTitlebarAccessoryViewController(brand)
+        window.isMovableByWindowBackground = true
         window.title = "MomentStays"; window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 390, height: 540)
         window.delegate = self; platform.window = window
@@ -109,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func shareResults() { platform.shareResults() }
     @objc private func recentResults() { platform.showRecentTasks() }
     @objc private func stopMonitoring() { platform.stopMonitoring() }
-    @objc private func chooseSources() { platform.chooseSources() }
+    @objc private func chooseSources() { model.sourceMenuRequested = true }
     @objc private func chooseOutput() { platform.chooseOutput() }
     @objc private func importPhotos() { platform.importPhotos() }
     @objc private func start() { platform.start() }

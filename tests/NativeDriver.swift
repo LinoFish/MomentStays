@@ -57,7 +57,7 @@ struct NativeDriver {
                     { _,_ in policy == "overwrite" ? .overwrite : policy == "skip" ? .skip : .cancel }
                 }
                 let outcome = try NativeBatch.run(sources:inputs,
-                    output:URL(fileURLWithPath:req["output"] as! String),options:options,token:token,existingOutput:resolver) { update in
+                    output:URL(fileURLWithPath:req["output"] as! String),options:options,token:token,concurrency:req["concurrency"] as? Int,existingOutput:resolver) { update in
                         if let after = req["cancel_after"] as? Int, update.index >= after { token.cancel() }
                     }
                 var result: [String:Any] = ["counts":outcome.counts,"report":outcome.report.map { $0.path as Any } ?? NSNull(),"cancelled":outcome.cancelled]

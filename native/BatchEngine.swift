@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import Darwin
+import ImageIO
 
 struct ConversionOptions {
     var direction = "to-apple"
@@ -34,6 +35,15 @@ final class StopToken {
     var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return stopped }
 }
 
+final class BatchTimings {
+    private(set) var seconds: [String:Double] = [:]
+    func measure<T>(_ stage: String, _ work: () throws -> T) rethrows -> T {
+        let start = ProcessInfo.processInfo.systemUptime
+        defer { seconds[stage,default:0] += ProcessInfo.processInfo.systemUptime - start }
+        return try work()
+    }
+}
+
 struct ScanRow {
     let source: URL
     let relative: String
@@ -43,7 +53,70 @@ struct ScanRow {
     let detail: String
     var manufacturer: String = "未知"
     var manufacturerDetail: String = ""
-    var needsInspection: Bool { !isMotion && detail != PhotoFormat.notMotion }
+    var confirmedStatic = false
+    var version: SourceVersion?
+    var needsInspection: Bool { !isMotion && !confirmedStatic }
+}
+
+// A batch-local reuse check, including inode and change time. Never persisted as
+// proof of content identity; conversion still hashes its input and output.
+struct SourceVersion: Equatable {
+    let device: Int32
+    let inode: UInt64
+    let size: Int64
+    let modified: timespec
+    let changed: timespec
+    static func read(_ url: URL) -> SourceVersion? {
+        var value = stat()
+        guard lstat(url.path, &value) == 0, (value.st_mode & S_IFMT) == S_IFREG else { return nil }
+        return SourceVersion(device:value.st_dev,inode:value.st_ino,size:value.st_size,modified:value.st_mtimespec,changed:value.st_ctimespec)
+    }
+    static func == (a: Self, b: Self) -> Bool {
+        a.device == b.device && a.inode == b.inode && a.size == b.size &&
+        a.modified.tv_sec == b.modified.tv_sec && a.modified.tv_nsec == b.modified.tv_nsec &&
+        a.changed.tv_sec == b.changed.tv_sec && a.changed.tv_nsec == b.changed.tv_nsec
+    }
+}
+
+// Fixed-size workers, with weighted admission so large inputs run alone when
+// necessary. Results/progress are serialized; no task is created per library item.
+enum BatchScheduling {
+    static func limit(scanning: Bool) -> Int {
+        let info = ProcessInfo.processInfo
+        if info.thermalState == .serious || info.thermalState == .critical { return 1 }
+        return max(1,min(scanning ? 4 : 2,info.activeProcessorCount / 2,Int(info.physicalMemory / (2 * 1024 * 1024 * 1024))))
+    }
+    @discardableResult static func perform<T>(files: [URL], limit: Int, heavy: Bool = false, token: StopToken,
+                           work: @escaping (Int) -> T, receive: @escaping (Int,T) -> Void) -> (peak: Int, reservedBytes: Int64) {
+        guard !files.isEmpty else { return (0,0) }
+        let condition = NSCondition(), group = DispatchGroup()
+        let budget = max(Int64(256 * 1024 * 1024),Int64(ProcessInfo.processInfo.physicalMemory / 8))
+        let costs = files.map { min(budget,max(Int64(64 * 1024 * 1024),min(budget,SourceVersion.read($0)?.size ?? budget) * (heavy ? 24 : 12))) }
+        var next = 0, used: Int64 = 0
+        var running = 0, peak = 0, peakBytes: Int64 = 0
+        for _ in 0..<max(1,min(limit,files.count)) {
+            group.enter()
+            DispatchQueue.global(qos:.userInitiated).async {
+                defer { group.leave() }
+                while true {
+                    condition.lock()
+                    while next < files.count && !token.isCancelled && used + costs[next] > budget {
+                        _ = condition.wait(until:Date().addingTimeInterval(0.1))
+                    }
+                    guard next < files.count, !token.isCancelled else { condition.unlock(); return }
+                    let index = next, cost = costs[index]; next += 1; used += cost
+                    running += 1; peak = max(peak,running); peakBytes = max(peakBytes,used)
+                    condition.unlock()
+                    let value = autoreleasepool { work(index) }
+                    condition.lock()
+                    receive(index,value)
+                    used -= cost; running -= 1; condition.broadcast(); condition.unlock()
+                }
+            }
+        }
+        group.wait()
+        return (peak,peakBytes)
+    }
 }
 
 struct BatchProgress {
@@ -116,37 +189,81 @@ enum NativeBatch {
         let prefix = input.path.hasSuffix("/") ? input.path : input.path + "/"
         guard output != input && !output.path.hasPrefix(prefix) else { throw Failure("请选择原片文件夹之外的输出位置") }
     }
-    static func scan(source: URL, token: StopToken, progress: (Int,Int)->Void) throws -> [ScanRow] {
+    static func scan(source: URL, token: StopToken, progress: @escaping (Int,Int)->Void) throws -> [ScanRow] {
         try scan(sources: [source], token: token, progress: progress)
     }
-    static func scan(sources: [URL], direction:String = "to-apple", token: StopToken, progress: (Int,Int)->Void) throws -> [ScanRow] {
-        if direction == "to-android" { return try AndroidExport.scan(sources,token:token,progress:progress) }
+    static func scan(sources: [URL], direction:String = "to-apple", token: StopToken,
+                     concurrency: Int? = nil, rowsReady: (([ScanRow])->Void)? = nil,
+                     progress: @escaping (Int,Int)->Void) throws -> [ScanRow] {
+        if direction == "to-android" { return try AndroidExport.scan(sources,token:token,concurrency:concurrency,rowsReady:rowsReady,progress:progress) }
         let (base, entries) = try selection(sources)
-        var rows: [ScanRow] = []
-        for (index,file) in entries.enumerated() {
-            if token.isCancelled { break }
-            let rel = try relative(file, root: base)
-            let row: ScanRow = autoreleasepool {
-                do {
-                    let photo = try PhotoFormat.parse(Array(Data(contentsOf: file)))
-                    let maker = PhotoVendor.identify(photo.still,format:photo.format)
-                    let hdr: String
-                    if PhotoHEIF.matches(photo.still) { hdr = "HEIC（原样保留）" }
-                    else if photo.ultra { hdr = "Ultra HDR" }
-                    else if try PhotoHDR.honorPrivate(photo.still) != nil { hdr = "荣耀私有 HDR" }
-                    else if try PhotoHDR.hasISO(photo.still) { hdr = "ISO HDR" }
-                    else { hdr = ((try? PhotoHDR.legacy(photo.still).0) ?? nil) != nil ? "旧 Apple HDR" : "SDR / 其他" }
-                    let time = photo.coverFrame.map { "原始第 \($0) 帧（从0计）" } ?? photo.timestamp.map { String(format: "%.6f 秒", Double($0) / 1e6) } ?? "未记录"
-                    return ScanRow(source: file, relative: rel, isMotion: true, hdr: hdr, cover: time,
-                        detail: hdr == "荣耀私有 HDR" ? "荣耀私有 HDR：保留静态扩展，暂不能转为 Ultra HDR；Apple 设备显示 SDR" : photo.timestamp == nil && photo.coverFrame == nil ? "缺少封面时间；默认不转换" : "\(photo.format)：等待转换",manufacturer:maker.name,manufacturerDetail:maker.detail)
-                } catch {
-                    let maker = PhotoVendor.identify((try? Array(Data(contentsOf:file))) ?? [],format:"")
-                    return ScanRow(source: file, relative: rel, isMotion: false, hdr: "—", cover: "—", detail: error.localizedDescription,manufacturer:maker.name,manufacturerDetail:maker.detail)
+        let relatives = try entries.map { try relative($0,root:base) }
+        var rows = [Int:ScanRow](), completed = 0
+        var pending: [ScanRow] = [], lastUpdate = Date.distantPast
+        BatchScheduling.perform(files:entries,limit:concurrency ?? BatchScheduling.limit(scanning:true),token:token,
+            work: { index in scanFile(entries[index],relative:relatives[index]) }, receive: { index,row in
+                rows[index] = row; completed += 1; pending.append(row)
+                if completed == entries.count || Date().timeIntervalSince(lastUpdate) >= 0.1 {
+                    rowsReady?(pending); pending.removeAll(keepingCapacity:true); lastUpdate = Date()
                 }
-            }
-            rows.append(row); progress(index + 1, entries.count)
+                progress(completed,entries.count)
+            })
+        if !pending.isEmpty { rowsReady?(pending) }
+        return rows.keys.sorted().compactMap { rows[$0] }
+    }
+    static func scanFile(_ file: URL, relative: String) -> ScanRow {
+        let before = SourceVersion.read(file)
+        var data: [UInt8] = []
+        var row: ScanRow
+        do {
+            data = Array(try Data(contentsOf:file))
+            let photo = try PhotoFormat.parse(data)
+            let maker = PhotoVendor.identify(photo.still,format:photo.format)
+            let hdr: String
+            if PhotoHEIF.matches(photo.still) { hdr = "HEIC（原样保留）" }
+            else if photo.ultra { hdr = "Ultra HDR" }
+            else if try PhotoHDR.honorPrivate(photo.still) != nil { hdr = "荣耀私有 HDR" }
+            else if try PhotoHDR.hasISO(photo.still) { hdr = "ISO HDR" }
+            else { hdr = ((try? PhotoHDR.legacy(photo.still).0) ?? nil) != nil ? "旧 Apple HDR" : "SDR / 其他" }
+            let time = photo.coverFrame.map { "原始第 \($0) 帧（从0计）" } ?? photo.timestamp.map { String(format:"%.6f 秒",Double($0) / 1e6) } ?? "未记录"
+            row = ScanRow(source:file,relative:relative,isMotion:true,hdr:hdr,cover:time,
+                detail:hdr == "荣耀私有 HDR" ? "荣耀私有 HDR：保留静态扩展，暂不能转为 Ultra HDR；Apple 设备显示 SDR" : time == "未记录" ? "缺少封面时间；默认不转换" : "\(photo.format)：等待转换",manufacturer:maker.name,manufacturerDetail:maker.detail)
+        } catch {
+            let maker = PhotoVendor.identify(data,format:"")
+            let isStatic = error.localizedDescription == PhotoFormat.notMotion && confirmedStatic(data)
+            row = ScanRow(source:file,relative:relative,isMotion:false,hdr:"—",cover:"—",
+                detail:isStatic ? "静态照片，不含动态内容，不参与转换" : error.localizedDescription,
+                manufacturer:maker.name,manufacturerDetail:maker.detail,confirmedStatic:isStatic)
         }
-        return rows
+        if let before = before, before == SourceVersion.read(file) { row.version = before }
+        else {
+            row = ScanRow(source:file,relative:relative,isMotion:false,hdr:"—",cover:"—",detail:"扫描期间来源发生变化，请重新扫描")
+        }
+        return row
+    }
+    static func confirmedStatic(_ data: [UInt8]) -> Bool {
+        do {
+            // The parser's notMotion message alone also covers unsupported motion
+            // layouts. Require a complete still container without motion claims.
+            var packets: [XMPPacket]
+            if PhotoHEIF.matches(data) {
+                let layout = try PhotoHEIF.layout(data)
+                guard layout.boxes.allSatisfy({ ["ftyp","meta","mdat","free","skip"].contains($0.type) }) else { return false }
+                packets = try layout.items.filter { $0.type == "mime" }.flatMap {
+                    try MLXMP.packets([255,216] + MLJPEG.app(225,MLXMP.header + PhotoHEIF.bytes(data,$0)) + [255,217])
+                }
+            } else {
+                guard try MLJPEG.imageRanges(data).last?.upperBound == data.count else { return false }
+                packets = try MLXMP.packets(data)
+            }
+            let claims = ["MotionPhoto","MicroVideo","VideoLength","MediaDataOffset","MotionPhoto_Data"]
+            guard !packets.contains(where: { packet in claims.contains { packet.document.xmlString.contains($0) } }) else { return false }
+            guard let image = CGImageSourceCreateWithData(Data(data) as CFData,nil), CGImageSourceGetStatus(image) == .statusComplete,
+                  let props = CGImageSourceCopyPropertiesAtIndex(image,0,nil) as? [String:Any],
+                  (props[kCGImagePropertyPixelWidth as String] as? Int ?? 0) > 0,
+                  (props[kCGImagePropertyPixelHeight as String] as? Int ?? 0) > 0 else { return false }
+            return true
+        } catch { return false }
     }
     static func hashFile(_ url: URL) throws -> String {
         // Streaming avoids retaining an additional copy of each original photo.
@@ -239,7 +356,7 @@ enum NativeBatch {
         }
         guard status == 0 else { throw Failure("无法恢复输出文件名；原结果已保留：\(String(cString:strerror(errno)))") }
     }
-    static func convert(source: URL, target: URL, options: ConversionOptions, token: StopToken, overwrite: Bool = false) throws -> [String:Any] {
+    static func convert(source: URL, target: URL, options: ConversionOptions, token: StopToken, overwrite: Bool = false, timings: BatchTimings = BatchTimings()) throws -> [String:Any] {
         var options = options
         if let index = options.coverSelections[normalized(source).path] { options.coverIndex = index }
         guard ["primary","secondary"].contains(options.videoTrack), ["livephoto","livephoto+auxiliary","auxiliary-only","livephoto+candidates"].contains(options.outputMode) else { throw Failure("轨道或导出模式无效") }
@@ -247,7 +364,7 @@ enum NativeBatch {
         guard (options.coverIndex == nil && options.outputMode != "livephoto+candidates") || options.videoTrack == "primary" else { throw Failure("高清候选封面需搭配主运动轨") }
         guard ["static","livephoto"].contains(options.candidateDelivery) else { throw Failure("候选照片的交付格式无效") }
         let fm = FileManager.default
-        let sourceHash = try hashFile(source)
+        let sourceHash = try timings.measure("source_hash") { try hashFile(source) }
         if !overwrite && fm.fileExists(atPath: target.path) {
             let manifest = try verify(target)
             var previous = manifest["options"] as? [String:Any] ?? [:]
@@ -277,7 +394,7 @@ enum NativeBatch {
             }
             throw Failure("同名输出已存在且内容或设置不同；未覆盖，请选择新的输出目录")
         }
-        let photo = try PhotoFormat.parse(Array(Data(contentsOf: source)))
+        let photo = try timings.measure("source_parse") { try PhotoFormat.parse(Array(Data(contentsOf:source))) }
         if options.outputMode != "auxiliary-only" && options.coverIndex == nil && photo.timestamp == nil && photo.coverFrame == nil && options.missingTime == "error" { throw Failure("原片没有有效封面时间戳或封面帧号，未使用推测位置") }
         if token.isCancelled { throw Failure("已停止") }
         try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -320,7 +437,7 @@ enum NativeBatch {
                 "output_sha256":[name:try hashFile(stage.appendingPathComponent(name))],"timing":auxiliary!,
                 "auxiliary_video":auxiliary!,"hdr":["status":"not-applicable"],"warnings":[]]
             try json(manifest,to:stage.appendingPathComponent("manifest.json"))
-            try publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles)
+            try timings.measure("validation_and_publish") { try publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles) }
             return ["status":"converted","source":source.path,"output":target.path,"detail":"辅助轨已单独导出：\(auxiliary!["width"]!) × \(auxiliary!["height"]!)，\(auxiliary!["frames"]!) 帧，\(auxiliary!["duration_seconds"]!) 秒；无音频，未重新编码" + (auxiliary?["duration_repair"] == nil ? "" : "；已按设置修复零时长，画面数据未改变"),"auxiliary_video":auxiliary!]
         }
         var image = photo.still
@@ -399,7 +516,7 @@ enum NativeBatch {
             request["timestamp_source"] = "video-metadata"
             warnings.append("主 XMP 缺失；已从内嵌视频元数据恢复原始封面时间")
         }
-        let timing = try movie(request)
+        let timing = try timings.measure("media_remux_and_validation") { try movie(request) }
         var candidatePhotos: [[String:Any]] = []
         if options.outputMode == "livephoto+candidates" {
             let stem = source.deletingPathExtension().lastPathComponent
@@ -416,7 +533,7 @@ enum NativeBatch {
                 if let timestamp = timestamp { request["timestamp_us"] = timestamp }
                 if let frame = frame { request["cover_frame_index"] = frame }
                 if role != "original" { request["timestamp_source"] = "high-res-candidate" }
-                let timing = try movie(request)
+                let timing = try timings.measure("media_remux_and_validation") { try movie(request) }
                 names[candidateVideoRole(role)] = movieName
                 return timing
             }
@@ -457,61 +574,110 @@ enum NativeBatch {
         if let selectedCandidate = selectedCandidate { manifest["selected_cover"] = selectedCandidate }
         if options.outputMode == "livephoto+candidates" { manifest["candidate_photos"] = candidatePhotos }
         try json(manifest,to:stage.appendingPathComponent("manifest.json"))
-        try publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles)
+        try timings.measure("validation_and_publish") { try publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles) }
         return ["status":"converted","source":source.path,"output":target.path,"timing":timing,"hdr":hdr,"warnings":warnings,
             "output_files":names,
             "detail":(warnings.isEmpty ? (hdr["reason"] as? String ?? "已转换并校验") : warnings.joined(separator:"；")) +
                 (options.outputMode == "livephoto+candidates" ? "；另存 \(candidatePhotos.count) 张" + (options.candidateDelivery == "livephoto" ? "独立实况照片" : "独立高清静态照片") : "")]
     }
     static func run(source: URL, output: URL, options: ConversionOptions, token: StopToken,
-                    progress: (BatchProgress)->Void) throws -> BatchOutcome {
-        try run(sources: [source], output: output, options: options, token: token, progress: progress)
+                    progress: @escaping (BatchProgress)->Void) throws -> BatchOutcome {
+        try run(sources:[source],output:output,options:options,token:token,progress:progress)
     }
     static func run(sources: [URL], output: URL, options: ConversionOptions, token: StopToken,
+                    scanRows: [ScanRow]? = nil, concurrency: Int? = nil,
                     existingOutput: ((URL,URL)->ExistingOutputDecision)? = nil,
-                    progress: (BatchProgress)->Void) throws -> BatchOutcome {
+                    progress: @escaping (BatchProgress)->Void) throws -> BatchOutcome {
+        let started = ProcessInfo.processInfo.systemUptime
         let destination = normalized(output)
         try validateOutput(sources:sources,output:destination)
         let (base, entries) = try options.direction == "to-android" ? AndroidExport.selection(sources) : selection(sources)
-        try FileManager.default.createDirectory(at:destination,withIntermediateDirectories:true)
-        var results: [[String:Any]] = []
-        var counts = ["converted":0,"resumed":0,"skipped":0,"failed":0]
-        for (index,file) in entries.enumerated() {
-            if token.isCancelled { break }
-            let rel = try relative(file,root:base)
-            let target = destination.appendingPathComponent(rel + (options.direction == "to-android" ? ".motionphoto" : options.outputMode == "auxiliary-only" ? ".auxiliary-export" : ".livephoto"))
-            var overwrite = false
-            if FileManager.default.fileExists(atPath:target.path), let decide = existingOutput {
-                switch decide(file,target) {
-                case .skip:
-                    counts["skipped",default:0] += 1
-                    let detail = "输出已存在，已按选择跳过；已有文件未改动"
-                    results.append(["status":"skipped","source":file.path,"output":target.path,"detail":detail])
-                    progress(BatchProgress(index:index + 1,total:entries.count,relative:rel,status:"skipped",detail:detail))
-                    continue
-                case .overwrite: overwrite = true
-                case .cancel: token.cancel()
-                }
+        let enumerated = ProcessInfo.processInfo.systemUptime
+        if let rows = scanRows {
+            guard Set(rows.map { normalized($0.source) }) == Set(entries) else {
+                throw Failure("来源清单已变化，请重新扫描后转换")
             }
-            if token.isCancelled { break }
-            let result: [String:Any] = autoreleasepool {
-                do {
-                    if options.direction == "to-android" { return try AndroidExport.convert(source:file,target:target,options:options,token:token,overwrite:overwrite) }
-                    return try convert(source:file,target:target,options:options,token:token,overwrite:overwrite) }
-                catch {
-                    let skipped = error.localizedDescription == PhotoFormat.notMotion
-                    return ["status":skipped ? "skipped" : "failed","source":file.path,"error":error.localizedDescription,"detail":error.localizedDescription]
-                }
-            }
-            if token.isCancelled { break }
-            let status = result["status"] as? String ?? "failed"
-            counts[status,default:0] += 1; results.append(result)
-            progress(BatchProgress(index:index + 1,total:entries.count,relative:rel,status:status,detail:result["detail"] as? String ?? ""))
         }
+        let relatives = try entries.map { try relative($0,root:base) }
+        let snapshot = Dictionary((scanRows ?? []).map { (normalized($0.source),$0) },uniquingKeysWith:{ a,_ in a })
+        var staticIndices: Set<Int> = []
+        if options.direction != "to-android" {
+            for (index,file) in entries.enumerated() {
+                if token.isCancelled { break }
+                let row: ScanRow
+                if let cached = snapshot[file], cached.version != nil, cached.version == SourceVersion.read(file) { row = cached }
+                else { row = autoreleasepool { scanFile(file,relative:relatives[index]) } }
+                if row.confirmedStatic { staticIndices.insert(index) }
+            }
+        }
+        let planned = ProcessInfo.processInfo.systemUptime
+        let total = entries.count - staticIndices.count
+        var results: [Int:[String:Any]] = [:]
+        var counts = ["converted":0,"resumed":0,"skipped":0,"failed":0]
+        for index in staticIndices.sorted() {
+            results[index] = ["status":"skipped","classification":"static","source":entries[index].path,"detail":"静态照片，已跳过"]
+            counts["skipped",default:0] += 1
+            progress(BatchProgress(index:0,total:total,relative:relatives[index],status:"static",detail:"静态照片，已跳过"))
+        }
+        let active = entries.indices.filter { !staticIndices.contains($0) }
+        let targets = active.map { destination.appendingPathComponent(relatives[$0] + (options.direction == "to-android" ? ".motionphoto" : options.outputMode == "auxiliary-only" ? ".auxiliary-export" : ".livephoto")) }
+        // Reserve targets before dispatch, including case-insensitive volumes.
+        guard Set(targets.map { $0.path.precomposedStringWithCanonicalMapping.lowercased() }).count == targets.count else {
+            throw Failure("多个来源映射到同一输出路径，请分批转换")
+        }
+        if !active.isEmpty { try FileManager.default.createDirectory(at:destination,withIntermediateDirectories:true) }
+        let decisionLock = NSLock()
+        var completed = 0
+        let workers = concurrency ?? BatchScheduling.limit(scanning:false)
+        let scheduling = BatchScheduling.perform(files:active.map { entries[$0] },limit:workers,
+            heavy:options.coverIndex != nil || !options.coverSelections.isEmpty || options.outputMode == "livephoto+candidates",token:token,
+            work: { offset -> [String:Any] in
+                let index = active[offset], file = entries[index], target = targets[offset]
+                var overwrite = false
+                var wait: Double = 0
+                if FileManager.default.fileExists(atPath:target.path), let decide = existingOutput {
+                    let waiting = ProcessInfo.processInfo.systemUptime
+                    decisionLock.lock()
+                    let decision = token.isCancelled ? ExistingOutputDecision.cancel : decide(file,target)
+                    decisionLock.unlock()
+                    wait = ProcessInfo.processInfo.systemUptime - waiting
+                    switch decision {
+                    case .skip: return ["status":"skipped","source":file.path,"output":target.path,"detail":"输出已存在，已按选择跳过；已有文件未改动","decision_wait_seconds":wait]
+                    case .overwrite: overwrite = true
+                    case .cancel: token.cancel()
+                    }
+                }
+                if token.isCancelled { return ["status":"cancelled"] }
+                let began = ProcessInfo.processInfo.systemUptime
+                var result: [String:Any]
+                let timings = BatchTimings()
+                do {
+                    result = try options.direction == "to-android" ? AndroidExport.convert(source:file,target:target,options:options,token:token,overwrite:overwrite,timings:timings) : convert(source:file,target:target,options:options,token:token,overwrite:overwrite,timings:timings)
+                } catch {
+                    result = ["status":"failed","source":file.path,"error":error.localizedDescription,"detail":error.localizedDescription]
+                }
+                result["stage_seconds"] = timings.seconds
+                result["conversion_seconds"] = ProcessInfo.processInfo.systemUptime - began
+                result["decision_wait_seconds"] = wait
+                return result
+            }, receive: { offset,result in
+                let status = result["status"] as? String ?? "failed"
+                // Retain successfully published work even if another worker stopped.
+                guard status != "cancelled", !token.isCancelled || ["converted","resumed","skipped"].contains(status) else { return }
+                let index = active[offset]
+                results[index] = result; counts[status,default:0] += 1; completed += 1
+                progress(BatchProgress(index:completed,total:total,relative:relatives[index],status:status,detail:result["detail"] as? String ?? ""))
+            })
         let stamp = ISO8601DateFormatter().string(from:Date()).replacingOccurrences(of:":",with:"-")
         let report = options.exportDataFiles ? destination.appendingPathComponent("report-\(stamp)-\(UUID().uuidString.prefix(6)).json") : nil
-        let data: [String:Any] = ["counts":counts,"cancelled":token.isCancelled,"files":results]
-        if let report = report { try json(data,to:report) }
+        let metrics: [String:Any] = ["enumeration_seconds":enumerated - started,"planning_seconds":planned - enumerated,
+            "total_seconds":ProcessInfo.processInfo.systemUptime - started,"worker_limit":workers,"peak_in_flight":scheduling.peak,"peak_reserved_bytes":scheduling.reservedBytes,
+            "static_skipped":staticIndices.count,"conversion_entries":total,"completed_entries":completed]
+        let data: [String:Any] = ["counts":counts,"cancelled":token.isCancelled,"files":results.keys.sorted().compactMap { results[$0] },"performance":metrics]
+        if let report = report {
+            try FileManager.default.createDirectory(at:destination,withIntermediateDirectories:true)
+            try json(data,to:report)
+        }
         return BatchOutcome(counts:counts,report:report,reportData:data,cancelled:token.isCancelled)
     }
 }

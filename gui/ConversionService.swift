@@ -4,6 +4,7 @@ struct ConversionJob {
     let sources: [URL]
     let output: URL
     let options: ConversionOptions
+    var scanRows: [ScanRow]? = nil
 }
 
 typealias ExistingOutputPresenter = (URL, URL, @escaping (ExistingOutputDecision) -> Void) -> Void
@@ -11,7 +12,7 @@ typealias ExistingOutputPresenter = (URL, URL, @escaping (ExistingOutputDecision
 // Completion/progress/presentation callbacks are delivered on the main queue.
 // Implementations own execution, never the lifetime of a SwiftUI View.
 protocol ConversionServing {
-    func scan(sources: [URL], direction: ConversionDirection, token: StopToken,
+    func scan(sources: [URL], direction: ConversionDirection, token: StopToken, rowsReady: @escaping ([ScanRow]) -> Void,
               progress: @escaping (Int, Int) -> Void, completion: @escaping (Result<[ScanRow], Error>) -> Void)
     func run(job: ConversionJob, token: StopToken, existingOutput: @escaping ExistingOutputPresenter,
              progress: @escaping (BatchProgress) -> Void, completion: @escaping (Result<BatchOutcome, Error>) -> Void)
@@ -44,12 +45,14 @@ final class OutputDecisionLatch {
 final class ConversionService: ConversionServing {
     private let worker = DispatchQueue(label: "app.motionlive.conversion", qos: .userInitiated)
 
-    func scan(sources: [URL], direction: ConversionDirection, token: StopToken,
+    func scan(sources: [URL], direction: ConversionDirection, token: StopToken, rowsReady: @escaping ([ScanRow]) -> Void,
               progress: @escaping (Int, Int) -> Void, completion: @escaping (Result<[ScanRow], Error>) -> Void) {
         worker.async {
             var lastUpdate = Date.distantPast
             let result = Result {
-                try NativeBatch.scan(sources: sources, direction: direction.rawValue, token: token) { index, total in
+                try NativeBatch.scan(sources: sources, direction: direction.rawValue, token: token, rowsReady: { rows in
+                    DispatchQueue.main.async { rowsReady(rows) }
+                }) { index, total in
                     let now = Date()
                     if index == total || now.timeIntervalSince(lastUpdate) >= 0.1 {
                         lastUpdate = now
@@ -65,7 +68,7 @@ final class ConversionService: ConversionServing {
              progress: @escaping (BatchProgress) -> Void, completion: @escaping (Result<BatchOutcome, Error>) -> Void) {
         worker.async {
             let result = Result {
-                try NativeBatch.run(sources: job.sources, output: job.output, options: job.options, token: token,
+                try NativeBatch.run(sources: job.sources, output: job.output, options: job.options, token: token, scanRows: job.scanRows,
                     existingOutput: { source, target in
                         let latch = OutputDecisionLatch()
                         DispatchQueue.main.async {
