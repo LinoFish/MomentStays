@@ -30,3 +30,33 @@ artifacts/
 *.[mM][pP]4
 *.zip
 *.dmg
+
+# Local agent instructions, editor settings and personal development records.
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/.agents/
+/.codex/
+/.claude/
+/.cursor/
+/.astera/
+/.idea/
+/.vscode/
+/docs/design/huashu/*
+/docs/design/native-workflow-*/*
+/docs/design/*.mockup.html
+/docs/design/ux-audit-*.md
+/docs/development/*开发计划.md
+/docs/development/*复用方案.md
+/docs/development/Swift引擎性能优化方案.md
+/docs/development/性能复查*
+/docs/product/并行处理、辅助照片EXIF与安卓互转.md
+/docs/product/照片队列分类与状态展示.md
+/docs/validation/*
+
+# Regenerable test output and coverage caches.
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

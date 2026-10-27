@@ -36,7 +36,7 @@ These acknowledgements describe the recorded research scope; they do not claim t
 - [ds_store](https://github.com/dmgbuild/ds_store) and [mac_alias](https://github.com/dmgbuild/mac_alias): MIT-licensed build dependencies, pinned in `packaging/dmg-requirements.txt`, used by `packaging/dmg_layout.py`. Their Python code is not bundled in the app or DMG.
 - [dmgbuild](https://github.com/dmgbuild/dmgbuild) and Chromium's [DMG layout generator](https://chromium.googlesource.com/chromium/src/+/main/chrome/installer/mac/generate_dsstore.py): references for installer creation and Finder layout fields.
 - [Python-Markdown](https://github.com/Python-Markdown/markdown): BSD-3-Clause documentation-tool dependency imported by `scripts/sync_website_guides.py`; not needed to run the app.
-- [huashu-design](https://github.com/alchaincyf/huashu-design): design workflow used during interface-prototype exploration, as recorded in the design documentation; not an app runtime dependency.
+- [huashu-design](https://github.com/alchaincyf/huashu-design): design workflow used during interface-prototype exploration; not an app runtime dependency.
 
 Apple and Google developer documentation and format specifications are additional technical references. LocalSend, when installed and enabled by the user, is an external system-sharing target; it is not bundled or linked into MomentStays.
 

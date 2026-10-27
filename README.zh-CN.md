@@ -189,7 +189,7 @@ python3 scripts/check_swiftui_ui.py
 | 应用属性与可复现图标绘制 | `packaging/` |
 | 项目图标与 README 视觉素材 | [品牌素材](docs/branding/README.md) |
 
-进一步阅读：[实现说明](docs/development/SwiftUI实现说明.md)、[图库规范](docs/design/图库识别与自动入册规范.md)、[共享规范](docs/design/输出位置与系统共享规范.md)、[验证范围](docs/validation/图库与共享-1.0.md)、[本地样片与隐私](docs/development/本地样片与隐私.md)。
+进一步阅读：[实现说明](docs/development/SwiftUI实现说明.md)、[图库规范](docs/design/图库识别与自动入册规范.md)、[共享规范](docs/design/输出位置与系统共享规范.md)、[本地样片与隐私](docs/development/本地样片与隐私.md)。
 
 当前尚未提供 iOS 应用。复杂时间线、未知 HEIF 结构和不支持的私有 HDR 可能被明确拒绝。构造媒体回归不能替代真实图库入册/播放、iCloud、第三方共享、手机相册 HDR，以及 ARM/iOS 真机验证。
 
