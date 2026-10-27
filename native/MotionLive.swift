@@ -15,7 +15,17 @@ func emit(_ value: [String: Any]) throws {
     let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
     print(String(decoding: data, as: UTF8.self))
 }
-func sha(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+// Table lookup instead of one String(format:) per byte; same lowercase hex output.
+func hex(_ digest: SHA256.Digest) -> String {
+    let digits = Array("0123456789abcdef".utf8)
+    var chars = [UInt8](repeating: 0, count: digest.count * 2)
+    for (i, byte) in digest.enumerated() {
+        chars[i * 2] = digits[Int(byte >> 4)]
+        chars[i * 2 + 1] = digits[Int(byte & 0x0f)]
+    }
+    return String(decoding: chars, as: UTF8.self)
+}
+func sha(_ data: Data) -> String { hex(SHA256.hash(data: data)) }
 func seconds(_ t: CMTime) -> Double { CMTimeGetSeconds(t) }
 func textItem(_ key: String, _ value: String) -> AVMetadataItem {
     let item = AVMutableMetadataItem()
@@ -77,12 +87,13 @@ func trackInfo(_ asset: AVAsset, _ track: AVAssetTrack) throws -> TrackInfo {
             guard CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: count, destination: &bytes) == noErr else {
                 throw Failure("Cannot read compressed packet")
             }
-            hash.update(data: Data(bytes))
+            // Hash the copied bytes directly; wrapping them in Data would copy every sample again.
+            bytes.withUnsafeBytes { hash.update(bufferPointer: $0) }
         }
     }
     guard reader.status == .completed else { throw Failure(reader.error?.localizedDescription ?? "Sample reading failed") }
     return TrackInfo(track: track, pts: pts, durations: durations, sizes: sizes,
-                     hash: hash.finalize().map { String(format: "%02x", $0) }.joined())
+                     hash: hex(hash.finalize()))
 }
 
 func timedSamples(_ asset: AVAsset) throws -> [(CMTime, CMTime)] {

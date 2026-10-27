@@ -257,7 +257,8 @@ enum NativeBatch {
                 packets = try MLXMP.packets(data)
             }
             let claims = ["MotionPhoto","MicroVideo","VideoLength","MediaDataOffset","MotionPhoto_Data"]
-            guard !packets.contains(where: { packet in claims.contains { packet.document.xmlString.contains($0) } }) else { return false }
+            // xmlString serializes the whole document; build it once per packet, not once per claim.
+            guard !packets.contains(where: { packet in let xml = packet.document.xmlString; return claims.contains { xml.contains($0) } }) else { return false }
             guard let image = CGImageSourceCreateWithData(Data(data) as CFData,nil), CGImageSourceGetStatus(image) == .statusComplete,
                   let props = CGImageSourceCopyPropertiesAtIndex(image,0,nil) as? [String:Any],
                   (props[kCGImagePropertyPixelWidth as String] as? Int ?? 0) > 0,
@@ -271,7 +272,7 @@ enum NativeBatch {
         defer { try? handle.close() }
         var hash = SHA256()
         while let data = try handle.read(upToCount: 1024 * 1024), !data.isEmpty { hash.update(data: data) }
-        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+        return hex(hash.finalize())
     }
     static func json(_ value: Any, to url: URL) throws {
         try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted,.sortedKeys,.withoutEscapingSlashes]).write(to: url, options: .atomic)
@@ -602,13 +603,17 @@ enum NativeBatch {
         let snapshot = Dictionary((scanRows ?? []).map { (normalized($0.source),$0) },uniquingKeysWith:{ a,_ in a })
         var staticIndices: Set<Int> = []
         if options.direction != "to-android" {
-            for (index,file) in entries.enumerated() {
-                if token.isCancelled { break }
-                let row: ScanRow
-                if let cached = snapshot[file], cached.version != nil, cached.version == SourceVersion.read(file) { row = cached }
-                else { row = autoreleasepool { scanFile(file,relative:relatives[index]) } }
-                if row.confirmedStatic { staticIndices.insert(index) }
-            }
+            // Same rescan as before, but concurrent like scan(): scanFile only
+            // reads its own file, and staticIndices is only touched from the
+            // serialized receive step. Previously this loop ran serially, so a
+            // batch without fresh scan rows paid a full scan before converting.
+            BatchScheduling.perform(files: entries, limit: BatchScheduling.limit(scanning: true), token: token,
+                work: { index in
+                    if let cached = snapshot[entries[index]], cached.version != nil, cached.version == SourceVersion.read(entries[index]) { return cached }
+                    return autoreleasepool { scanFile(entries[index], relative: relatives[index]) }
+                }, receive: { index, row in
+                    if row.confirmedStatic { staticIndices.insert(index) }
+                })
         }
         let planned = ProcessInfo.processInfo.systemUptime
         let total = entries.count - staticIndices.count
