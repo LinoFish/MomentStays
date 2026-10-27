@@ -19,6 +19,8 @@ sha2 = "0.10"
 md-5 = "0.10"
 roxmltree = "0.20"
 serde_json = "1"
+memmap2 = "0.9"
+memchr = "2"
 
 [profile.release]
 lto = true
