@@ -462,6 +462,118 @@ fn still_with_identifier_replaces_and_keeps_coding() {
     assert_eq!(coding_bytes(&first), coding_bytes(&second));
 }
 
+/// LONG8 (type 16) MakerNote field value read back from a JPEG's EXIF.
+/// Real iPhone MakerNotes use LONG8 for LivePhotoVideoIndex (tag 0x17);
+/// the writer used to reject it as an unknown field type.
+fn makernote_long8(jpeg: &[u8], want: u16) -> Option<u64> {
+    let segs = pyjpeg::segments(jpeg).ok()?;
+    let exif = segs
+        .iter()
+        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(pyjpeg::EXIF_HDR))?;
+    let tiff_bytes = &exif.payload(jpeg)[6..];
+    let t = Tiff::new(tiff_bytes).ok()?;
+    let (root, _) = t.root().ok()?;
+    let ptr = root.iter().find(|f| f.tag == 0x8769)?;
+    let (exif_fields, _) = t.directory(ptr.offset(t.little).ok()?).ok()?;
+    let note_field = exif_fields.iter().find(|f| f.tag == 0x927C)?;
+    let note_off = note_field.offset(t.little).ok()?;
+    let note = &tiff_bytes[note_off..note_off + note_field.count];
+    if !note.starts_with(b"Apple iOS\0\x00\x01") || note.len() < 16 {
+        return None;
+    }
+    let little = note[12] == b'I';
+    let rd16 = |p: usize| -> u16 {
+        if little {
+            u16::from_le_bytes([note[p], note[p + 1]])
+        } else {
+            u16::from_be_bytes([note[p], note[p + 1]])
+        }
+    };
+    let rd32 = |p: usize| -> u32 {
+        if little {
+            u32::from_le_bytes([note[p], note[p + 1], note[p + 2], note[p + 3]])
+        } else {
+            u32::from_be_bytes([note[p], note[p + 1], note[p + 2], note[p + 3]])
+        }
+    };
+    let n = rd16(14) as usize;
+    for i in 0..n {
+        let p = 16 + i * 12;
+        if p + 12 > note.len() || rd16(p) != want || rd16(p + 2) != 16 {
+            continue;
+        }
+        let count = rd32(p + 4) as usize;
+        if count != 1 {
+            return None;
+        }
+        let off = rd32(p + 8) as usize;
+        let raw = &note[off..off + 8];
+        return Some(if little {
+            u64::from_le_bytes(raw.try_into().ok()?)
+        } else {
+            u64::from_be_bytes(raw.try_into().ok()?)
+        });
+    }
+    None
+}
+
+#[test]
+fn still_with_identifier_keeps_long8_makernote_fields() {
+    // Regression: a real iPhone 15 Pro Max MakerNote (CC0 sample, see
+    // SOURCES.md) carries LONG8 fields; replacing the identifier must
+    // keep their values verbatim, not fail on the field type.
+    let long8: u64 = 0x1122334455667788;
+    let old_uuid = b"AAAAAAAA-1111-2222-3333-444444444444\0";
+    let ent = |tag: u16, ty: u16, count: u32, val: [u8; 4]| {
+        let mut e = Vec::new();
+        e.extend(tag.to_le_bytes());
+        e.extend(ty.to_le_bytes());
+        e.extend(count.to_le_bytes());
+        e.extend(val);
+        e
+    };
+    // MakerNote, little-endian: dir at 16 (3 entries), next at 52,
+    // LONG8 value at 56, old uuid at 64.
+    let mut note = b"Apple iOS\0\x00\x01".to_vec();
+    note.extend(b"II");
+    note.extend(3u16.to_le_bytes());
+    note.extend(ent(0x0001, 9, 1, 42u32.to_le_bytes()));
+    note.extend(ent(0x0011, 2, 37, 64u32.to_le_bytes()));
+    note.extend(ent(0x0017, 16, 1, 56u32.to_le_bytes()));
+    note.extend([0u8; 4]);
+    note.extend(long8.to_le_bytes());
+    note.extend(old_uuid);
+    assert_eq!(note.len(), 101);
+    // TIFF, little-endian: root IFD at 8 (Exif ptr 26), Exif IFD at 26
+    // (MakerNote ptr 44), note at 44.
+    let mut tiff = b"II".to_vec();
+    tiff.extend(42u16.to_le_bytes());
+    tiff.extend(8u32.to_le_bytes());
+    tiff.extend(1u16.to_le_bytes());
+    tiff.extend(ent(0x8769, 4, 1, 26u32.to_le_bytes()));
+    tiff.extend([0u8; 4]);
+    tiff.extend(1u16.to_le_bytes());
+    tiff.extend(ent(0x927C, 7, note.len() as u32, 44u32.to_le_bytes()));
+    tiff.extend([0u8; 4]);
+    tiff.extend(&note);
+    assert_eq!(tiff.len(), 44 + note.len());
+    let mut jpeg = vec![0xFF, 0xD8];
+    let mut exif = b"Exif\0\0".to_vec();
+    exif.extend(&tiff);
+    jpeg.extend(app1(&exif));
+    jpeg.extend([0xFF, 0xDB, 0x00, 0x04, 0x00, 0x11]);
+    jpeg.extend([0xFF, 0xC0, 0x00, 0x08, 0x08, 0x00, 0x10, 0x00, 0x10, 0x01]);
+    jpeg.extend([0xFF, 0xC4, 0x00, 0x04, 0x00, 0x11]);
+    jpeg.extend([0xFF, 0xDA, 0x00, 0x04, 0x00, 0x11]);
+    jpeg.push(0x42);
+    jpeg.extend([0xFF, 0xD9]);
+    let new_uuid = "123E4567-E89B-12D3-A456-426614174000";
+    let out = live_still_with_identifier(&jpeg, new_uuid).expect("live_still");
+    assert_eq!(makernote_uuid(&out).as_deref(), Some(new_uuid));
+    assert_eq!(makernote_long8(&out, 0x17), Some(long8), "LONG8 value kept");
+    assert_eq!(coding_bytes(&out), coding_bytes(&jpeg), "coding bytes unchanged");
+}
+
 #[test]
 fn still_with_identifier_refuses_heic() {
     let mut fake = Vec::new();

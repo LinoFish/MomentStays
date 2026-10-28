@@ -138,19 +138,19 @@ pub fn parse(d: &[u8]) -> Result<MotionPhoto> {
 fn parse_heif(d: &[u8]) -> Result<MotionPhoto> {
     let vendor = locate(d, 0)?;
     let mut p = 0;
-    let mut mpvd: Option<(usize, usize)> = None;
+    let mut mpvd: Option<(usize, usize, usize)> = None;
     while p < d.len() {
         if d.len() - p < 8 { return fail("HEIC 顶层 box 被截断"); }
         let mut size = crate::binary::be(d, p, 4)?;
         let mut header = 8;
         if size == 1 { size = crate::binary::be(d, p + 8, 8)?; header = 16; }
         if size < header || size > d.len() - p { return fail("HEIC 顶层 box 长度无效"); }
-        if &d[p + 4..p + 8] == b"mpvd" { mpvd = Some((p, p + size)); break; }
+        if &d[p + 4..p + 8] == b"mpvd" { mpvd = Some((p, p + size, header)); break; }
         p += size;
     }
-    let (boundary, mpvd_end) = match mpvd { Some(v) => v, None => return fail(NOT_MOTION) };
+    let (boundary, mpvd_end, mpvd_header) = match mpvd { Some(v) => v, None => return fail(NOT_MOTION) };
     let consistent = mpvd_end == d.len()
-        && vendor.as_ref().map_or(true, |v| v.format == "samsung-sef" && v.start == boundary + 8 && v.end <= mpvd_end);
+        && vendor.as_ref().map_or(true, |v| v.format == "samsung-sef" && v.start == boundary + mpvd_header && v.end <= mpvd_end);
     if !consistent { return fail("三星 HEIC 的 mpvd/SEF 视频边界不一致"); }
     let still = &d[..boundary];
     let l = heif::layout(still)?;
@@ -165,13 +165,17 @@ fn parse_heif(d: &[u8]) -> Result<MotionPhoto> {
     let mut time = integer(&pk, "MotionPhotoPresentationTimestampUs")?;
     if time.map_or(true, |t| t < 0) { time = integer(&pk, "MicroVideoPresentationTimestampUs")?; }
     if time.map_or(false, |t| t < 0) { time = None; }
-    let range = match &vendor { Some(v) => v.start..v.end, None => boundary + 8..mpvd_end };
+    let range = match &vendor { Some(v) => v.start..v.end, None => boundary + mpvd_header..mpvd_end };
     let video = &d[range.clone()];
     let top = boxes(video, 0, video.len())?;
     if top.first().map_or(true, |b| !b.is(b"ftyp")) || !top.iter().any(|b| b.is(b"moov")) || !top.iter().any(|b| b.is(b"mdat")) {
         return fail("HEIC 动态视频无效");
     }
-    heif::exif(still)?;
+    // No Exif gate here: an Exif item is optional for HEIC motion
+    // photos — the official Google fixture (libmphoto, Apache-2.0) has
+    // none. Still validity comes from layout + XMP + video checks
+    // above; `heif::exif` stays available for callers that need it
+    // (e.g. `inspect`'s make/model, which tolerates its absence).
     Ok(MotionPhoto {
         still: still.to_vec(), video: range, timestamp: time,
         timestamp_tag: time.map(|_| "MotionPhotoPresentationTimestampUs".to_string()),

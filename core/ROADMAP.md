@@ -52,8 +52,8 @@ P4. [~] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3
 A1. [~] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
        cover: Time(us) | Frame(n), source vendor, preserved vendor XMP } built by every reader.
        JPEG path done (`model.rs`, built from `format::parse`); HEIC writers done for
-       Google/Samsung (`heifwrite.rs`, synthetic fixtures only — public-sample
-       verification pending, see item 3).
+       Google/Samsung (`heifwrite.rs`, public samples verified locally
+       2026-10-28, see item 3 and `tests/SOURCES.md`).
 A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
        `cdylib` + UniFFI (or JNI) Kotlin bindings, smoke test calling parse from Kotlin.
 A3. [~] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
@@ -61,8 +61,11 @@ A3. [~] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresent
        JPEG writers done (all five vendors); HEIC mpvd writer done for Google/Samsung
        (`heifwrite::assemble_heic`: XMP rewrite per Swift `HEIFMetadata.write`, mpvd +
        Samsung SEF, parse-back validation of video bytes / coding hash / cover);
-       other HEIC targets refused. 5 tests (synthetic fixtures) + 1 CLI test;
-       public-sample verification pending (see item 3).
+       other HEIC targets refused. 6 tests (synthetic fixtures + largesize mpvd
+       regression) + 1 CLI test; public-sample verification done locally
+       2026-10-28 (Samsung S22 mpvd + Google libmphoto largesize mpvd parse
+       and writer round-trip, see `tests/SOURCES.md`); gallery recognition
+       still Needs Mac check.
 A4. [x] Cover conversion between time and frame index (Huawei uses frames) via the MP4 sample-table
        reader (item 7); refuse rather than guess when timing is ambiguous.
        Done: `cover.rs` (frame = presentation-sorted index, same as Swift `pair()`;
@@ -76,7 +79,10 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        MOV-remux round-trips done (MP4->MOV->MP4, per-track count/sizes/bytes/
        presentation, synthetic video+audio and real H.264 file).
 3. [ ] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
-       iloc v0/v1/v2, idat storage.
+       iloc v0/v1/v2, idat storage. Public samples located and verified
+       locally 2026-10-28 (see `tests/SOURCES.md`); not committed to the
+       repo (1.6-6.5 MB each). Synthetic largesize-mpvd and LONG8
+       MakerNote regression tests landed in their place.
 4. [ ] Scan parity: port `PhotoVendor.identify` labels and HDR classification
        (honorPrivate / ISO 21496 / legacy Apple) → `scan` subcommand matching NativeDriver `scan` rows.
 5. [ ] Fuzzing: cargo-fuzz targets for `parse`, `jpeg::segments`, `heif::layout`; guarantee no panics
@@ -175,14 +181,30 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   byte-for-byte on the still and video portions.
 - `model` writers: verify against real vendor samples (especially Samsung SEF on-device
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
-- HEIC writers (A3): synthetic-fixture verified only; needs a Mac run to
-  confirm vendor galleries recognize the HEIC mpvd outputs, and public
-  HEIC samples for the fixture set (item 3).
+- HEIC writers (A3): public samples verified locally (parse + writer
+  round-trip, see `tests/SOURCES.md`); still needs a Mac run to confirm
+  vendor galleries recognize the HEIC mpvd outputs (especially the
+  Swift-style XMP on Samsung, whose camera files use different
+  Padding/Length semantics), and the Samsung sefd form is not parsed.
 - C ABI Swift bridge (item 10): the C header exists and the C smoke test
   passes on Linux; importing the header and calling it from the Swift
   app needs a Mac run.
 
 ## Log
+- 2026-10-28: HEIC public-sample verification (ROADMAP A3 / item 3):
+  Samsung S22 Ultra mpvd HEIC (MIT, sm_motion_photo) and Google
+  libmphoto largesize-mpvd HEIC (Apache-2.0) parse and writer-round-trip
+  clean (video bytes, coding hash, timestamp identical); Apple iPhone
+  15 Pro Max still (CC0, Wikimedia Commons) passes `live_still_with_identifier`
+  (tag 17 replaced, tag 23 kept, coding bytes unchanged). Samples
+  registered in `tests/SOURCES.md`, not committed (size). The samples
+  forced three fixes: largesize mpvd headers in `format.rs` (video
+  start was hard-coded to mpvd + 8), Exif optional for HEIC motion
+  photos (the Google fixture's still has none), and LONG8/IFD8 field
+  sizes in `pyjpeg.rs` `maker_note` (real MakerNotes use type 16).
+  Samsung sefd-form HEIC (S20) is documented as unsupported, not
+  parsed. 2 regression tests. Full suite 97 tests pass,
+  `check_rust_core.py` 16 inputs 0 mismatches.
 - 2026-10-28: C ABI landed (ROADMAP item 10): `src/capi.rs` (`inspect`
   over FFI: version / inspect / free-string, panics caught at the
   boundary), cbindgen header `core/include/momentstays_core.h` (config

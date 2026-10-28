@@ -295,9 +295,12 @@ pub fn maker_note(identifier: &str, old: &[u8]) -> Result<Vec<u8>> {
         // Growing the front table moves old data: adjust external value offsets.
         let kept_len = kept.len();
         let delta = (kept_len as isize + 1 - n as isize) * 12;
+        // TIFF 6.0 field sizes, plus BigTIFF LONG8/IFD8: real iPhone
+        // MakerNotes use type 16 (LONG8) for LivePhotoVideoIndex.
         let sizes: HashMap<usize, usize> = [
             (1, 1), (2, 1), (3, 2), (4, 4), (5, 8), (6, 1), (7, 1),
-            (8, 2), (9, 4), (10, 8), (11, 4), (12, 8),
+            (8, 2), (9, 4), (10, 8), (11, 4), (12, 8), (13, 4),
+            (16, 8), (17, 8),
         ].into_iter().collect();
         let mut patched: Vec<[u8; 12]> = Vec::new();
         for e in kept {
