@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="lang-zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>留刻 MomentStays — 安卓动态照片转苹果实况照片（Live Photo）Mac 工具</title>
+<meta name="description" content="免费 Mac 工具：把三星、小米、华为、OPPO、vivo、Pixel 的安卓动态照片转成 iPhone 实况照片，也能转回。封面、画质、HDR 原样保留，全程本地处理。">
+<meta name="keywords" content="Motion Photo, Live Photo, convert, macOS, Android, iPhone, Samsung, Xiaomi, HEIC, Ultra HDR, 动态照片, 实况照片, 安卓动态照片转实况照片">
+<meta property="og:title" content="留刻 MomentStays — 留住原来的瞬间。">
+<meta property="og:description" content="免费 Mac 工具：把三星、小米、华为、OPPO、vivo、Pixel 的安卓动态照片转成 iPhone 实况照片，也能转回。封面、画质、HDR 原样保留，全程本地处理。">
+<meta property="og:image" content="https://linofish.github.io/MomentStays/assets/social-preview.png?v=3">
+<meta property="og:type" content="website">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#14181C">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#EDEFF0">
+<link rel="canonical" href="https://linofish.github.io/MomentStays/zh/">
+<link rel="alternate" hreflang="en" href="https://linofish.github.io/MomentStays/">
+<link rel="alternate" hreflang="zh-CN" href="https://linofish.github.io/MomentStays/zh/">
+<link rel="alternate" hreflang="x-default" href="https://linofish.github.io/MomentStays/">
+<meta property="og:url" content="https://linofish.github.io/MomentStays/zh/">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:site_name" content="留刻 MomentStays">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "MomentStays", "alternateName": ["留刻", "MomentStays Motion Photo to Live Photo converter", "MomentStays 动态照片转实况照片"], "applicationCategory": "MultimediaApplication", "operatingSystem": "macOS 12 or later", "description": "免费 Mac 工具：把三星、小米、华为、OPPO、vivo、Pixel 的安卓动态照片转成 iPhone 实况照片，也能转回。封面、画质、HDR 原样保留，全程本地处理。", "inLanguage": "zh", "url": "https://linofish.github.io/MomentStays/zh/", "downloadUrl": "https://github.com/LinoFish/MomentStays/releases", "softwareHelp": "https://linofish.github.io/MomentStays/guide-zh.html", "license": "https://www.gnu.org/licenses/gpl-3.0.html", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "author": {"@type": "Person", "name": "Lino", "url": "https://github.com/LinoFish"}, "sameAs": ["https://github.com/LinoFish/MomentStays"], "image": "https://linofish.github.io/MomentStays/assets/social-preview.png?v=3"}</script>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/ms-serif-bold.woff2?v=1" as="font" type="font/woff2" crossorigin>
+
+<style>
+@font-face{font-family:"MS Serif";src:url(../assets/fonts/ms-serif-bold.woff2?v=1) format("woff2");font-weight:700;font-display:swap}
+@font-face{font-family:"MS Serif";src:url(../assets/fonts/ms-serif-regular.woff2?v=1) format("woff2");font-weight:400;font-display:swap}
+:root{--paper:#EDEFF0;--ink:#1F2933;--soft:#56616D;--faint:#7A848E;--rule:rgba(31,41,51,.14);--amber:#E39A2D;--amber-t:#9A5B0C;--film:#1E2328;--film-t:#AEB6BE;--btn:#1F2933;--btn-t:#fff;
+--i-bg0:#FFFFFF;--i-bg1:#ECEEF1;--i-ink:#1F2933;--i-core:#F0A43C;--i-edge:rgba(31,41,51,.10);
+--serif:"MS Serif","Noto Serif SC","Songti SC","STSong",Georgia,serif;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif;--pad:clamp(20px,5vw,72px)}
+@media (prefers-color-scheme:dark){:root{--paper:#14181C;--ink:#E8ECEF;--soft:#A3ADB7;--faint:#86909A;--rule:rgba(232,236,239,.13);--amber:#F4B860;--amber-t:#F4B860;--film:#0A0D10;--btn:#E8ECEF;--btn-t:#14181C;
+--i-bg0:#2A3442;--i-bg1:#141A22;--i-ink:#F2F4F5;--i-core:#F4B860;--i-edge:rgba(255,255,255,.08)}}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.75;-webkit-font-smoothing:antialiased}
+h1,h2,h3{text-wrap:balance;font-weight:700}p,li,dd{text-wrap:pretty}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1296px;margin:0 auto;padding:0 var(--pad)}
+.serif{font-family:var(--serif)}
+:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:4px}
+/* nav */
+header{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:saturate(1.4) blur(12px);-webkit-backdrop-filter:saturate(1.4) blur(12px)}
+.nav{display:flex;align-items:center;gap:26px;height:64px;font-size:15px;color:var(--soft)}
+.home{display:flex;align-items:center;gap:10px;color:var(--ink);font-weight:600;letter-spacing:.02em;margin-right:auto}
+.navicon{width:28px;height:28px}
+.nav .lk:hover,.foot a:hover{color:var(--ink)}
+.lang{border:1px solid var(--rule);border-radius:999px;padding:4px 12px;font-size:14px}
+.gh{display:flex;width:44px;height:44px;align-items:center;justify-content:center;margin:-10px -12px -10px -14px;color:var(--ink)}
+/* hero */
+.hero{padding-top:clamp(40px,9vh,104px);padding-bottom:clamp(48px,8vh,88px)}
+h1{font-family:var(--serif);font-size:clamp(60px,9.4vw,136px);line-height:1.04;letter-spacing:.02em}
+html[lang=en] h1{letter-spacing:-.01em;font-size:clamp(44px,8.6vw,128px)}
+.h1sub{display:block;font-size:max(15px,.2em);font-weight:400;letter-spacing:.1em;color:var(--soft);margin-top:.7em}
+.kicker{margin-top:18px;color:var(--soft);font-size:clamp(16px,1.3vw,18px)}
+.lede{font-family:var(--serif);font-size:clamp(21px,2.1vw,28px);line-height:1.7;max-width:30em;margin-top:22px}
+html[lang=en] .lede{line-height:1.5;max-width:28em}
+.lede em{font-style:normal;background:linear-gradient(transparent 62%,rgba(227,154,45,.38) 0)}
+/* film strip */
+.stripbox{margin-top:clamp(48px,7vh,72px)}
+.strip{position:relative;display:grid;grid-template-columns:repeat(8,1fr);gap:10px;background:var(--film);padding:50px 18px 26px;border-radius:4px;cursor:pointer}
+.strip::before,.strip::after{content:"";position:absolute;left:12px;right:12px;height:7px;background:repeating-linear-gradient(90deg,rgba(237,239,240,.42) 0 10px,transparent 10px 22px);border-radius:1px}
+.strip::before{top:8px}.strip::after{bottom:8px}
+.f{position:relative;aspect-ratio:4/3;border-radius:2px;background:linear-gradient(160deg,var(--a),var(--b));transition:filter .6s}
+.f span{position:absolute;right:6px;bottom:6px;font-size:12px;line-height:1.5;color:#D5DBE1;background:rgba(0,0,0,.42);padding:0 6px;border-radius:2px;font-variant-numeric:tabular-nums}
+.f.pick span{color:#F6C67F}
+.ring{position:absolute;left:0;top:0;border:3px solid var(--amber);border-radius:5px;pointer-events:none;transition:transform 1.1s cubic-bezier(.65,0,.25,1),border-color .5s,opacity .4s}
+.ring b{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:nowrap;font-size:13px;line-height:1.4;font-weight:600;color:var(--amber);transition:opacity .35s}
+.ring.at-first{border-color:#9AA3AC}.ring.at-first b{color:#C5CCD3}
+.ring .t2{opacity:0}
+.ring.done .t1{opacity:0}.ring.done .t2{opacity:1}
+.stripcap{display:flex;justify-content:space-between;gap:16px;margin-top:14px;font-size:14px;color:var(--faint)}
+.replay{background:none;border:0;font:inherit;color:var(--soft);cursor:pointer;white-space:nowrap;min-height:44px;margin:-12px 0}
+.replay:hover{color:var(--ink)}
+.cta{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-top:clamp(40px,6vh,60px);font-size:15px}
+.btn{display:inline-flex;align-items:center;min-height:48px;background:var(--btn);color:var(--btn-t);padding:0 24px;border-radius:999px;font-weight:600;transition:transform .2s}
+.btn:hover{transform:translateY(-1px)}
+.tl{font-weight:600;border-bottom:1.5px solid currentColor;padding:4px 0}
+.cta .meta{color:var(--soft);flex-basis:100%;font-size:14px}
+/* sections */
+section{border-top:1px solid var(--rule);padding:clamp(56px,9vh,96px) 0;scroll-margin-top:64px}
+.cols{display:grid;grid-template-columns:minmax(220px,1fr) 2fr;gap:40px 64px}
+h2{font-family:var(--serif);font-size:clamp(28px,2.6vw,36px);line-height:1.3}
+.sub{color:var(--soft);margin-top:8px;font-size:16px}
+.keep{display:grid;grid-template-columns:8em 1fr;gap:6px 28px;padding:0 0 30px;margin-bottom:30px;border-bottom:1px solid var(--rule)}
+.keep:last-child{border:0;margin:0;padding:0}
+.keep dt{font-size:14px;color:var(--amber-t);font-weight:600;padding-top:6px}
+.keep h3{font-family:var(--serif);font-size:23px;line-height:1.4;margin-bottom:8px}
+.keep ul{list-style:none;color:var(--soft)}
+.keep li{padding-left:1.1em;position:relative}
+.keep li::before{content:"";position:absolute;left:0;top:.72em;width:5px;height:5px;border-radius:50%;background:var(--amber)}
+.keep li.n{font-size:14.5px;color:var(--faint);padding-left:0;margin-top:6px}
+.keep li.n::before{display:none}
+.steps{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:32px;counter-reset:s}
+.steps li{border-top:2px solid var(--ink);padding-top:16px}
+.steps .num{font-family:var(--serif);font-size:44px;line-height:1;color:var(--amber-t);display:block;margin-bottom:14px}
+.steps h3{font-size:20px;margin-bottom:4px}
+.steps p{color:var(--soft);font-size:16px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:16px;min-width:560px}
+th{text-align:left;font-size:14px;color:var(--faint);font-weight:600;padding:0 16px 12px 0;border-bottom:1px solid var(--ink)}
+td{padding:16px 16px 16px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--soft)}
+td:first-child{color:var(--ink);font-weight:600;white-space:nowrap}
+details{border-bottom:1px solid var(--rule)}
+details:first-of-type{border-top:1px solid var(--rule)}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:60px;font-weight:600;font-size:17px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font-weight:400;font-size:24px;color:var(--faint);transition:transform .25s}
+details[open] summary::after{transform:rotate(45deg)}
+details p{color:var(--soft);padding:0 2em 20px 0;max-width:46em}
+.more{margin-top:24px;font-size:15px}
+.more a{border-bottom:1px solid currentColor;color:var(--soft)}
+/* download band = film */
+.get{background:var(--film);color:#E8ECEF;position:relative;border:0}
+.get::before,.get::after{content:"";position:absolute;left:0;right:0;height:8px;background:repeating-linear-gradient(90deg,rgba(237,239,240,.35) 0 12px,transparent 12px 26px)}
+.get::before{top:14px}.get::after{bottom:14px}
+.get .sub,.get li{color:#A3ADB7}
+.get .btn{background:var(--amber);color:#1B1408}
+.get ul{list-style:none;font-size:14.5px;margin-top:22px}
+.get li+li{margin-top:6px}
+.get details{border-color:rgba(232,236,239,.14);margin-top:26px}
+.get summary{font-size:15px}
+.get summary::after{color:#86909A}
+pre{background:rgba(255,255,255,.05);border-radius:6px;padding:16px 18px;overflow-x:auto;font:13.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;color:#D5DBE1;margin-bottom:20px}
+/* footer */
+footer{padding:44px 0 56px;font-size:14px;color:var(--faint)}
+.foot{display:flex;flex-wrap:wrap;gap:6px 22px}
+.fs{font-family:var(--serif);color:var(--amber-t);margin-top:14px;font-size:16px}
+@media (max-width:900px){.nav .lk{display:none}.cols{grid-template-columns:1fr}.keep{grid-template-columns:1fr}.keep dt{padding:0}}
+@media (max-width:640px){body{font-size:16px}.strip{grid-template-columns:repeat(4,1fr);row-gap:34px;padding:26px 14px}.steps{grid-template-columns:1fr;gap:26px}.stripcap{flex-direction:column;gap:4px}.replay{align-self:flex-start}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.ring,.ring b,.btn{transition:none}}
+</style>
+</head>
+<body>
+<header><div class="wrap nav">
+<a class="home" href="#top" aria-label="留刻"><svg class="navicon" viewBox="100 100 824 824" aria-hidden="true"><defs><linearGradient id="nvbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--i-bg0)"/><stop offset="1" style="stop-color:var(--i-bg1)"/></linearGradient></defs><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#nvbg)"/><rect x="101" y="101" width="822" height="822" rx="184" fill="none" style="stroke:var(--i-edge)" stroke-width="3"/><circle cx="512" cy="512" r="250" fill="none" style="stroke:var(--i-ink)" stroke-width="22" stroke-dasharray="0 43.6" stroke-linecap="round" opacity=".9"/><circle cx="512" cy="512" r="150" fill="none" style="stroke:var(--i-ink)" stroke-width="28"/><circle cx="512" cy="512" r="62" style="fill:var(--i-core)"/></svg><span>留刻</span></a>
+<a class="lk" href="#keeps">保留什么</a><a class="lk" href="#how">怎么用</a><a class="lk" href="#support">格式支持</a><a class="lk" href="#faq">常见问题</a><a class="lk" href="../guide-zh.html">使用手册</a>
+<a class="lang" href="../" onclick="try{localStorage.setItem('ms-lang','en')}catch(e){}" hreflang="en">EN</a>
+<a class="gh" href="https://github.com/LinoFish/MomentStays" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+</div></header>
+<main>
+<div class="wrap hero" id="top">
+<h1>留刻<span class="h1sub">MomentStays</span></h1>
+<p class="kicker">在 Mac 上互转安卓动态照片与苹果实况照片</p>
+<p class="lede">换了手机，封面却跑到了第一帧。留刻按原时间戳，把封面放回<em>你当初选的那一帧</em>。</p>
+<figure class="stripbox">
+<div class="strip" id="strip" role="img" aria-label="一张动态照片的逐帧画面。别的工具常把第一帧当封面，留刻保留你选的 1.42 秒那一帧。"><div class="f" style="--a:#3B4652;--b:#26303A"><span>0.00 s</span></div><div class="f" style="--a:#46525F;--b:#2C3640"><span>0.20 s</span></div><div class="f" style="--a:#55616D;--b:#323C46"><span>0.48 s</span></div><div class="f" style="--a:#6B7680;--b:#3A444E"><span>0.80 s</span></div><div class="f" style="--a:#8A939B;--b:#48525C"><span>1.12 s</span></div><div class="f pick" style="--a:#C9B48E;--b:#6D5A3E"><span>1.42 s</span></div><div class="f" style="--a:#7F8890;--b:#454F59"><span>1.70 s</span></div><div class="f" style="--a:#636E78;--b:#38424C"><span>2.00 s</span></div><div class="ring at-first" id="ring" aria-hidden="true"><b class="t1">别的工具</b><b class="t2">你选的那一帧</b></div></div>
+<figcaption class="stripcap"><span>一张动态照片的逐帧画面。别的工具常把第一帧当封面，留刻保留你选的 1.42 秒那一帧。</span><button class="replay" id="replay" type="button">重播</button></figcaption>
+</figure>
+<div class="cta"><a class="btn" href="https://github.com/LinoFish/MomentStays/releases">下载 macOS 版</a><a class="tl" href="https://github.com/LinoFish/MomentStays">GitHub 源码</a><span class="meta">免费开源，macOS 12+，全程在本机处理</span></div>
+</div>
+<section id="keeps"><div class="wrap cols"><div><h2>三样都留住</h2><p class="sub">别的工具往往至少丢掉一样</p></div><div><dl class="keep"><dt>封面</dt><dd><h3>还是你选的那一帧</h3><ul><li>按原时间戳对齐到对应的那一帧</li><li>时间信息缺失会直接提示，不拿中间帧凑数</li><li>想更清晰？部分照片可改选高清候选帧，动态不变</li></ul></dd></dl><dl class="keep"><dt>音视频</dt><dd><h3>不重新编码</h3><ul><li>原始音视频数据直接重新封装</li><li>输出前逐个样本校验</li><li class="n">注：苹果 HEIC 转安卓 JPEG 时，静态图需重新编码：格式不同，且安卓对 HEIC 支持有限</li></ul></dd></dl><dl class="keep"><dt>HDR</dt><dd><h3>能留的都留，留不了就说明</h3><ul><li>Ultra HDR 增益图连同参数保留</li><li>不支持的 HDR 会标出，不假装转好</li><li class="n">注：苹果增益图转成安卓格式时，可能无法完全无损</li><li class="n">注：高清候选帧不含 HDR 增益图</li></ul></dd></dl></div></div></section>
+<section id="how"><div class="wrap cols"><div><h2>怎么用</h2><p class="sub">三步就好</p></div><ol class="steps"><li><span class="num">1</span><h3>添加</h3><p>文件、文件夹，或「照片」图库</p></li><li><span class="num">2</span><h3>转换</h3><p>选方向和格式，支持批量</p></li><li><span class="num">3</span><h3>收好</h3><p>直接导入相册，或导出为文件</p></li></ol></div></section>
+<section id="support"><div class="wrap cols"><div><h2>格式支持</h2></div><div class="tw"><table><tr><th>方向</th><th>支持来源</th><th>输出</th></tr><tr><td>Android → Apple</td><td>Google 兼容格式、华为/荣耀、三星（含部分 HEIC）、OPPO、vivo</td><td>实况照片（JPEG/HEIC + MOV）</td></tr><tr><td>Apple → Android</td><td>Google/通用、小米、三星、华为/荣耀、OPPO、vivo</td><td>动态照片（JPEG）</td></tr><tr><td>Apple → Android</td><td>三星</td><td>动态照片（HEIC，保留原编码）</td></tr></table></div></div></section>
+<section id="faq"><div class="wrap cols"><div><h2>常见问题</h2></div><div><details><summary>直接拷到 iPhone 不行吗？</summary><p>不行，格式不同，拷过去只是一张静态图</p></details><details><summary>会掉画质吗？</summary><p>视频和音频不会，只重新封装并校验。安卓转 iPhone，照片原样保留；若改选高清候选封面，该帧会解码为 JPEG，不带原封面的 HDR；iPhone 的 HEIC 转安卓 JPEG，静态图必须重新编码（安卓对 HEIC 支持有限），HDR 增益图也可能无法完全无损</p></details><details><summary>照片会上传吗？</summary><p>不会，全程在你的 Mac 本地完成</p></details><details><summary>能转回安卓吗？</summary><p>可以，选择「Apple → Android」和对方手机品牌即可</p></details><details><summary>收费吗？</summary><p>免费开源（GPL-3.0），觉得好用，欢迎在 GitHub 赞助</p></details><p class="more"><a href="../guides/index.html#zh">更多教程：三星、小米、华为动态照片怎么转</a></p></div></div></section>
+<section class="get" id="download"><div class="wrap cols"><div><h2>下载留刻</h2><p class="sub">下载 DMG 即可使用，无需安装其他依赖</p></div><div><a class="btn" href="https://github.com/LinoFish/MomentStays/releases">下载 macOS 版</a><ul><li>已在 Intel / macOS 12 验证，Apple Silicon 验证中</li><li>未经 Apple 公证：首次打开被拦截时，到「系统设置 → 隐私与安全性」点「仍要打开」</li></ul>
+<details><summary>从源码构建</summary><pre>git clone https://github.com/LinoFish/MomentStays.git
+cd MomentStays
+bash scripts/build_app.sh               # Intel
+bash scripts/build_app.sh --universal   # Universal
+open dist/MomentStays.app</pre></details></div></div></section>
+</main>
+<footer><div class="wrap"><div class="foot"><span>© 2026 Lino，以 GPL-3.0 协议开源</span><a href="https://github.com/LinoFish/MomentStays">GitHub</a><a href="https://github.com/LinoFish/MomentStays/issues">反馈问题</a><a href="../guide-zh.html">使用手册</a><a href="../guides/index.html#zh">教程</a><a href="https://github.com/LinoFish/MomentStays/blob/main/README.zh-CN.md">中文说明</a><a href="../archive/v1/zh/">旧版网站</a></div><p class="fs">留住原来的瞬间</p><p class="fs">网站设计工作流：<a href="https://github.com/alchaincyf/huashu-design">huashu-design / 花叔 Design</a> · <a href="https://github.com/LinoFish/MomentStays/blob/main/THIRD_PARTY_NOTICES.md">第三方致谢</a> · <a href="../assets/fonts/OFL.txt">字体许可证</a></p></div></footer>
+<script>(function(){
+  var strip=document.getElementById('strip'),ring=document.getElementById('ring');
+  if(!strip||!ring)return;
+  var fr=strip.querySelectorAll('.f'),first=fr[0],pick=strip.querySelector('.f.pick'),timer;
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function place(el){var s=strip.getBoundingClientRect(),r=el.getBoundingClientRect(),p=6;
+    ring.style.width=(r.width+p*2)+'px';ring.style.height=(r.height+p*2)+'px';
+    ring.style.transform='translate('+(r.left-s.left-p)+'px,'+(r.top-s.top-p)+'px)';}
+  function settle(){ring.classList.remove('at-first');ring.classList.add('done');place(pick);}
+  function play(){clearTimeout(timer);
+    if(reduce){settle();return;}
+    ring.style.transition='none';ring.classList.remove('done');ring.classList.add('at-first');place(first);
+    ring.offsetWidth;ring.style.transition='';
+    timer=setTimeout(settle,1500);}
+  window.addEventListener('resize',function(){place(ring.classList.contains('done')?pick:first);});
+  strip.addEventListener('click',play);
+  var rb=document.getElementById('replay');if(rb)rb.addEventListener('click',play);
+  if(document.fonts&&document.fonts.ready){document.fonts.ready.then(function(){setTimeout(play,350);});}else{setTimeout(play,350);}
+})();</script>
+</body>
+</html>

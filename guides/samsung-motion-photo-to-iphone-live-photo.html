@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Turn Samsung Motion Photos into iPhone Live Photos | MomentStays</title>
+<meta name="description" content="Samsung Motion Photos arrive on iPhone as stills. Convert them to Live Photos on a Mac with MomentStays: SEF and some HEIC supported, no re-encoding.">
+<link rel="canonical" href="https://linofish.github.io/MomentStays/guides/samsung-motion-photo-to-iphone-live-photo.html">
+<link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
+<meta name="theme-color" content="#F0F6F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1B27" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="MomentStays">
+<meta property="og:image" content="https://linofish.github.io/MomentStays/assets/social-preview.png?v=3">
+<meta property="og:title" content="How to Turn Samsung Motion Photos into iPhone Live Photos | MomentStays">
+<meta property="og:description" content="Samsung Motion Photos arrive on iPhone as stills. Convert them to Live Photos on a Mac with MomentStays: SEF and some HEIC supported, no re-encoding.">
+<meta property="og:url" content="https://linofish.github.io/MomentStays/guides/samsung-motion-photo-to-iphone-live-photo.html">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary">
+<style>
+:root{--bg:#F0F6F5;--surface:#FFFFFF;--ink:#122A38;--muted:#47636E;--teal:#0E7A66;--amber:#A96F14;--line:rgba(18,42,56,.14)}
+@media (prefers-color-scheme:dark){:root{--bg:#0D1B27;--surface:#132A36;--ink:#F0F6F5;--muted:#B0C8CF;--teal:#65DCC5;--amber:#F3BE72;--line:rgba(240,246,245,.14)}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans SC","Microsoft YaHei",Roboto,Arial,sans-serif;line-height:1.7;font-size:17px}
+a{color:var(--teal)}
+header.top{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+header.top .in{max-width:760px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.01em}
+.brand img{width:26px;height:26px;border-radius:7px}
+header.top nav a{color:var(--muted);text-decoration:none;font-size:15px;margin-left:16px}
+header.top nav a:hover{color:var(--teal)}
+main{max-width:760px;margin:0 auto;padding:32px 20px 56px}
+.crumb{font-size:14px;color:var(--muted);margin:0 0 10px}
+.crumb a{color:var(--muted)}
+h1{font-size:clamp(26px,5vw,36px);line-height:1.25;margin:0 0 16px;letter-spacing:-.01em}
+h2{font-size:22px;margin:40px 0 12px;line-height:1.35}
+h3{font-size:17px;margin:20px 0 6px}
+p{margin:0 0 14px}
+.answer{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--teal);border-radius:12px;padding:16px 18px;margin:0 0 8px;font-size:18px}
+.answer p:last-child{margin:0}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+ol.steps>li{counter-increment:s;position:relative;padding:0 0 18px 48px}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:32px;height:32px;border-radius:50%;background:var(--teal);color:var(--bg);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:15px}
+ol.steps>li strong{display:block}
+ul{padding-left:22px;margin:0 0 14px}
+li{margin:0 0 6px}
+.note{color:var(--muted);font-size:15px}
+.warn{border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--surface);border-radius:12px;padding:12px 16px;margin:14px 0;font-size:15.5px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:1px 6px;white-space:nowrap}
+.faq details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:0 0 10px}
+.faq summary{cursor:pointer;font-weight:600}
+.faq details p{margin:10px 0 0}
+.cta{margin:40px 0 0;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;text-align:center}
+.cta h2{margin:0 0 8px}
+.btn{display:inline-block;background:var(--teal);color:var(--bg);text-decoration:none;font-weight:700;padding:12px 22px;border-radius:999px;margin:6px 0}
+.btn:hover{filter:brightness(1.08)}
+.cta .note{margin:8px 0 0}
+.related ul{list-style:none;padding:0}
+.related li{border-bottom:1px solid var(--line);padding:8px 0;margin:0}
+.related li:last-child{border-bottom:0}
+footer{max-width:760px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:14px}
+footer a{color:var(--muted)}
+</style>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "Can it convert Samsung HEIC Motion photos?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Some validated HEIC layouts convert directly. If yours isn't recognized, please open a GitHub issue with a sample."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Will the video or audio be recompressed?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. Video and audio are remuxed, never re-encoded, and verified sample by sample."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Can I convert my whole camera roll at once?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Yes. Add a folder for batch conversion and import the results straight into a Photos album."
+   }
+  }
+ ]
+}
+</script>
+</head>
+<body>
+<header class="top"><div class="in">
+<a class="brand" href="../"><img src="../assets/icon.svg" alt="" width="26" height="26">MomentStays</a>
+<nav><a href="./">Guides</a><a href="https://github.com/LinoFish/MomentStays/releases" rel="noopener">Download</a></nav>
+</div></header>
+<main>
+<p class="crumb"><a href="../">Home</a> / <a href="./">Guides</a></p>
+<article>
+<h1>How do I turn Samsung Motion Photos into iPhone Live Photos?</h1>
+<div class="answer"><p>Copy the original Samsung files to a Mac, convert them with MomentStays, and import them into Photos. iCloud Photos then syncs them to your iPhone as Live Photos. Samsung JPEG (including SEF) and some validated HEIC layouts are supported.</p></div>
+<h2>Why Samsung Motion Photos don't play on iPhone</h2>
+<p>A Samsung Motion photo stores a few seconds of video at the end of the photo file, marked with Samsung's own trailer. Samsung notes that motion photos viewed on a PC, or shared through messaging and social apps, are treated as stills. iPhone needs an image + MOV pair, so the file has to be converted first.</p>
+<h2>Step by step</h2>
+<ol class="steps">
+<li><strong>Copy the original files to your Mac</strong>Use a USB cable with <a href="https://openmtp.ganeshrvel.com/" rel="noopener">OpenMTP</a> (Google no longer offers Android File Transfer), or <a href="https://localsend.org/" rel="noopener">LocalSend</a> over the same Wi-Fi. Copy from the phone's <code>DCIM/Camera</code> folder.</li>
+<li><strong>Open MomentStays</strong>If macOS blocks the first launch: System Settings → Privacy &amp; Security → Open Anyway.</li>
+<li><strong>Add files and convert</strong>Add single files, whole folders, or read from your Photos library. Batch conversion is supported.</li>
+<li><strong>Import into Photos</strong>Send the Live Photos straight into a Photos album, or save them as JPEG/HEIC + MOV pairs.</li>
+<li><strong>Sync to iPhone</strong>With iCloud Photos on for both Mac and iPhone, the Live Photos appear on your iPhone. Press and hold to play.</li>
+</ol>
+<div class="warn">Don't send them through messaging or social apps. Samsung and Huawei both note that motion photos shared through third-party apps arrive as still images. Some cloud or web uploads can drop the video too, so always start from the original file.</div>
+<h2>Samsung format support</h2>
+<ul><li>JPEG Motion photos: supported, including Samsung's SEF trailer.</li>
+<li>HEIC Motion photos: some validated layouts supported. Not recognized? <a href="https://github.com/LinoFish/MomentStays/issues" rel="noopener">Send a sample</a>.</li>
+<li>Reverse: iPhone Live Photos can become Samsung Motion photos (JPEG or Samsung HEIC).</li></ul>
+<section class="faq"><h2>FAQ</h2>
+<details><summary>Can it convert Samsung HEIC Motion photos?</summary><p>Some validated HEIC layouts convert directly. If yours isn&#x27;t recognized, please open a GitHub issue with a sample.</p></details>
+<details><summary>Will the video or audio be recompressed?</summary><p>No. Video and audio are remuxed, never re-encoded, and verified sample by sample.</p></details>
+<details><summary>Can I convert my whole camera roll at once?</summary><p>Yes. Add a folder for batch conversion and import the results straight into a Photos album.</p></details>
+</section>
+<section class="cta"><h2>Download MomentStays (free)</h2>
+<a class="btn" href="https://github.com/LinoFish/MomentStays/releases" rel="noopener">Download from GitHub</a>
+<p class="note">macOS 12+ · Open source (GPL-3.0) · Runs 100% locally · Tested on Intel/macOS 12; Apple Silicon testing in progress</p>
+</section>
+<section class="related"><h2>Related guides</h2>
+<ul>
+<li><a href="motion-photo-to-live-photo-mac.html">How do I convert Motion Photos to Live Photos on a Mac?</a></li>
+<li><a href="./#zh">中文指南 →</a></li>
+</ul></section>
+</article>
+</main>
+<footer><p>MomentStays is a free, open-source macOS app that converts Android Motion Photos ⇄ Apple Live Photos. <a href="../">Home</a> · <a href="https://github.com/LinoFish/MomentStays" rel="noopener">GitHub</a></p></footer>
+</body>
+</html>

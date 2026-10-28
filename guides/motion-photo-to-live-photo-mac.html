@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Convert Motion Photos to Live Photos on Mac | MomentStays</title>
+<meta name="description" content="Android Motion Photos show up as stills on iPhone. Convert them to Live Photos on your Mac with free, open-source MomentStays—locally, no re-encoding.">
+<link rel="canonical" href="https://linofish.github.io/MomentStays/guides/motion-photo-to-live-photo-mac.html">
+<link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
+<meta name="theme-color" content="#F0F6F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1B27" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="MomentStays">
+<meta property="og:image" content="https://linofish.github.io/MomentStays/assets/social-preview.png?v=3">
+<meta property="og:title" content="How to Convert Motion Photos to Live Photos on Mac | MomentStays">
+<meta property="og:description" content="Android Motion Photos show up as stills on iPhone. Convert them to Live Photos on your Mac with free, open-source MomentStays—locally, no re-encoding.">
+<meta property="og:url" content="https://linofish.github.io/MomentStays/guides/motion-photo-to-live-photo-mac.html">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary">
+<style>
+:root{--bg:#F0F6F5;--surface:#FFFFFF;--ink:#122A38;--muted:#47636E;--teal:#0E7A66;--amber:#A96F14;--line:rgba(18,42,56,.14)}
+@media (prefers-color-scheme:dark){:root{--bg:#0D1B27;--surface:#132A36;--ink:#F0F6F5;--muted:#B0C8CF;--teal:#65DCC5;--amber:#F3BE72;--line:rgba(240,246,245,.14)}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans SC","Microsoft YaHei",Roboto,Arial,sans-serif;line-height:1.7;font-size:17px}
+a{color:var(--teal)}
+header.top{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+header.top .in{max-width:760px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.01em}
+.brand img{width:26px;height:26px;border-radius:7px}
+header.top nav a{color:var(--muted);text-decoration:none;font-size:15px;margin-left:16px}
+header.top nav a:hover{color:var(--teal)}
+main{max-width:760px;margin:0 auto;padding:32px 20px 56px}
+.crumb{font-size:14px;color:var(--muted);margin:0 0 10px}
+.crumb a{color:var(--muted)}
+h1{font-size:clamp(26px,5vw,36px);line-height:1.25;margin:0 0 16px;letter-spacing:-.01em}
+h2{font-size:22px;margin:40px 0 12px;line-height:1.35}
+h3{font-size:17px;margin:20px 0 6px}
+p{margin:0 0 14px}
+.answer{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--teal);border-radius:12px;padding:16px 18px;margin:0 0 8px;font-size:18px}
+.answer p:last-child{margin:0}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+ol.steps>li{counter-increment:s;position:relative;padding:0 0 18px 48px}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:32px;height:32px;border-radius:50%;background:var(--teal);color:var(--bg);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:15px}
+ol.steps>li strong{display:block}
+ul{padding-left:22px;margin:0 0 14px}
+li{margin:0 0 6px}
+.note{color:var(--muted);font-size:15px}
+.warn{border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--surface);border-radius:12px;padding:12px 16px;margin:14px 0;font-size:15.5px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:1px 6px;white-space:nowrap}
+.faq details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:0 0 10px}
+.faq summary{cursor:pointer;font-weight:600}
+.faq details p{margin:10px 0 0}
+.cta{margin:40px 0 0;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;text-align:center}
+.cta h2{margin:0 0 8px}
+.btn{display:inline-block;background:var(--teal);color:var(--bg);text-decoration:none;font-weight:700;padding:12px 22px;border-radius:999px;margin:6px 0}
+.btn:hover{filter:brightness(1.08)}
+.cta .note{margin:8px 0 0}
+.related ul{list-style:none;padding:0}
+.related li{border-bottom:1px solid var(--line);padding:8px 0;margin:0}
+.related li:last-child{border-bottom:0}
+footer{max-width:760px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:14px}
+footer a{color:var(--muted)}
+</style>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "Does converting reduce quality?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No re-encoding. Video and audio are remuxed and verified sample by sample. The original cover-frame timestamp is kept and matched to the exact video frame by its original timestamp; missing timing is reported, not guessed. Ultra HDR gain maps are preserved with their parameters, and unsupported HDR is flagged."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Are my photos uploaded anywhere?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. MomentStays runs 100% locally on your Mac."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Which Macs does it run on?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "macOS 12 or later. It's tested on Intel with macOS 12; Apple Silicon testing is in progress. The app is ad-hoc signed, not notarized, so the first launch needs System Settings → Privacy & Security → Open Anyway."
+   }
+  }
+ ]
+}
+</script>
+</head>
+<body>
+<header class="top"><div class="in">
+<a class="brand" href="../"><img src="../assets/icon.svg" alt="" width="26" height="26">MomentStays</a>
+<nav><a href="./">Guides</a><a href="https://github.com/LinoFish/MomentStays/releases" rel="noopener">Download</a></nav>
+</div></header>
+<main>
+<p class="crumb"><a href="../">Home</a> / <a href="./">Guides</a></p>
+<article>
+<h1>How do I convert Motion Photos to Live Photos on a Mac?</h1>
+<div class="answer"><p>Copy the original Motion Photo files to your Mac, convert them with MomentStays (free, open source, runs locally), and import the results into Photos. With iCloud Photos on, they sync to your iPhone as playable Live Photos.</p></div>
+<h2>Why Motion Photos don't move on iPhone</h2>
+<p>An Android Motion Photo is a single JPEG with an MP4 clip appended after the image data and located via metadata. An Apple Live Photo is a still image plus a separate MOV, paired by a shared identifier. iOS doesn't read the Android layout, so you only see the still.</p>
+<p>Brands name it differently: Samsung "Motion photo", Huawei "Moving picture", Google Pixel "Top Shot / Motion". Pixel files are usually named <code>PXL_date_time.MP.jpg</code> (older ones: <code>MVIMG_…jpg</code>).</p>
+<h2>Step by step</h2>
+<ol class="steps">
+<li><strong>Copy the original files to your Mac</strong>Use a USB cable with <a href="https://openmtp.ganeshrvel.com/" rel="noopener">OpenMTP</a> (Google no longer offers Android File Transfer), or <a href="https://localsend.org/" rel="noopener">LocalSend</a> over the same Wi-Fi. Copy from the phone's <code>DCIM/Camera</code> folder.</li>
+<li><strong>Open MomentStays</strong>If macOS blocks the first launch: System Settings → Privacy &amp; Security → Open Anyway.</li>
+<li><strong>Add files and convert</strong>Add single files, whole folders, or read from your Photos library. Batch conversion is supported.</li>
+<li><strong>Import into Photos</strong>Send the Live Photos straight into a Photos album, or save them as JPEG/HEIC + MOV pairs.</li>
+<li><strong>Sync to iPhone</strong>With iCloud Photos on for both Mac and iPhone, the Live Photos appear on your iPhone. Press and hold to play.</li>
+</ol>
+<div class="warn">Don't send them through messaging or social apps. Samsung and Huawei both note that motion photos shared through third-party apps arrive as still images. Some cloud or web uploads can drop the video too, so always start from the original file.</div>
+<h2>Supported phones</h2>
+<p>Android → Live Photo: Google-compatible Motion Photo JPEG, Huawei/Honor, Samsung (including SEF and some validated HEIC layouts), OPPO, vivo (V2). The reverse also works: Live Photo → Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, vivo (JPEG) and Samsung HEIC. Have a file it doesn't recognize? <a href="https://github.com/LinoFish/MomentStays/issues" rel="noopener">Open an issue</a>.</p>
+<section class="faq"><h2>FAQ</h2>
+<details><summary>Does converting reduce quality?</summary><p>No re-encoding. Video and audio are remuxed and verified sample by sample. The original cover-frame timestamp is kept and matched to the exact video frame by its original timestamp; missing timing is reported, not guessed. Ultra HDR gain maps are preserved with their parameters, and unsupported HDR is flagged.</p></details>
+<details><summary>Are my photos uploaded anywhere?</summary><p>No. MomentStays runs 100% locally on your Mac.</p></details>
+<details><summary>Which Macs does it run on?</summary><p>macOS 12 or later. It&#x27;s tested on Intel with macOS 12; Apple Silicon testing is in progress. The app is ad-hoc signed, not notarized, so the first launch needs System Settings → Privacy &amp; Security → Open Anyway.</p></details>
+</section>
+<section class="cta"><h2>Download MomentStays (free)</h2>
+<a class="btn" href="https://github.com/LinoFish/MomentStays/releases" rel="noopener">Download from GitHub</a>
+<p class="note">macOS 12+ · Open source (GPL-3.0) · Runs 100% locally · Tested on Intel/macOS 12; Apple Silicon testing in progress</p>
+</section>
+<section class="related"><h2>Related guides</h2>
+<ul>
+<li><a href="samsung-motion-photo-to-iphone-live-photo.html">How do I turn Samsung Motion Photos into iPhone Live Photos?</a></li>
+<li><a href="./#zh">中文指南 →</a></li>
+</ul></section>
+</article>
+</main>
+<footer><p>MomentStays is a free, open-source macOS app that converts Android Motion Photos ⇄ Apple Live Photos. <a href="../">Home</a> · <a href="https://github.com/LinoFish/MomentStays" rel="noopener">GitHub</a></p></footer>
+</body>
+</html>

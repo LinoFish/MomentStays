@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小米动态照片怎么转成 iPhone 实况照片？| MomentStays</title>
+<meta name="description" content="小米动态照片传到 iPhone 只剩静态图？可在 Mac 上用 MomentStays 试转为实况照片；iPhone 实况照片也能转回小米格式。">
+<link rel="canonical" href="https://linofish.github.io/MomentStays/guides/xiaomi-motion-photo-to-live-photo.html">
+<link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
+<meta name="theme-color" content="#F0F6F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1B27" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="MomentStays">
+<meta property="og:image" content="https://linofish.github.io/MomentStays/assets/social-preview.png?v=3">
+<meta property="og:title" content="小米动态照片怎么转成 iPhone 实况照片？| MomentStays">
+<meta property="og:description" content="小米动态照片传到 iPhone 只剩静态图？可在 Mac 上用 MomentStays 试转为实况照片；iPhone 实况照片也能转回小米格式。">
+<meta property="og:url" content="https://linofish.github.io/MomentStays/guides/xiaomi-motion-photo-to-live-photo.html">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary">
+<style>
+:root{--bg:#F0F6F5;--surface:#FFFFFF;--ink:#122A38;--muted:#47636E;--teal:#0E7A66;--amber:#A96F14;--line:rgba(18,42,56,.14)}
+@media (prefers-color-scheme:dark){:root{--bg:#0D1B27;--surface:#132A36;--ink:#F0F6F5;--muted:#B0C8CF;--teal:#65DCC5;--amber:#F3BE72;--line:rgba(240,246,245,.14)}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans SC","Microsoft YaHei",Roboto,Arial,sans-serif;line-height:1.7;font-size:17px}
+a{color:var(--teal)}
+header.top{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+header.top .in{max-width:760px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.01em}
+.brand img{width:26px;height:26px;border-radius:7px}
+header.top nav a{color:var(--muted);text-decoration:none;font-size:15px;margin-left:16px}
+header.top nav a:hover{color:var(--teal)}
+main{max-width:760px;margin:0 auto;padding:32px 20px 56px}
+.crumb{font-size:14px;color:var(--muted);margin:0 0 10px}
+.crumb a{color:var(--muted)}
+h1{font-size:clamp(26px,5vw,36px);line-height:1.25;margin:0 0 16px;letter-spacing:-.01em}
+h2{font-size:22px;margin:40px 0 12px;line-height:1.35}
+h3{font-size:17px;margin:20px 0 6px}
+p{margin:0 0 14px}
+.answer{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--teal);border-radius:12px;padding:16px 18px;margin:0 0 8px;font-size:18px}
+.answer p:last-child{margin:0}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+ol.steps>li{counter-increment:s;position:relative;padding:0 0 18px 48px}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:32px;height:32px;border-radius:50%;background:var(--teal);color:var(--bg);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:15px}
+ol.steps>li strong{display:block}
+ul{padding-left:22px;margin:0 0 14px}
+li{margin:0 0 6px}
+.note{color:var(--muted);font-size:15px}
+.warn{border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--surface);border-radius:12px;padding:12px 16px;margin:14px 0;font-size:15.5px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:1px 6px;white-space:nowrap}
+.faq details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:0 0 10px}
+.faq summary{cursor:pointer;font-weight:600}
+.faq details p{margin:10px 0 0}
+.cta{margin:40px 0 0;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;text-align:center}
+.cta h2{margin:0 0 8px}
+.btn{display:inline-block;background:var(--teal);color:var(--bg);text-decoration:none;font-weight:700;padding:12px 22px;border-radius:999px;margin:6px 0}
+.btn:hover{filter:brightness(1.08)}
+.cta .note{margin:8px 0 0}
+.related ul{list-style:none;padding:0}
+.related li{border-bottom:1px solid var(--line);padding:8px 0;margin:0}
+.related li:last-child{border-bottom:0}
+footer{max-width:760px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:14px}
+footer a{color:var(--muted)}
+</style>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "我的小米动态照片能保证转换成功吗？",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "不能保证。MomentStays 支持 Google 兼容格式；小米不同机型/系统版本的封装可能不同。欢迎试用，失败请在 GitHub 反馈。"
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "能把 iPhone 实况照片发给用小米的朋友吗？",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "可以。用 MomentStays 转成小米格式的动态照片 JPEG，再用 LocalSend 或数据线等不压缩的方式发给对方。"
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "转换会重新压缩视频吗？",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "不会。视频和音频只做封装转换（remux）并逐样本校验，不重新编码。"
+   }
+  }
+ ]
+}
+</script>
+</head>
+<body>
+<header class="top"><div class="in">
+<a class="brand" href="../zh/"><img src="../assets/icon.svg" alt="" width="26" height="26">MomentStays</a>
+<nav><a href="./">指南</a><a href="https://github.com/LinoFish/MomentStays/releases" rel="noopener">下载</a></nav>
+</div></header>
+<main>
+<p class="crumb"><a href="../zh/">首页</a> / <a href="./">指南</a></p>
+<article>
+<h1>小米动态照片怎么转成 iPhone 实况照片？</h1>
+<div class="answer"><p>可以在 Mac 上用 MomentStays 试一试：它能转换 Google 兼容格式的动态照片。小米文件的具体封装公开资料说法不一，若你的文件没被识别，欢迎提交样例反馈。反方向（iPhone 实况照片 → 小米动态照片）已支持。</p></div>
+<h2>为什么小米动态照片在 iPhone 上不动</h2>
+<p>小米相机里的「动态照片」同样是把一段短视频嵌在 JPG 里。iPhone 只认「图片 + MOV」配对的实况照片，因此直接传过去只显示静态图。小米官方开发者文档也说明，各厂商动态照片规范不统一。</p>
+<h2>操作步骤</h2>
+<ol class="steps">
+<li><strong>把原文件传到 Mac</strong>用 USB 数据线 + <a href="https://openmtp.ganeshrvel.com/" rel="noopener">OpenMTP</a>（Google 的 Android File Transfer 已停止提供），或同一 Wi-Fi 下用 <a href="https://localsend.org/" rel="noopener">LocalSend</a>。从手机 <code>DCIM/Camera</code> 复制原图。</li>
+<li><strong>打开 MomentStays</strong>首次启动若被拦截：系统设置 → 隐私与安全性 → 仍要打开。</li>
+<li><strong>添加文件并转换</strong>可添加单个文件、整个文件夹，或直接读取「照片」图库，支持批量。</li>
+<li><strong>导入「照片」</strong>结果可直接导入「照片」App 的相簿，也可另存为 JPEG/HEIC + MOV 配对文件。</li>
+<li><strong>同步到 iPhone</strong>Mac 与 iPhone 都开启 iCloud 照片，实况照片会自动出现在 iPhone 上，长按即可播放。</li>
+</ol>
+<div class="warn">别用微信、QQ 等聊天软件或社交 App 传：三星、华为官方都说明，经第三方 App 分享后动态照片会变成静态图。云盘/网页上传也可能只剩照片，请以原文件为准。</div>
+<h2>小米支持情况</h2>
+<ul><li><strong>小米 → iPhone</strong>：未对小米机型逐一验证。若文件属于 Google 兼容格式即可转换；不能识别时请<a href="https://github.com/LinoFish/MomentStays/issues" rel="noopener">附样例反馈</a>，我们会据此适配。</li>
+<li><strong>iPhone → 小米</strong>：已支持，可把实况照片转成小米相册可识别的动态照片 JPEG。</li></ul>
+<section class="faq"><h2>常见问题</h2>
+<details><summary>我的小米动态照片能保证转换成功吗？</summary><p>不能保证。MomentStays 支持 Google 兼容格式；小米不同机型/系统版本的封装可能不同。欢迎试用，失败请在 GitHub 反馈。</p></details>
+<details><summary>能把 iPhone 实况照片发给用小米的朋友吗？</summary><p>可以。用 MomentStays 转成小米格式的动态照片 JPEG，再用 LocalSend 或数据线等不压缩的方式发给对方。</p></details>
+<details><summary>转换会重新压缩视频吗？</summary><p>不会。视频和音频只做封装转换（remux）并逐样本校验，不重新编码。</p></details>
+</section>
+<section class="cta"><h2>免费下载 MomentStays</h2>
+<a class="btn" href="https://github.com/LinoFish/MomentStays/releases" rel="noopener">前往 GitHub 下载</a>
+<p class="note">macOS 12+ · 开源（GPL-3.0）· 100% 本地运行，不上传照片 · 已在 Intel/macOS 12 测试，Apple 芯片测试中</p>
+</section>
+<section class="related"><h2>相关指南</h2>
+<ul>
+<li><a href="android-motion-photo-to-iphone.html">安卓动态照片怎么导入 iPhone，变成实况照片？</a></li>
+<li><a href="samsung-motion-photo-to-live-photo.html">三星动态照片怎么转成苹果实况照片？</a></li>
+<li><a href="huawei-motion-photo-to-live-photo.html">华为/荣耀动态照片怎么转成苹果实况照片？</a></li>
+<li><a href="new-iphone-old-motion-photos.html">从安卓换到 iPhone，以前的动态照片怎么办？</a></li>
+<li><a href="./#en">English guides →</a></li>
+</ul></section>
+</article>
+</main>
+<footer><p>MomentStays 是免费开源的 macOS 应用，实现安卓动态照片与苹果实况照片双向转换。 <a href="../zh/">首页</a> · <a href="https://github.com/LinoFish/MomentStays" rel="noopener">GitHub</a></p></footer>
+</body>
+</html>
