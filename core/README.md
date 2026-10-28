@@ -100,12 +100,18 @@ Swift `movie()` does: per kept track, sample count, sizes, concatenated
 sample hash and presentation times must match exactly.
 
 Limits: negative presentation times are refused (no explicit edit-list
-handling for them, same rule as Swift); the QuickTime metadata step (content
-identifier + still-image-time mett track, item 9b) is not implemented yet, so
-this output is a valid MOV but not yet a Live Photo. Verified on Linux: 5
-tests (synthetic video+audio, mett-track drop, negative-PTS refusal, second
-video selection, real ffmpeg H.264 file) plus ffprobe on the real-file output
-(pts/dts/sizes identical to source, decodes cleanly).
+handling for them, same rule as Swift). The movie-level content identifier
+(item 9b first half) is implemented: `remux_to_mov_with_identifier` writes
+moov/udta/meta/ilst (UTF-8 `----` item), `read_content_identifier` reads it
+back, and ffprobe independently reports the tag. The still-image-time mett
+track (item 9b second half) is deliberately NOT written: its boxed sample
+bytes are not pinned by any verifiable source and were not guessed — the
+closing step is a Mac hex dump of Swift `movie()` output (see ROADMAP Needs
+Mac check). Until then this output is a valid MOV with a content identifier
+but not yet a Live Photo. Verified on Linux: 5 remux tests (synthetic
+video+audio, mett-track drop, negative-PTS refusal, second video selection,
+real ffmpeg H.264 file) plus ffprobe on the real-file output (pts/dts/sizes
+identical to source, decodes cleanly), and 3 identifier tests.
 
 ## Parity
 

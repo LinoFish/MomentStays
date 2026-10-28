@@ -362,7 +362,13 @@ fn stco_box(is64: bool, offsets: &[usize]) -> Result<Vec<u8>> {
     Ok(full(if is64 { b"co64" } else { b"stco" }, 0, 0, &p))
 }
 
-fn build_moov(tracks: &[TrackParts], chunk_offsets: &[Vec<usize>], movie_duration: u32, next_track_id: u32) -> Result<Vec<u8>> {
+fn build_moov(
+    tracks: &[TrackParts],
+    chunk_offsets: &[Vec<usize>],
+    movie_duration: u32,
+    next_track_id: u32,
+    udta: Option<&[u8]>,
+) -> Result<Vec<u8>> {
     let mut moov_body = mvhd_box(movie_duration, next_track_id);
     for (t, offsets) in tracks.iter().zip(chunk_offsets.iter()) {
         let span = track_duration_span(&t.samples);
@@ -384,13 +390,107 @@ fn build_moov(tracks: &[TrackParts], chunk_offsets: &[Vec<usize>], movie_duratio
         trak_body.extend(bx(b"mdia", &mdia_body));
         moov_body.extend(bx(b"trak", &trak_body));
     }
+    if let Some(u) = udta {
+        moov_body.extend(u);
+    }
     Ok(bx(b"moov", &moov_body))
+}
+
+/// Movie-level QuickTime metadata carrying the Live Photo content identifier:
+/// moov/udta/meta/hdlr(mdta) + ilst/----/mean + name + data (UTF-8, type 1).
+/// Layout follows the QuickTime File Format metadata chapter and ffmpeg's
+/// `mov_read_custom` reader (mean/name/data full boxes, data locale 0).
+pub fn content_identifier_udta(uuid: &str) -> Vec<u8> {
+    let mut hdlr_body = u32b(0).to_vec();
+    hdlr_body.extend(b"mdta");
+    hdlr_body.extend([0u8; 12]);
+    hdlr_body.push(0);
+    let hdlr = full(b"hdlr", 0, 0, &hdlr_body);
+    let mean = full(b"mean", 0, 0, b"com.apple.quicktime.metadata");
+    let name = full(b"name", 0, 0, b"com.apple.quicktime.content.identifier");
+    let mut data_body = u32b(0).to_vec();
+    data_body.extend(uuid.as_bytes());
+    let data = full(b"data", 0, 1, &data_body);
+    let mut item = mean;
+    item.extend(name);
+    item.extend(data);
+    let ilst = bx(b"ilst", &bx(b"----", &item));
+    let mut meta_body = hdlr;
+    meta_body.extend(ilst);
+    bx(b"udta", &full(b"meta", 0, 0, &meta_body))
+}
+
+/// Read the content identifier back from a MOV's udta/meta/ilst, if present.
+pub fn read_content_identifier(data: &[u8]) -> Result<Option<String>> {
+    let top = mp4::boxes(data, 0, data.len())?;
+    let moov = match top.iter().find(|b| b.is(b"moov")) {
+        Some(m) => m.clone(),
+        None => return Ok(None),
+    };
+    let udta = match children(data, &moov)?.into_iter().find(|b| b.is(b"udta")) {
+        Some(u) => u,
+        None => return Ok(None),
+    };
+    let meta = match children(data, &udta)?.into_iter().find(|b| b.is(b"meta")) {
+        Some(m) => m,
+        None => return Ok(None),
+    };
+    // `meta` is a full box: its children start after version/flags.
+    let ilst = match mp4::boxes(data, meta.payload + 4, meta.end)?.into_iter().find(|b| b.is(b"ilst")) {
+        Some(i) => i,
+        None => return Ok(None),
+    };
+    for item in children(data, &ilst)? {
+        if !item.is(b"----") {
+            continue;
+        }
+        let mut mean = None;
+        let mut name = None;
+        let mut value = None;
+        for c in children(data, &item)? {
+            if c.end - c.payload < 4 {
+                continue;
+            }
+            let body = &data[c.payload + 4..c.end];
+            if c.is(b"mean") {
+                mean = Some(body.to_vec());
+            } else if c.is(b"name") {
+                name = Some(body.to_vec());
+            } else if c.is(b"data") && body.len() >= 4 {
+                value = Some(body[4..].to_vec());
+            }
+        }
+        if mean.as_deref() == Some(b"com.apple.quicktime.metadata".as_slice())
+            && name.as_deref() == Some(b"com.apple.quicktime.content.identifier".as_slice())
+        {
+            if let Some(v) = value {
+                return Ok(Some(String::from_utf8(v).map_err(|_| crate::Error::new("内容标识不是 UTF-8"))?));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// Remux an MP4 to a QuickTime MOV: chosen video track (0-based among video
 /// tracks) plus all audio tracks, samples copied verbatim.
 pub fn remux_to_mov(data: &[u8], video_index: usize) -> Result<Vec<u8>> {
+    remux_impl(data, video_index, None)
+}
+
+/// Same as `remux_to_mov`, plus the movie-level content identifier
+/// (`com.apple.quicktime.content.identifier`, ROADMAP item 9b first half).
+/// The still-image-time mett track is NOT added here: its boxed sample bytes
+/// are not pinned by any verifiable source yet (see ROADMAP item 9b).
+pub fn remux_to_mov_with_identifier(data: &[u8], video_index: usize, uuid: &str) -> Result<Vec<u8>> {
+    if uuid.is_empty() {
+        return fail("内容标识不能为空");
+    }
+    remux_impl(data, video_index, Some(uuid))
+}
+
+fn remux_impl(data: &[u8], video_index: usize, identifier: Option<&str>) -> Result<Vec<u8>> {
     let (tracks, max_track_id) = parse_tracks(data, video_index)?;
+    let udta = identifier.map(content_identifier_udta);
     // First build with zero offsets to measure moov, then rebuild with real ones.
     let zero: Vec<Vec<usize>> = tracks.iter().map(|t| vec![0; t.chunks.len()]).collect();
     let movie_duration = tracks
@@ -400,7 +500,7 @@ pub fn remux_to_mov(data: &[u8], video_index: usize) -> Result<Vec<u8>> {
         .into_iter()
         .max()
         .unwrap_or(0);
-    let moov_len = build_moov(&tracks, &zero, movie_duration, max_track_id + 1)?.len();
+    let moov_len = build_moov(&tracks, &zero, movie_duration, max_track_id + 1, udta.as_deref())?.len();
     let mut ftyp_payload = b"qt  ".to_vec();
     ftyp_payload.extend(u32b(0));
     ftyp_payload.extend(b"qt  ");
@@ -419,7 +519,7 @@ pub fn remux_to_mov(data: &[u8], video_index: usize) -> Result<Vec<u8>> {
         }
         chunk_offsets.push(offsets);
     }
-    let moov = build_moov(&tracks, &chunk_offsets, movie_duration, max_track_id + 1)?;
+    let moov = build_moov(&tracks, &chunk_offsets, movie_duration, max_track_id + 1, udta.as_deref())?;
     debug_assert_eq!(moov.len(), moov_len);
     let mut out = ftyp;
     out.extend(moov);

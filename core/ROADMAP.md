@@ -86,9 +86,22 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        stco/co64 rebuilt, edit list rescaled to the 1_000_000 movie timescale, ftyp `qt  `;
        validated by parse-back `check_remux` + ffprobe (real H.264 file: pts/dts/sizes exact,
        decodes clean). 5 tests.
-   [ ] step (b): QuickTime metadata — content identifier
-       (`com.apple.quicktime.content.identifier`) + still-image-time mett track. Without it
-       the remux output is a valid MOV but not yet a Live Photo.
+   [x] step (b1): movie-level content identifier
+       (`com.apple.quicktime.content.identifier` in moov/udta/meta/ilst, UTF-8
+       `----` item): `remux_to_mov_with_identifier` + `read_content_identifier`;
+       verified by parse-back and by ffprobe format tags. 3 tests.
+   [ ] step (b2): still-image-time mett track. NOT done — the boxed sample
+       bytes are not pinned by any verifiable source and were NOT guessed.
+       Known from Swift `movie()`: format description identifier
+       `mdta/com.apple.quicktime.still-image-time`, data type
+       `com.apple.metadata.datatype.int8`, value 0, mediaTimeScale 1_000_000,
+       one group at frameTime/frameDuration; reader requires exactly one
+       marker with value in {-1, 0, 255}. Unknown: the exact sample bytes
+       AVAssetWriter writes for a boxed int8 item, and the mett stsd entry
+       children. Closing step (needs a Mac): run Swift `movie()` on a sample,
+       hex-dump the mett track's stsd entry and mdat sample, then encode
+       those bytes. Until then the remux output is a valid MOV with a content
+       identifier but not yet a Live Photo.
 10. [ ] C ABI (`cbindgen` header), universal static lib build script, optional Swift bridge behind a flag.
 11. [ ] Cross-platform `convert` CLI and release binaries via CI.
 
@@ -100,10 +113,25 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   decode); needs a Mac run to confirm the MOV pairs with its still as a Live
   Photo once the mett track (item 9b) is added, and to compare against Swift
   `movie()` output sample-for-sample.
+- still-image-time mett track (item 9b2): needs a Mac run of Swift `movie()`
+  on a sample file, then a hex dump of the mett track's stsd entry and mdat
+  sample — those bytes are the ground truth for the Rust encoder. Do not
+  guess them; the 2012 QuickTime spec predates mett tracks and ffmpeg's
+  demuxer does not parse still-image-time samples.
 - `model` writers: verify against real vendor samples (especially Samsung SEF on-device
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
 
 ## Log
+- 2026-10-28: Content identifier landed (`remux.rs`, ROADMAP item 9b first
+  half): `remux_to_mov_with_identifier` writes moov/udta/meta/ilst with a
+  UTF-8 `----` item (mean `com.apple.quicktime.metadata`), `read_content_
+  identifier` reads it back; 3 tests. ffprobe independently reports the tag
+  (`TAG:com.apple.quicktime.content.identifier=<uuid>`). The still-image-
+  time mett track (9b second half) is deliberately NOT written: its boxed
+  sample bytes are not pinned by any verifiable source (QTFF 2012 predates
+  mett tracks, ffmpeg does not parse still-image-time samples, web searches
+  surfaced no byte-level reference) and were not guessed; the closing step
+  is a Mac hex dump of Swift `movie()` output (see Needs Mac check).
 - 2026-10-28: MP4->MOV sample-copy remux landed (`remux.rs`, ROADMAP item 9a):
   chosen video track + all audio tracks, verbatim sample bytes and timing tables,
   rebuilt chunk offsets, edit list rescaled to the 1_000_000 movie timescale;
