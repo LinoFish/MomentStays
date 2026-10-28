@@ -28,7 +28,7 @@ All conversion and verification happen locally on your Mac. Nothing is uploaded.
 - [9. Batches, delivery, and sharing](#9-batches-delivery-and-sharing)
 - [10. Settings reference](#10-settings-reference)
 - [11. Manifests and reports](#11-manifests-and-reports)
-- [12. Command-line tool (CLI)](#12-command-line-tool-cli)
+- [12. Development tools](#12-development-tools)
 - [13. Troubleshooting](#13-troubleshooting)
 - [14. Known limitations](#14-known-limitations)
 
@@ -138,7 +138,7 @@ Rules that protect your cover:
 
 - **Atomic publish.** Results are written to a staging area and published only after every check passes; replacements swap atomically after the new result verifies.
 - **Source fingerprint.** The source file's SHA-256 is compared before and after; if another program modifies the source mid-conversion, the result is not published.
-- **Output location rule.** The output folder must be outside the source folder (enforced in both GUI and CLI).
+- **Output location rule.** The output folder must be outside the source folder (enforced by the app).
 
 **When an output already exists:**
 
@@ -348,38 +348,9 @@ Batch reports are named `report-<date>-<time>-<random>.json`, with counts and pe
 
 **Privacy:** reports and manifests can contain source paths, EXIF, dates, and hashes. Keep them local; MomentStays itself uploads nothing.
 
-## 12. Command-line tool (CLI)
+## 12. Development tools
 
-The repository ships a separate Python CLI that shares parts of the native engine. **Scope:** the CLI covers the Google Motion Photo (JPEG) workflow only — no HEIC, vendor containers, auxiliary tracks, or library features.
-
-Requirements: Python 3.9+, macOS 12+, Xcode Command Line Tools. The first run compiles the native helper automatically (with a notice).
-
-```bash
-# from the repository root
-./motion-live --help
-./motion-live --version        # 0.1.0
-
-# 1) Read-only scan: cover time, HDR, format problems (file or folder, recursive)
-./motion-live scan ~/Photos/incoming
-
-# 2) Batch convert (output dir is required and must be outside the input dir)
-./motion-live convert ~/Photos/incoming -o ~/Photos/converted
-
-# 3) Verify an existing result against its recorded checksums
-./motion-live verify ~/Photos/converted/sample.jpg.livephoto
-```
-
-`convert` options:
-
-| Option | Default | Meaning |
-|---|---|---|
-| `--missing-time {error,midpoint}` | `error` | Error when cover time is missing; `midpoint` uses the video midpoint and must be chosen explicitly |
-| `--legacy-hdr {auto,preserve}` | `auto` | `auto` tries converting an existing legacy Apple gain map; plain SDR never gains HDR. `preserve` keeps it untouched |
-| `--time-domain {auto,media,presentation}` | `auto` | Checks sample and presentation timelines and errors on ambiguity; can be pinned explicitly |
-
-Behavior: inputs are `.jpg/.jpeg` only (symlinks skipped). Plain still JPEGs are `skipped`; corrupt motion photos are `failed` and make the exit code 1. Each result is a `<name>.livephoto/` folder (photo.jpg + photo.mov + manifest.json) plus a batch report in the output root. Existing results with matching fingerprint and options are `resumed`; mismatches error out and ask for a different output directory. Publishing is atomic and non-overwriting, and output timestamps inherit the source's access/modification times.
-
-Parsing is strict by design: Motion Photo detection relies on GCamera XMP and container structure, the video must sit at the file tail and pass full box-structure validation — never signature sniffing — and an Ultra HDR claim without an MPF auxiliary image is an error.
+The legacy Python CLI has been removed; use the app for scanning, conversion and output verification. Python remains in the repository for format references, regression tests, packaging and documentation maintenance. Running the app does not require Python.
 
 ## 13. Troubleshooting
 
@@ -406,7 +377,6 @@ Parsing is strict by design: Motion Photo detection relies on GCamera XMP and co
 - **Real-library behavior:** real-world playback after import, re-export, HDR display, permission revocation, and similar system behaviors are under ongoing real-environment validation; automated regression uses synthetic fixtures and does not equal every real device.
 - **Monitoring scope:** library monitoring runs only while the app is open and only for the chosen scope; no background daemon.
 - **Sharing scope:** third-party share targets may still modify files; verify at the receiving end.
-- **CLI scope:** Google Motion Photo JPEG workflow only (see §12).
 
 ---
 

@@ -140,17 +140,6 @@ Builds stay in local `dist/`. Current runtime validation is based on Intel/macOS
 
 When importing files manually into Photos, select the matching JPEG/HEIC and MOV together. Independent auxiliary MOV files are ordinary videos. Keep the output folder outside the source folder.
 
-### Optional Python CLI
-
-The CLI provides a separate Google Motion Photo workflow; it does not expose every native-app, HEIC, vendor, or library feature. It requires Python 3.9+ and Command Line Tools:
-
-```bash
-python3 -m motionlive scan "/path/to/originals"
-python3 -m motionlive convert "/path/to/originals" -o "/path/to/output"
-```
-
-The `./motion-live` launcher is also available. Native components compile into `.build/` on first use.
-
 ## Local by design
 
 Conversion and verification run locally. Personal sample photos, converted outputs, full reports, build products, and editor captures are excluded from this repository. The project artwork is code-drawn SVG and uses no personal media.
@@ -162,6 +151,8 @@ python3 scripts/check_publish.py
 ```
 
 ## Development
+
+The legacy Python CLI has been removed. Python is retained only for format references, regression tests, packaging and documentation tooling; the app runs independently of it.
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
@@ -182,12 +173,12 @@ python3 scripts/check_swiftui_ui.py
 | --- | --- |
 | SwiftUI, task state, Photos and sharing | `gui/` |
 | Parsing, HDR, timing, conversion, verification | `native/` |
-| Optional Python workflow | `motionlive/` |
+| Python format reference for regression and Rust parity | `motionlive/` |
 | Build scripts and regression drivers | `scripts/`, `tests/` |
 | App metadata and reproducible icon drawing | `packaging/` |
 | Project icon and README artwork | [Brand assets](docs/branding/README.md) |
 
-New to MomentStays? Start with the **[User Guide](docs/USER_GUIDE.md)** ([简体中文版](docs/USER_GUIDE.zh-CN.md)) — every feature explained, including auxiliary tracks, Photos library import, and the CLI.
+New to MomentStays? Start with the **[User Guide](docs/USER_GUIDE.md)** ([简体中文版](docs/USER_GUIDE.zh-CN.md)) — every feature explained, including auxiliary tracks and Photos library import.
 
 Further technical documentation is currently in Chinese: [implementation](docs/development/SwiftUI实现说明.md), [library integration](docs/design/图库识别与自动入册规范.md), [sharing](docs/design/输出位置与系统共享规范.md), and [local fixtures/privacy](docs/development/本地样片与隐私.md).
 

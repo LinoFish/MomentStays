@@ -142,17 +142,6 @@ DMG 仅显示应用、Applications 链接与拖拽箭头。手册从应用内打
 
 手动导入「照片」时，同时选择对应 JPEG/HEIC 和 MOV。独立辅助轨 MOV 是普通视频。输出文件夹必须位于原片目录之外。
 
-### 可选 Python CLI
-
-CLI 提供独立的 Google Motion Photo 工作流，不包含原生应用的全部厂商、HEIC 和图库功能。需要 Python 3.9+ 与 Command Line Tools：
-
-```bash
-python3 -m motionlive scan "/原片路径"
-python3 -m motionlive convert "/原片路径" -o "/输出路径"
-```
-
-也可使用 `./motion-live` 入口，首次运行会把原生组件编译到 `.build/`。
-
 ## 本地处理与隐私
 
 转换和校验在本地完成。个人照片样片、转换结果、完整报告、构建产物和编辑器截图均排除在仓库之外。项目视觉素材由代码绘制，不使用个人媒体。
@@ -164,6 +153,8 @@ python3 scripts/check_publish.py
 ```
 
 ## 开发
+
+旧 Python CLI 已移除。Python 仅保留用于格式参考、回归测试、打包和文档工具；App 运行不依赖 Python。
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
@@ -184,7 +175,7 @@ python3 scripts/check_swiftui_ui.py
 | --- | --- |
 | SwiftUI、任务状态、图库与共享 | `gui/` |
 | 解析、HDR、时间、转换与校验 | `native/` |
-| 可选 Python 工作流 | `motionlive/` |
+| 回归测试与 Rust 对照用 Python 格式参考 | `motionlive/` |
 | 构建与回归入口 | `scripts/`、`tests/` |
 | 应用属性与可复现图标绘制 | `packaging/` |
 | 项目图标与 README 视觉素材 | [品牌素材](docs/branding/README.md) |

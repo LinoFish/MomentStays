@@ -66,7 +66,7 @@ The `MIT/Apache-2.0` spelling is reproduced from the relevant package metadata. 
 | [Google libultrahdr](https://github.com/google/libultrahdr) | Upstream [LICENSE](https://github.com/google/libultrahdr/blob/main/LICENSE) includes MIT and Apache-2.0 notices. | External optional prerequisite for `tests/ProbeUltraHDR.cpp`; also an HDR metadata reference. The app does not compile or bundle the library. |
 | [fontTools](https://github.com/fonttools/fonttools), [Brotli](https://github.com/google/brotli) | 4.60.1, MIT; 1.1.0, MIT | Local WOFF2 metadata inspection for this attribution inventory; their Python code is not included in the app or site. |
 | [Swift](https://github.com/swiftlang/swift) | Upstream Apache-2.0 / runtime-exception terms; Apple SDK terms separately apply. | Native compilation; SDK command-line tools also provide signing, icon and disk-image utilities. |
-| [Python](https://www.python.org/), [pip](https://github.com/pypa/pip) | PSF terms; pip MIT | Optional Python workflow, generated-fixture checks and local build/documentation tooling. |
+| [Python](https://www.python.org/), [pip](https://github.com/pypa/pip) | PSF terms; pip MIT | Test-only format references, generated-fixture checks and local build/documentation tooling. |
 | [Rust](https://github.com/rust-lang/rust), [Cargo](https://github.com/rust-lang/cargo) | MIT OR Apache-2.0 | Builds and checks the experimental Rust module. |
 | [Git](https://git-scm.com/), [GitHub CLI](https://github.com/cli/cli) | Git GPL-2.0; GitHub CLI MIT | Version control, publishing and release asset management. |
 
