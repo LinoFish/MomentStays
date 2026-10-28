@@ -1,0 +1,78 @@
+[
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/base.jpg",
+    "status": "not-convertible",
+    "reason": "Not a marked Google Motion Photo"
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/extended-motion.jpg",
+    "status": "motion-photo",
+    "hdr": "legacy-or-sdr",
+    "timestamp_us": 400000,
+    "timestamp_tag": "MotionPhotoPresentationTimestampUs",
+    "warnings": []
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/extended.jpg",
+    "status": "motion-photo",
+    "hdr": "legacy-or-sdr",
+    "timestamp_us": 400000,
+    "timestamp_tag": "MotionPhotoPresentationTimestampUs",
+    "warnings": []
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/legacy-mpf.jpg",
+    "status": "not-convertible",
+    "reason": "Not a marked Google Motion Photo"
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/motion-element.jpg",
+    "status": "motion-photo",
+    "hdr": "legacy-or-sdr",
+    "timestamp_us": 400000,
+    "timestamp_tag": "MotionPhotoPresentationTimestampUs",
+    "warnings": []
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/motion-legacy.jpg",
+    "status": "motion-photo",
+    "hdr": "legacy-or-sdr",
+    "timestamp_us": 1234567,
+    "timestamp_tag": "MicroVideoPresentationTimestampUs",
+    "warnings": []
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/motion-notime.jpg",
+    "status": "motion-photo",
+    "hdr": "legacy-or-sdr",
+    "timestamp_us": null,
+    "timestamp_tag": null,
+    "warnings": []
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/motion.jpg",
+    "status": "motion-photo",
+    "hdr": "legacy-or-sdr",
+    "timestamp_us": 400000,
+    "timestamp_tag": "MotionPhotoPresentationTimestampUs",
+    "warnings": []
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/srgb.jpg",
+    "status": "not-convertible",
+    "reason": "Not a marked Google Motion Photo"
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/static.jpg",
+    "status": "not-convertible",
+    "reason": "Not a marked Google Motion Photo"
+  },
+  {
+    "source": "/home/hatch/workspace/momentstays-rustcore/core/tests/fixtures-pycli/ultra.jpg",
+    "status": "motion-photo",
+    "hdr": "ultra-hdr",
+    "timestamp_us": 400000,
+    "timestamp_tag": "MotionPhotoPresentationTimestampUs",
+    "warnings": []
+  }
+]
