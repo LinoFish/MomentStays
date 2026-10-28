@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>MomentStays</string>
+  <key>CFBundleDisplayName</key><string>MomentStays</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array>
+  <key>LSHasLocalizedDisplayName</key><true/>
+  <key>CFBundleIdentifier</key><string>app.motionlive.converter</string>
+  <key>CFBundleExecutable</key><string>MomentStays</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.3.1</string>
+  <key>CFBundleVersion</key><string>31</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.photography</string>
+  <key>NSPhotoLibraryUsageDescription</key><string>读取您选择范围内的照片与配对视频以识别、转换动态照片；在您选择导入相册时，将转换结果作为新实况照片加入图库和指定相册，原片保持不变。</string>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Lino. GPL-3.0-only.</string>
+  <key>CFBundleDocumentTypes</key><array><dict>
+    <key>CFBundleTypeName</key><string>Android Motion Photo JPEG/HEIC</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>LSHandlerRank</key><string>Alternate</string>
+    <key>LSItemContentTypes</key><array><string>public.jpeg</string><string>public.heic</string><string>public.heif</string></array>
+  </dict></array>
+</dict></plist>

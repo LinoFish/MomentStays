@@ -1,0 +1,245 @@
+#if UI_DIAGNOSTICS
+import AppKit
+import SwiftUI
+
+// Only compiled for --diagnostics builds. Synthetic data never accesses photos.
+final class UISnapshotSupport {
+    let model: WorkspaceModel
+    let window: NSWindow
+    var frames: [String: CGRect] = [:]
+    private(set) var finished = false
+    private var checks: [[String: Any]] = []
+    private var reportWindow: NSWindow?
+    private var libraryPicker: PhotosLibraryPicker?
+    private var recentFrames: [String: CGRect] = [:]
+    init(model: WorkspaceModel, window: NSWindow) { self.model = model; self.window = window }
+    private func argument(_ flag: String) -> String? {
+        guard let index = CommandLine.arguments.firstIndex(of: flag), index + 1 < CommandLine.arguments.count else { return nil }
+        return CommandLine.arguments[index + 1]
+    }
+    func prepare() {
+        if let appearance = argument("--ui-appearance") { NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua) }
+        if argument("--direction") == "to-android" { model.updateSettings { $0.direction = .toAndroid } }
+        guard argument("--ui-snapshot") != nil else { return }
+        model.loadPreview(count: Int(argument("--ui-fixtures") ?? "24") ?? 24,
+            progressPreview: CommandLine.arguments.contains("--ui-progress-preview"))
+        if CommandLine.arguments.contains("--ui-long-locations") { model.loadPreviewLocations() }
+        if CommandLine.arguments.contains("--ui-clear-preview") { model.clearSources() }
+        if let source = argument("--ui-motion-source") {
+            MotionPreviewDiagnostics.source = URL(fileURLWithPath: source)
+            model.loadPreview(count: 1, progressPreview: false)
+        }
+        if let index = argument("--ui-cover-index").flatMap(Int.init), let item = model.items.first {
+            model.selectCover(index,for:item.source)
+        }
+        if let delivery = argument("--ui-candidate-delivery").flatMap(CandidateDelivery.init(rawValue:)) {
+            model.updateSettings { $0.exportMode = .withCandidates; $0.candidateDelivery = delivery }
+        }
+        if let destination = argument("--ui-destination"), let value = OutputDestination(rawValue: destination) {
+            model.updateSettings { $0.destination = value }
+            model.deliverySummary = "转换结果已保留，可在最近结果中重试交付"
+            model.recentTasksAvailable = true; model.shareReady = model.settings.direction == .toAndroid
+            model.libraryMonitoring = true; model.librarySummary = "监测所选相册（运行期间）"
+        }
+        if CommandLine.arguments.contains("--ui-preview") || CommandLine.arguments.contains("--ui-hover-preview") || argument("--ui-cover-index") != nil { model.previewVisible = true }
+        if CommandLine.arguments.contains("--ui-select-first") { model.selection = model.items.first?.id }
+        if CommandLine.arguments.contains("--ui-detail") { model.detailExpanded = true }
+    }
+    func start() {
+        guard let path = argument("--ui-snapshot") else { return }
+        let width = Double(argument("--ui-width") ?? "1120") ?? 1120
+        let height = Double(argument("--ui-height") ?? "700") ?? 700
+        resize(width: width, height: height)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            if CommandLine.arguments.contains("--ui-source-menu") { self.model.sourceMenuRequested = true }
+            if CommandLine.arguments.contains("--ui-output-menu"), let content = self.window.contentView,
+               let arrow = self.descendants(content).first(where: { $0.identifier?.rawValue == "output-mode-button" }) as? NSButton { arrow.performClick(nil) }
+            if CommandLine.arguments.contains("--ui-error-preview") { self.model.errorMessage = "示例错误：照片缺少有效封面时间。原片保持不变，可在高级参数中检查时间策略。" }
+            if CommandLine.arguments.contains("--ui-report-preview") { self.showReportPreview() }
+            if CommandLine.arguments.contains("--ui-expand-settings") { self.model.settingsPresented = true }
+            if CommandLine.arguments.contains("--ui-library-preview") { self.showLibraryPreview() }
+            if CommandLine.arguments.contains("--ui-recent-preview") { self.showRecentPreview() }
+            if CommandLine.arguments.contains("--ui-resize-check") {
+                self.model.selection = self.model.items.first?.id
+                self.model.updateSettings { $0.exportDataFiles = false }
+                self.resizeSequence([(390, 540), (640, 600), (959, 640), (960, 640), (1280, 540), (480, 600)], path: path)
+            } else if self.argument("--ui-cover-index") != nil { self.candidatePreview(path:path) }
+            else if CommandLine.arguments.contains("--ui-hover-preview") { self.hoverPreview(path: path) }
+            else { self.finishSnapshot(path) }
+        }
+    }
+    private func candidatePreview(path: String, remaining: Int = 100) {
+        if MotionPreviewDiagnostics.candidateImageLoaded || remaining == 0 { finishSnapshot(path); return }
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.1) { self.candidatePreview(path:path,remaining:remaining - 1) }
+    }
+    private func hoverPreview(path: String, remaining: Int = 60, sent: Bool = false) {
+        if MotionPreviewDiagnostics.duration != nil, let content = window.contentView,
+           let target = descendants(content).first(where: { $0.identifier?.rawValue == "motion-timeline-hover" }) {
+            if !sent {
+                let point = target.convert(NSPoint(x: target.bounds.width * 0.8, y: target.bounds.midY), to: nil)
+                if let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) {
+                    target.mouseMoved(with: event)
+                }
+            }
+            if MotionPreviewDiagnostics.frame != nil {
+                if CommandLine.arguments.contains("--ui-hover-exit") {
+                    target.mouseExited(with: NSEvent())
+                }
+                finishSnapshot(path); return
+            }
+            if remaining > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.hoverPreview(path: path, remaining: remaining - 1, sent: true) }
+                return
+            }
+        } else if remaining > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.hoverPreview(path: path, remaining: remaining - 1) }
+            return
+        }
+        finishSnapshot(path)
+    }
+
+    private func resize(width: Double, height: Double) {
+        var frame = window.frame
+        frame.size = NSSize(width:max(window.minSize.width,width),height:max(window.minSize.height,height))
+        window.setFrame(frame, display: true)
+    }
+    private func resizeSequence(_ sizes: [(Double, Double)], path: String) {
+        guard let next = sizes.first else { finishSnapshot(path); return }
+        resize(width: next.0, height: next.1)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            var check = self.metrics()
+            check["selection_preserved"] = self.model.selection == self.model.items.first?.id
+            check["settings_preserved"] = !self.model.settings.exportDataFiles
+            self.checks.append(check)
+            self.resizeSequence(Array(sizes.dropFirst()), path: path)
+        }
+    }
+    private func metrics() -> [String: Any] {
+        let bounds = window.contentView?.bounds ?? .zero
+        let visible = CGRect(origin: .zero, size: bounds.size).insetBy(dx:-0.5,dy:-0.5)
+        let queue = frames["queue-list"] ?? .zero
+        let primary = frames["primary-action"] ?? .zero
+        let tables = window.contentView.map { descendants($0).compactMap { $0 as? NSTableView } } ?? []
+        let buttons = window.contentView.map { descendants($0).compactMap { $0 as? NSButton } } ?? []
+        let sourceButton = buttons.first { $0.identifier?.rawValue == "import-button" }
+        var sourceColor: [Double] = []
+        var systemAccentColor: [Double] = []
+        window.effectiveAppearance.performAsCurrentDrawingAppearance {
+            if let color = NSColor.systemOrange.usingColorSpace(.sRGB) {
+                systemAccentColor = [Double(color.redComponent), Double(color.greenComponent), Double(color.blueComponent)]
+            }
+            if let color = sourceButton?.bezelColor?.usingColorSpace(.sRGB) {
+                sourceColor = [Double(color.redComponent), Double(color.greenComponent), Double(color.blueComponent)]
+            }
+        }
+        return ["source_button_title": sourceButton?.title ?? "", "source_button_enabled":sourceButton?.isEnabled ?? false,
+            "output_destination":model.settings.destination.rawValue,
+            "output_menu_titles":OutputMenuDiagnostics.titles,"output_menu_selected":OutputMenuDiagnostics.selected,
+            "output_path":model.output?.path ?? "", "clear_enabled":!model.sources.isEmpty && !model.isBusy && !model.sharing, "source_button_color": sourceColor, "system_accent_color": systemAccentColor,
+            "window_controls_visible": [NSWindow.ButtonType.closeButton,.miniaturizeButton,.zoomButton].allSatisfy { window.standardWindowButton($0)?.isHidden == false },
+            "source_menu_opened": SourceMenuDiagnostics.opened,
+            "source_menu_titles": SourceMenuDiagnostics.titles,
+            "queue_scope": frames.keys.first(where: { $0.hasPrefix("queue-scope-") })?.replacingOccurrences(of:"queue-scope-",with:"") ?? "",
+            "titlebar_brand_visible": window.titlebarAccessoryViewControllers.contains { !$0.view.isHidden },
+            "titlebar_absent": !window.styleMask.contains(.titled),
+            "frame_width": window.frame.width, "frame_height": window.frame.height,
+            "minimum_width": window.minSize.width, "minimum_height": window.minSize.height,
+            "content_height": bounds.height, "queue_height": queue.height,
+            "queue_width": queue.width, "primary_visible": !primary.isEmpty && visible.contains(primary),
+            "queue_visible": !queue.isEmpty && visible.contains(queue),
+            "preview_duration": MotionPreviewDiagnostics.duration.map { $0 as Any } ?? NSNull(),
+            "preview_cover": MotionPreviewDiagnostics.cover.map { $0 as Any } ?? NSNull(),
+            "preview_frame": MotionPreviewDiagnostics.frame.map { $0 as Any } ?? NSNull(),
+            "preview_hovering": MotionPreviewDiagnostics.hovering,
+            "candidate_count": MotionPreviewDiagnostics.candidateCount,
+            "candidate_image_loaded": MotionPreviewDiagnostics.candidateImageLoaded,
+            "row_count": model.items.count, "inspector_visible": frames["inspector"] != nil,
+            "settings_sheet_visible": window.attachedSheet != nil,
+            "sheet_width": window.attachedSheet?.frame.width ?? 0,
+            "library_picker": libraryPicker?.diagnosticMetrics ?? [:],
+            "recent_actions_visible": window.attachedSheet.map { sheet in
+                guard let bounds = sheet.contentView?.bounds, let actions = recentFrames["recent-actions"] else { return false }
+                return bounds.insetBy(dx:-1,dy:-1).contains(actions)
+            } ?? false,
+            "native_tables": tables.map { ["rows": $0.numberOfRows, "selected_row": $0.selectedRow,
+                "visible_rows": $0.rows(in: $0.visibleRect).length,
+                "horizontal_overflow": $0.bounds.width > ($0.enclosingScrollView?.contentSize.width ?? $0.bounds.width) + 1] as [String: Any] },
+            "frames": frames.filter { !$0.key.isEmpty }.mapValues { ["x": $0.minX, "y": $0.minY, "width": $0.width, "height": $0.height] }]
+    }
+    private func descendants(_ view: NSView) -> [NSView] {
+        [view] + view.subviews.flatMap { descendants($0) }
+    }
+    private func showReportPreview() {
+        let files: [[String: Any]] = model.items.prefix(12).enumerated().map { index, item in
+            ["source": item.source.path, "status": index % 3 == 0 ? "failed" : "converted",
+             "detail": index % 3 == 0 ? "原片缺少有效封面时间；未发布输出，原始文件保持不变。" : "转换完成，图像与视频已通过校验。"]
+        }
+        let report = ConversionReport(BatchOutcome(counts: ["converted": 8, "failed": 4], report: nil,
+            reportData: ["files": files], cancelled: false))
+        let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 500), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        panel.contentMinSize = WindowSizing.report
+        panel.title = "转换报告"; panel.isReleasedWhenClosed = false
+        panel.contentView = NSHostingView(rootView:ReportView(report:report,actions:WorkspaceActions())
+            .frame(minWidth:WindowSizing.report.width,minHeight:WindowSizing.report.height))
+        panel.contentMinSize = WindowSizing.report
+        panel.center(); panel.makeKeyAndOrderFront(nil); reportWindow = panel
+    }
+
+    private func showLibraryPreview() {
+        let picker = PhotosLibraryPicker(direction:model.settings.direction) { _, _ in }
+        libraryPicker = picker
+        picker.presentPreview(window,count:CommandLine.arguments.contains("--ui-library-empty") ? 0 : 12,
+            selectFirst:CommandLine.arguments.contains("--ui-library-selected"),
+            switchVersion:CommandLine.arguments.contains("--ui-library-switch-version"),
+            listMode:CommandLine.arguments.contains("--ui-library-list"),
+            switchView:CommandLine.arguments.contains("--ui-library-switch-view"),
+            resize:CommandLine.arguments.contains("--ui-library-resize"))
+    }
+
+    private func showRecentPreview() {
+        let panel = NSWindow(contentRect:NSRect(origin:.zero,size:WindowSizing.recent),
+            styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+        panel.title = "最近结果"; panel.contentMinSize = WindowSizing.recent
+        panel.isReleasedWhenClosed = false
+        var tasks: [DeliveryTask] = []
+        if !CommandLine.arguments.contains("--ui-recent-empty") {
+            for index in 0..<3 {
+                var settings = ConversionSettings(); settings.direction = index == 1 ? .toAndroid : .toApple
+                var task = DeliveryTask(settings:settings,output:"/示例照片/用于检查较长输出路径能否换行的转换结果/Live Photos")
+                task.results = [DeliveredFile(source:"/示例照片/照片.jpg",folder:task.output,files:[task.output + "/照片.jpg"],key:"example")]
+                task.cancelled = index == 2; task.importSummary = "结果已保留，部分文件需重新转换"
+                tasks.append(task)
+            }
+        }
+        let view = RecentTasksView(model:model,initialTasks:tasks,close:{},retry:{ _ in },remove:{ _ in [] })
+            .coordinateSpace(name:"workspace")
+            .onPreferenceChange(LayoutFramesKey.self) { self.recentFrames = $0 }
+        panel.contentView = NSHostingView(rootView:view)
+        window.beginSheet(panel)
+    }
+    private func finishSnapshot(_ path: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            let target = self.reportWindow ?? self.window.attachedSheet ?? self.window
+            target.contentView?.layoutSubtreeIfNeeded()
+            if let capture = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(target.windowNumber), [.boundsIgnoreFraming, .bestResolution]),
+               let png = NSBitmapImageRep(cgImage: capture).representation(using: .png, properties: [:]) {
+                try? png.write(to: URL(fileURLWithPath: path))
+            }
+            var result = self.metrics(); result["resize_checks"] = self.checks
+            if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: URL(fileURLWithPath: path + ".json"))
+            }
+            self.finished = true
+            self.model.settingsPresented = false
+            if let sheet = self.window.attachedSheet {
+                self.window.endSheet(sheet); sheet.orderOut(nil)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NSApp.terminate(nil) }
+            // A diagnostic run has only synthetic data. A lingering modal animation
+            // must not leave an unattended preview process running after capture.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { exit(0) }
+        }
+    }
+}
+#endif
