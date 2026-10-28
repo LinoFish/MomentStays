@@ -41,10 +41,12 @@ cargo build --release --bin momentstays
 Differences from the Python CLI, all deliberate:
 
 - `convert` still needs the macOS Swift helper (`native/MotionLive.swift`,
-  compiled on demand and cached in `.build/`): the video/audio remux and the
-  legacy gain-map path run there, exactly like the Python version. On Linux
-  `convert` fails at that step with `Conversion requires macOS 12 or later`;
-  `scan` and `verify` work everywhere.
+  compiled on demand and cached in `.build/`): the QuickTime metadata step
+  (content identifier, still-image-time mett track) and the legacy gain-map
+  path run there, exactly like the Python version. The sample-copy MP4->MOV
+  remux itself is now done in Rust (`remux::remux_to_mov`, ROADMAP item 9a);
+  the CLI does not use it yet. On Linux `convert` fails at that step with
+  `Conversion requires macOS 12 or later`; `scan` and `verify` work everywhere.
 - `implementation_id` is the SHA-256 of the sorted `core/src/**/*.rs` sources
   plus `native/MotionLive.swift`. Python outputs are therefore never reported
   as `resumed` by this binary (they fail with "already exists and is not
@@ -82,7 +84,28 @@ parsing it back: video bytes, still coding hash and cover must match.
 Refusals, not guesses: a Huawei target needs a frame cover and other targets
 need a time cover; converting between the two needs the MP4 sample-table
 reader (ROADMAP item 7) and is rejected for now. HEIC writers and MOV->MP4
-remux are not implemented yet; see ROADMAP A1/A3/A5 and item 8/9.
+remux are not implemented yet; see ROADMAP A1/A3/A5 and item 8/9b.
+
+## MP4 -> MOV remux (`remux`, ROADMAP item 9a)
+
+`remux::remux_to_mov(data, video_index)` rebuilds an MP4 as a QuickTime MOV
+without re-encoding: the chosen video track plus all audio tracks are kept,
+other tracks (Google mett, hint, text) are dropped. Sample bytes are copied
+verbatim; stts/stsc/stsz/ctts/stss boxes are copied verbatim, stco/co64 is
+rebuilt for the new mdat layout, mvhd/tkhd/mdhd are rebuilt (movie timescale
+1_000_000, track timescales preserved), and the edit list is copied with
+segment durations rescaled to the movie timescale, so the output playback
+timeline matches the source. `remux::check_remux` validates a remux the way
+Swift `movie()` does: per kept track, sample count, sizes, concatenated
+sample hash and presentation times must match exactly.
+
+Limits: negative presentation times are refused (no explicit edit-list
+handling for them, same rule as Swift); the QuickTime metadata step (content
+identifier + still-image-time mett track, item 9b) is not implemented yet, so
+this output is a valid MOV but not yet a Live Photo. Verified on Linux: 5
+tests (synthetic video+audio, mett-track drop, negative-PTS refusal, second
+video selection, real ffmpeg H.264 file) plus ffprobe on the real-file output
+(pts/dts/sizes identical to source, decodes cleanly).
 
 ## Parity
 

@@ -81,8 +81,14 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        match up to the uniform edit-list shift). Per-track sample hash matching
        against Swift `trackInfo` still needs a Mac run.
 8. [ ] Live Photo → Motion Photo assembly (AndroidExport) at byte level.
-9. [ ] Motion Photo → Live Photo remux without re-encoding (QuickTime metadata, content identifier,
-       still-image-time) — largest item; split into sub-steps when reached.
+9. [x] Motion Photo → Live Photo remux step (a): sample-copy MP4 -> MOV (`remux.rs`):
+       chosen video track + all audio tracks, stts/stsc/stsz/ctts/stss copied verbatim,
+       stco/co64 rebuilt, edit list rescaled to the 1_000_000 movie timescale, ftyp `qt  `;
+       validated by parse-back `check_remux` + ffprobe (real H.264 file: pts/dts/sizes exact,
+       decodes clean). 5 tests.
+   [ ] step (b): QuickTime metadata — content identifier
+       (`com.apple.quicktime.content.identifier`) + still-image-time mett track. Without it
+       the remux output is a valid MOV but not yet a Live Photo.
 10. [ ] C ABI (`cbindgen` header), universal static lib build script, optional Swift bridge behind a flag.
 11. [ ] Cross-platform `convert` CLI and release binaries via CI.
 
@@ -90,10 +96,22 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
 - Parse layer (M1): verified by the owner on Mac 2026-10-28 and merged into the
   main program locally; that merge is NOT pushed yet, so remote main does not
   have it. Do not claim it until the push lands.
+- MP4->MOV remux (item 9a): container validity verified on Linux (ffprobe +
+  decode); needs a Mac run to confirm the MOV pairs with its still as a Live
+  Photo once the mett track (item 9b) is added, and to compare against Swift
+  `movie()` output sample-for-sample.
 - `model` writers: verify against real vendor samples (especially Samsung SEF on-device
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
 
 ## Log
+- 2026-10-28: MP4->MOV sample-copy remux landed (`remux.rs`, ROADMAP item 9a):
+  chosen video track + all audio tracks, verbatim sample bytes and timing tables,
+  rebuilt chunk offsets, edit list rescaled to the 1_000_000 movie timescale;
+  negative presentation times refused. 5 tests (synthetic video+audio, mett
+  drop, negative-PTS refusal, second video selection, real H.264 file); ffprobe
+  on the real-file output shows pts/dts/sizes identical to source and it
+  decodes cleanly. Item 9b (content identifier + still-image-time mett track)
+  remains: without it the output is a valid MOV but not yet a Live Photo.
 - 2026-10-28: Cover time<->frame conversion landed (`cover.rs`, ROADMAP A4): frame is the
   presentation-sorted index (Swift `pair()` convention), half-duration + 2 us tolerance,
   ties/out-of-range refused; 5 tests (B-frame order, real H.264 file, strict video-track

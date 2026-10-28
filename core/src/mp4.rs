@@ -4,7 +4,7 @@ use crate::{fail, Result};
 use std::ops::Range;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct BoxRef { pub ty: [u8; 4], pub payload: usize, pub end: usize }
+pub struct BoxRef { pub ty: [u8; 4], pub start: usize, pub payload: usize, pub end: usize }
 
 impl BoxRef {
     pub fn is(&self, t: &[u8; 4]) -> bool { &self.ty == t }
@@ -25,7 +25,7 @@ pub fn boxes(d: &[u8], start: usize, end: usize) -> Result<Vec<BoxRef>> {
             header = 16;
         } else if size == 0 { size = end - p; }
         if size < header || size > end - p { return fail("MP4 元数据长度无效"); }
-        out.push(BoxRef { ty: [d[p + 4], d[p + 5], d[p + 6], d[p + 7]], payload: p + header, end: p + size });
+        out.push(BoxRef { ty: [d[p + 4], d[p + 5], d[p + 6], d[p + 7]], start: p, payload: p + header, end: p + size });
         p += size;
     }
     Ok(out)
@@ -158,6 +158,8 @@ pub struct TrackSamples {
     pub handler: String,
     pub timescale: u32,
     pub samples: Vec<Sample>,
+    /// Sample-index ranges per chunk, in decode order (mirrors stsc).
+    pub chunks: Vec<std::ops::Range<usize>>,
 }
 
 fn find_box(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<BoxRef> {
@@ -380,8 +382,10 @@ pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
         }
         // Walk chunks in order, laying samples out by size.
         let mut samples = Vec::with_capacity(sample_count);
+        let mut chunk_ranges: Vec<std::ops::Range<usize>> = Vec::with_capacity(total_chunks);
         let mut next = 0usize;
         for (ci, per) in chunk_samples.iter().enumerate() {
+            let start = next;
             let mut at = chunk_offsets[ci];
             for _ in 0..*per {
                 if next >= sample_count {
@@ -402,11 +406,12 @@ pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
                 at += size;
                 next += 1;
             }
+            chunk_ranges.push(start..next);
         }
         if next != sample_count {
             return fail("MP4 采样表样本数不一致");
         }
-        tracks.push(TrackSamples { handler, timescale, samples });
+        tracks.push(TrackSamples { handler, timescale, samples, chunks: chunk_ranges });
     }
     Ok(tracks)
 }
