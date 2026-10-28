@@ -437,7 +437,7 @@ enum PhotoQueueScope: String, CaseIterable, Identifiable {
 }
 
 // Uses the same official artwork as the Dock icon and the GitHub/website brand assets.
-/// 应用显示名：简体中文系统为“片刻栖所”，其他语言为 MomentStays（来自 zh-Hans.lproj/InfoPlist.strings）。
+/// 应用显示名：简体中文系统为“留刻”，其他语言为 MomentStays（来自 zh-Hans.lproj/InfoPlist.strings）。
 enum AppName {
     static let display: String = {
         let name = Bundle.main.localizedInfoDictionary?["CFBundleDisplayName"] as? String

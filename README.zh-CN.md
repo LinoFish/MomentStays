@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/branding/github-header.svg" alt="片刻栖所 MomentStays：留住原来的瞬间。保留封面时间、原始音视频流、HDR 增益图，与系统图库互通。" width="100%">
+  <img src="docs/branding/github-header.svg" alt="留刻 MomentStays：留住原来的瞬间。保留封面时间、原始音视频流、HDR 增益图，与系统图库互通。" width="100%">
 </p>
 
 <p align="center">
@@ -7,10 +7,10 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.3.1</strong>
+  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.4.0</strong>
 </p>
 
-# 片刻栖所（MomentStays）— 安卓动态照片转苹果实况照片（Live Photo）工具
+# 留刻（MomentStays）— 安卓动态照片转苹果实况照片（Live Photo）工具
 
 把安卓手机的动态照片转换成 iPhone 实况照片（Apple Live Photo），也可以把实况照片反向转回安卓动态照片。支持三星动态照片、小米动态照片、Google（Pixel）动态照片，以及华为/荣耀、OPPO、vivo 的动态照片格式，以 JPEG 为主，另支持已验证的三星 HEIC 布局。
 
@@ -34,7 +34,7 @@
 
 ## 留住原来的瞬间
 
-| | MomentStays 保留的内容 |
+| | 留刻保留的内容 |
 | --- | --- |
 | **选定的封面位置** | 读取源封面时间戳，映射实际视频帧，并写入 Live Photo 封面定时标记。 |
 | **原始视频和音频** | 复用压缩样本，不重新编码音视频；核对样本数据、数量、大小和呈现时间戳。 |
@@ -47,7 +47,7 @@
 
 既可以选择文件和文件夹，也可以通过 PhotoKit 直接读取系统「照片」图库。
 
-| 来源 | MomentStays 处理 | 去向 |
+| 来源 | 留刻处理 | 去向 |
 | --- | --- | --- |
 | 文件中的安卓动态照片，或图库中仍含完整动态数据的原件 | 分离静态图与视频，保留封面时间，校验配对 | **直接导入相册的新 Live Photo**，或 JPEG/HEIC + MOV 文件 |
 | 图库中的 Apple Live Photo，或完整图片 + MOV 配对 | 读取对应资源与封面定时标记，保留原始音视频 | 文件夹中的 **Android 动态照片**，或系统共享菜单 |
@@ -67,7 +67,7 @@
 
 ### 封面时间戳，对齐实际视频帧
 
-封面时间戳定义的是**动态视频中被选作封面的那个瞬间**。MomentStays 读取源定时元数据，并依据实际媒体时间线映射到对应视频帧。生成 Live Photo 时，写入 `com.apple.quicktime.still-image-time` 定时标记；反向转换时读取该标记，恢复安卓动态照片的封面位置。
+封面时间戳定义的是**动态视频中被选作封面的那个瞬间**。留刻读取源定时元数据，并依据实际媒体时间线映射到对应视频帧。生成 Live Photo 时，写入 `com.apple.quicktime.still-image-time` 定时标记；反向转换时读取该标记，恢复安卓动态照片的封面位置。
 
 默认对齐容差为半帧。时间缺失、有歧义或越界时明确报告，不静默改用视频中点。可选清单记录源时间、映射帧与对齐误差。
 
@@ -197,15 +197,15 @@ python3 scripts/check_swiftui_ui.py
 
 ### 三星、小米的动态照片怎么转成 iPhone 实况照片？
 
-在 MomentStays 里添加动态照片文件（或文件夹、或从「照片」图库选取），选择“安卓 → 苹果”方向，输出到指定相册，或导出为 JPEG/HEIC + MOV 配对文件。封面时间会被映射到真实视频帧，音视频只重新封装、不重新编码。
+在留刻里添加动态照片文件（或文件夹、或从「照片」图库选取），选择“安卓 → 苹果”方向，输出到指定相册，或导出为 JPEG/HEIC + MOV 配对文件。封面时间会被映射到真实视频帧，音视频只重新封装、不重新编码。
 
 ### 安卓动态照片导入 iPhone 后为什么不动？
 
-因为安卓 Motion Photo 和苹果 Live Photo 是两种不同的封装格式，直接拷贝文件无法被 iPhone「照片」识别为实况照片。需要先用 MomentStays 转成 Live Photo 的图文配对格式并写入封面标记，再导入图库才会动。
+因为安卓 Motion Photo 和苹果 Live Photo 是两种不同的封装格式，直接拷贝文件无法被 iPhone「照片」识别为实况照片。需要先用留刻转成 Live Photo 的图文配对格式并写入封面标记，再导入图库才会动。
 
 ### iPhone 实况照片能转回安卓动态照片吗？
 
-可以。选择“苹果 → 安卓”方向，MomentStays 读取实况照片的图片 + MOV 配对和封面标记，输出 Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2 等安卓动态照片格式（JPEG），或三星格式（HEIC；Google 与小米的动态照片只有 JPEG）。
+可以。选择“苹果 → 安卓”方向，留刻读取实况照片的图片 + MOV 配对和封面标记，输出 Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2 等安卓动态照片格式（JPEG），或三星格式（HEIC；Google 与小米的动态照片只有 JPEG）。
 
 ### 转换动态照片会不会掉画质、会不会重新编码？
 

@@ -1,6 +1,6 @@
 # MomentStays User Guide
 
-> Applies to MomentStays 1.3.0 (macOS 12 or later).
+> Applies to MomentStays 1.4.0 (macOS 12 or later).
 > 中文版见 [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md).
 
 > High-resolution cover selection and candidate-photo export are included from version 1.2.0. Earlier installers do not include these options.
@@ -256,7 +256,7 @@ The Library version setting defaults to **Unmodified original (keeps original HD
 
 ### 8.3 Direct import
 
-- Import is available for **Android → Apple** only. The still and paired video are created as one Live Photo in a single library request, then associated with the target album — default **"MomentStays Conversion Results"**, or another user album you pick.
+- Import is available for **Android → Apple** only. The still and paired video are created as one Live Photo in a single library request, then associated with the target album — default **"留刻转换结果"**, or another user album you pick.
 - Before import, pairing identifiers, the cover timing marker, and "no embedded media in the still" are verified again. **Independent auxiliary MOVs are never attached as the paired video**, and JSON manifests are never imported as photo resources.
 - Original filenames, capture dates, and locations are preserved (library values win; file metadata is the fallback). After writing, the new asset is read back and checked — Live Photo properties, filename, date, location, album membership — before it is shown as "Imported".
 - **Stage-scoped retries:** an import failure retries only the import (verified files are kept); an album-association failure retries only the association. Assets are never created twice.
@@ -311,7 +311,7 @@ Open the settings sheet with **More Options…** in the top toolbar. Items marke
 |---|---|---|
 | Direction | Conversion direction | Android → Apple Live Photo (default) / Apple Live Photo → Android |
 | Output | Destination | See §9.1; enabled options depend on direction and mode |
-| Output | Target album name | Default "MomentStays Conversion Results"; empty falls back to default |
+| Output | Target album name | Default "留刻转换结果"; empty falls back to default |
 | Output | Library version | Unmodified original (default) / Current edited version |
 | Content (→Apple) | Export mode | Live Photo only (default) / + auxiliary track / auxiliary only |
 | Content (→Apple) | Video track | Primary motion track (default) / Auxiliary track |

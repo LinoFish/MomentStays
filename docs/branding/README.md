@@ -1,4 +1,4 @@
-# MomentStays 视觉标识
+# 留刻（MomentStays）视觉标识
 
 核心语句：**The moment stays. / 留住原来的瞬间。**
 

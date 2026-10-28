@@ -7,10 +7,10 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.3.1</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.4.0</strong>
 </p>
 
-# MomentStays — Android Motion Photo ↔ Apple Live Photo Converter for macOS
+# MomentStays（留刻）— Android Motion Photo ↔ Apple Live Photo Converter for macOS
 
 Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. MomentStays preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos — JPEG, plus validated Samsung HEIC layouts.
 

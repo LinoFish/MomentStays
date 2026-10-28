@@ -26,13 +26,16 @@ SOURCE = "https://github.com/LinoFish/MomentStays/blob/main/docs/"
 
 
 def read_ref(ref, path):
-    return subprocess.check_output(["git", "show", f"{ref}:{path}"], cwd=ROOT, text=True)
+    return subprocess.check_output(["git", "show", f"{ref}:{path}"], cwd=ROOT, text=True).replace("片刻栖所", "留刻")
 
 
 def render_manual(name):
     text = (ROOT / "docs" / name).read_text()
     body = markdown.markdown(text, extensions=["tables", "fenced_code", "toc", "sane_lists"],
         extension_configs={"toc": {"slugify": slugify_unicode}})
+
+    # Keep existing links to the Chinese manual heading working after the rename.
+    body = body.replace('id="留刻momentstays使用手册"', 'id="momentstays-使用手册"')
 
     def link(match):
         href = match.group(1)
@@ -48,7 +51,7 @@ def page(template, chinese):
     filename = "guide-zh.html" if chinese else "guide.html"
     other = "guide.html" if chinese else "guide-zh.html"
     name = "USER_GUIDE.zh-CN.md" if chinese else "USER_GUIDE.md"
-    title = "MomentStays 使用手册" if chinese else "MomentStays User Guide"
+    title = "留刻（MomentStays）使用手册" if chinese else "MomentStays User Guide"
     prefix, rest = template.split("<article>", 1)
     _, suffix = rest.rsplit("</article>", 1)
     prefix = re.sub(r'<html[^>]*>', '<html lang="zh-CN" class="lang-zh">' if chinese else '<html lang="en">', prefix, count=1)
@@ -62,6 +65,8 @@ def page(template, chinese):
         f'<link rel="alternate" hreflang="en" href="{BASE}guide.html">\n'
         f'<link rel="alternate" hreflang="zh-CN" href="{BASE}guide-zh.html">\n')
     prefix = prefix.replace("</head>", alternate + "</head>")
+    if chinese:
+        prefix = prefix.replace('class="brand" href="index.html">MomentStays', 'class="brand" href="index.html">留刻')
     return prefix + f"<article>\n<!-- Generated from docs/{name} -->\n" + render_manual(name) + "\n</article>" + suffix
 
 
