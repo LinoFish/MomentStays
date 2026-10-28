@@ -51,12 +51,18 @@ P3. [x] Parallel batch: `inspect`/`extract` accept many files/dirs, rayon pool (
 P4. [~] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3-4x faster; fewer XML parses, no per-segment Vec).
 A1. [~] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
        cover: Time(us) | Frame(n), source vendor, preserved vendor XMP } built by every reader.
-       JPEG path done (`model.rs`, built from `format::parse`); HEIC writers pending.
+       JPEG path done (`model.rs`, built from `format::parse`); HEIC writers done for
+       Google/Samsung (`heifwrite.rs`, synthetic fixtures only — public-sample
+       verification pending, see item 3).
 A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
        `cdylib` + UniFFI (or JNI) Kotlin bindings, smoke test calling parse from Kotlin.
 A3. [~] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
        Samsung SEF (JPEG + HEIC mpvd), Huawei/Honor LIVE_ tail, OPPO, vivo; video bytes never re-encoded.
-       JPEG writers done (all five vendors); HEIC mpvd writer pending.
+       JPEG writers done (all five vendors); HEIC mpvd writer done for Google/Samsung
+       (`heifwrite::assemble_heic`: XMP rewrite per Swift `HEIFMetadata.write`, mpvd +
+       Samsung SEF, parse-back validation of video bytes / coding hash / cover);
+       other HEIC targets refused. 5 tests (synthetic fixtures) + 1 CLI test;
+       public-sample verification pending (see item 3).
 A4. [x] Cover conversion between time and frame index (Huawei uses frames) via the MP4 sample-table
        reader (item 7); refuse rather than guess when timing is ambiguous.
        Done: `cover.rs` (frame = presentation-sorted index, same as Swift `pair()`;
@@ -65,15 +71,20 @@ A4. [x] Cover conversion between time and frame index (Huawei uses frames) via t
        the real H.264 file.
 A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
        JPEG matrix done (10 tests in `tests/android.rs`: five vendors, Ultra HDR gain map,
-       Extended XMP keys, cross-vendor chain); HEIC and MOV-remux round-trips pending.
+       Extended XMP keys, cross-vendor chain); HEIC round-trips done (Google/Samsung
+       assemble + vendor CLI test, parse-back: video bytes, coding hash, cover);
+       MOV-remux round-trips pending.
 3. [ ] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
        iloc v0/v1/v2, idat storage.
 4. [ ] Scan parity: port `PhotoVendor.identify` labels and HDR classification
        (honorPrivate / ISO 21496 / legacy Apple) → `scan` subcommand matching NativeDriver `scan` rows.
 5. [ ] Fuzzing: cargo-fuzz targets for `parse`, `jpeg::segments`, `heif::layout`; guarantee no panics
        (replace remaining slicing that can panic on hostile input with checked access).
-6. [ ] `live_still` for JPEG (XMP rewrite, Apple MakerNote / Exif identifier) with parity defined on
-       coding hash + semantic XMP fields.
+6. [x] `live_still` for JPEG (XMP rewrite, Apple MakerNote / Exif identifier) with parity defined on
+       coding hash + semantic XMP fields. Done: `pymotion::live_still_with_identifier`
+       (static-only clean per Swift `liveStill(updateIdentifier:true)`, then MakerNote /
+       Exif identifier inject); parity = coding bytes unchanged + dynamic XMP fields
+       cleared + MakerNote tag 17 reads back the uuid; HEIC refused. 3 tests.
 7. [x] MP4/MOV sample-table reader (stts/stsz/stco/co64/ctts) and per-track sample hash matching
        Swift `trackInfo` (no AVFoundation). Reader done: `mp4::sample_tables` (per-sample
        offset/size/decode/presentation/sync, stss + ctts v0/v1); 6 tests incl. a real
@@ -88,9 +99,11 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
    false)` — static-only truncation, motion XMP strip for GCamera + OPPO/
    vivo keys and MotionPhoto directory items, EXIF untouched, gain-map
    bytes verified), then existing `model::write` with its parse-back
-   validation. `mett_cover_time` reads the cover from the mett track's
-   sample timing through the edit list (sample value NOT checked: same
-   open question as 9b2). HEIC stills refused (need HEIC writers). 8 tests.
+   validation. `mett_cover_time` reads the cover from the marker track's
+   sample timing through the edit list (accepting Swift `mett` entries and
+   native `mebx` entries identified by their still-image-time key; sample
+   value NOT checked — native files write -1, Swift `movie()` writes 0).
+   HEIC stills refused (need HEIC live_still). 8 assembly tests.
 9. [x] Motion Photo → Live Photo remux step (a): sample-copy MP4 -> MOV (`remux.rs`):
        chosen video track + all audio tracks, stts/stsc/stsz/ctts/stss copied verbatim,
        stco/co64 rebuilt, edit list rescaled to the 1_000_000 movie timescale, ftyp `qt  `;
@@ -100,27 +113,36 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        (`com.apple.quicktime.content.identifier` in moov/udta/meta/ilst, UTF-8
        `----` item): `remux_to_mov_with_identifier` + `read_content_identifier`;
        verified by parse-back and by ffprobe format tags. 3 tests.
-   [ ] step (b2): still-image-time mett track. NOT done — the boxed sample
-       bytes are not pinned by any verifiable source and were NOT guessed.
-       Known from Swift `movie()`: format description identifier
-       `mdta/com.apple.quicktime.still-image-time`, data type
-       `com.apple.metadata.datatype.int8`, value 0, mediaTimeScale 1_000_000,
-       one group at frameTime/frameDuration; reader requires exactly one
-       marker with value in {-1, 0, 255}. Unknown: the exact sample bytes
-       AVAssetWriter writes for a boxed int8 item, and the mett stsd entry
-       children. Closing step (needs a Mac): run Swift `movie()` on a sample,
-       hex-dump the mett track's stsd entry and mdat sample, then encode
-       those bytes. Until then the remux output is a valid MOV with a content
-       identifier but not yet a Live Photo.
+   [x] step (b2): still-image-time track, in the native iPhone form
+       (`remux_to_mov_with_identifier_and_mett`, CLI flag
+       `--cover-time-us`): handler `meta`, sample entry `mebx` with a
+       `keys` box carrying `mdta/com.apple.quicktime.still-image-time`,
+       one 9-byte sample (value -1), mdhd timescale 600, edit list with
+       an empty edit up to the cover point. Correction to the old plan:
+       no verified public sample contains a `mett` entry at all — every
+       real iPhone file uses `mebx` — so the AVAssetWriter `mett` byte
+       form is NOT replicated (it would be a guess); the writer copies
+       the native `mebx` stsd/sample bytes verbatim from MIT-licensed
+       public samples (see `tests/SOURCES.md`). Reader extended to
+       accept `mebx` entries identified by their still-image-time key
+       (other native `mebx` tracks — video-orientation, live-photo-info
+       — are ignored). 5 tests (writer round-trip incl. cover 0 and
+       negative-cover refusal, native 1-key/3-key reader forms,
+       other-meta-track disambiguation) + 1 CLI test; `mett_cover_time`
+       verified against the original public iPhone files (covers
+       1,233,333 us and 1,260,000 us). Remaining Mac items: Photos
+       recognition of the synthetic track, and comparison with Swift
+       `movie()` output (see Needs Mac check).
 10. [ ] C ABI (`cbindgen` header), universal static lib build script, optional Swift bridge behind a flag.
 11. [x] Cross-platform `convert` CLI (`momentstays-convert` binary, no Swift
     helper): `vendor` (Google/Samsung/Huawei/OPPO/vivo, xiaomi/honor as
     Google-layout aliases, Time<->Frame auto-conversion via sample
-    tables), `to-live` (MOV remux + content identifier, with a printed
-    warning that the still-image-time marker is still missing), `to-motion`
-    (Live pair assembly, cover from --cover-time/--cover-frame/
+    tables; HEIC inputs for Google/Samsung targets via `heifwrite`),
+    `to-live` (MOV remux + content identifier, `--cover-time-us` for the
+    still-image-time track, warning only when that flag is absent),
+    `to-motion` (Live pair assembly, cover from --cover-time/--cover-frame/
     --cover-from-mett). Existing `momentstays` Python-compatible binary
-    untouched (its tests still pass). 5 CLI tests. Release binaries via
+    untouched (its tests still pass). 7 CLI tests. Release binaries via
     CI remain open (no CI in this repo yet).
 
 ## Needs Mac check
@@ -131,11 +153,13 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   decode); needs a Mac run to confirm the MOV pairs with its still as a Live
   Photo once the mett track (item 9b) is added, and to compare against Swift
   `movie()` output sample-for-sample.
-- still-image-time mett track (item 9b2): needs a Mac run of Swift `movie()`
-  on a sample file, then a hex dump of the mett track's stsd entry and mdat
-  sample — those bytes are the ground truth for the Rust encoder. Do not
-  guess them; the 2012 QuickTime spec predates mett tracks and ffmpeg's
-  demuxer does not parse still-image-time samples.
+- still-image-time track (item 9b2): stsd/sample bytes are now pinned by
+  MIT-licensed public samples (see `tests/SOURCES.md`) and the writer
+  emits the native `mebx` form. Still needs a Mac run: confirm Photos
+  recognizes the synthetic track as a Live Photo marker, and compare
+  against Swift `movie()` output — whether Photos treats the native
+  `mebx` form and the AVAssetWriter `mett` form equivalently is still
+  unproven (no public `mett` sample exists to compare against).
 - Live->Motion assembly (item 8): container-level validity verified on
   Linux (ffprobe + decode, sample-for-sample vs source); needs a Mac run
   on a real Live Photo pair (JPEG still + MOV) to confirm the output opens
@@ -143,8 +167,31 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   byte-for-byte on the still and video portions.
 - `model` writers: verify against real vendor samples (especially Samsung SEF on-device
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
+- HEIC writers (A3): synthetic-fixture verified only; needs a Mac run to
+  confirm vendor galleries recognize the HEIC mpvd outputs, and public
+  HEIC samples for the fixture set (item 3).
 
 ## Log
+- 2026-10-28: Still-image-time track landed (`remux.rs`, ROADMAP item 9b2):
+  native iPhone form (`mebx` + still-image-time key, 9-byte sample value -1,
+  mdhd 600, empty-edit cover mapping) in `remux_to_mov_with_identifier_and_mett`
+  and CLI `--cover-time-us`; `mett_cover_time` now accepts native `mebx`
+  tracks (key-identified) as well as Swift `mett` tracks. 5 tests + 1 CLI
+  test; reader verified against the original MIT-licensed public iPhone
+  files (covers 1,233,333 us / 1,260,000 us); samples registered in
+  `tests/SOURCES.md`. Full suite 92 tests pass, `check_rust_core.py`
+  16 inputs 0 mismatches. Needs Mac check: Photos recognition of the
+  synthetic track and comparison with Swift `movie()` output.
+- 2026-10-28: `live_still` with identifier landed (`pymotion.rs`, ROADMAP
+  item 6): `live_still_with_identifier` (static-only clean, then Apple
+  MakerNote/Exif identifier inject per Swift `liveStill(updateIdentifier:true)`);
+  parity = coding bytes unchanged + dynamic XMP fields cleared + MakerNote
+  tag 17 reads back the uuid; HEIC refused. 3 tests.
+- 2026-10-28: HEIC writers landed (`heifwrite.rs`, ROADMAP A3): Google/Samsung
+  HEIC assembly (XMP rewrite per Swift `HEIFMetadata.write`, mpvd + Samsung
+  SEF, parse-back validation); `vendor` routes HEIC inputs for Google/Samsung
+  targets, other targets refused. 5 tests (synthetic fixtures) + 1 CLI test.
+  Public-sample verification still pending (item 3, `tests/SOURCES.md`).
 - 2026-10-28: Cross-platform convert CLI landed (`momentstays-convert`
   binary, ROADMAP item 11): `vendor` / `to-live` / `to-motion` on the Rust
   core only, no Swift helper; Time<->Frame auto-conversion via sample

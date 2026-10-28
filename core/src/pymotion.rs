@@ -586,6 +586,19 @@ pub fn live_still_clean(still: &[u8]) -> Result<Vec<u8>> {
     Ok(output)
 }
 
+/// Swift `PhotoFormat.liveStill(uuid, updateIdentifier:true)` for JPEG:
+/// clean first (static-only truncation + full motion XMP strip, like
+/// `live_still_clean`), then inject the EXIF MakerNote content
+/// identifier (like `live_still`). Parity is defined on coding data
+/// (unchanged: only EXIF/XMP header segments move) plus semantic XMP
+/// fields (motion keys gone) and the MakerNote tag 17 reading back as
+/// the uuid, mirroring Swift `movie()`'s still check. HEIC stills are
+/// refused by `live_still_clean`.
+pub fn live_still_with_identifier(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
+    let cleaned = live_still_clean(still)?;
+    live_still(&cleaned, identifier)
+}
+
 pub fn ultra_from_apple(still: &[u8], gain_jpeg: &[u8], stops: f64) -> Result<Vec<u8>> {
     // Repackage a converted legacy gain map; primary JPEG coding is unchanged.
     let mut gain_root = Element::new(XMPMETA, "xmpmeta");

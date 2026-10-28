@@ -4,15 +4,17 @@
 //! helper: everything runs on the Rust core, on any OS. Commands:
 //!
 //! * `vendor <input> <output> --to <vendor>` — Motion Photo vendor
-//!   conversion (Google/Samsung/Huawei/OPPO/vivo JPEG). The cover is taken
+//!   conversion (Google/Samsung/Huawei/OPPO/vivo JPEG; HEIC inputs route
+//!   to the Google/Samsung HEIC assembly path). The cover is taken
 //!   from the input unless `--cover-time` / `--cover-frame` overrides it;
 //!   Time<->Frame conversion via the video sample tables happens
 //!   automatically when the target vendor needs the other form.
 //! * `to-live <video.mp4> --uuid <uuid> -o <out.mov>` — Motion video to a
 //!   QuickTime MOV with the content identifier (sample-copy remux).
-//!   WARNING: the still-image-time mett marker is NOT written yet
-//!   (ROADMAP item 9b2), so the output is a valid, identified MOV but not
-//!   yet a complete Live Photo. The command prints this warning every run.
+//!   With `--cover-time-us <us>` the native-form still-image-time track
+//!   is also written (ROADMAP item 9b2); without it, the output is a
+//!   valid, identified MOV but not yet a complete Live Photo, and the
+//!   command prints that warning.
 //! * `to-motion <still.jpg> <movie.mov> --to <vendor> -o <out.jpg>` —
 //!   Live Photo pair to a vendor Motion Photo JPEG. Cover from
 //!   `--cover-time` / `--cover-frame`, or `--cover-from-mett` (the mett
@@ -20,7 +22,8 @@
 //!
 //! Vendor aliases: `xiaomi` and `honor` use the Google-compatible layout
 //! (like Swift `AndroidExport`: Honor's gallery plays the Google path).
-//! HEIC inputs are refused: HEIC writers are a stretch item.
+//! HEIC inputs are supported for Google/Samsung targets only, like Swift
+//! `AndroidExport.convert`.
 
 use momentstays_core::cover;
 use momentstays_core::format;
@@ -44,7 +47,7 @@ fn usage() -> String {
     [
         "usage:",
         "  momentstays-convert vendor <input> <output> --to <vendor> [--cover-time <us> | --cover-frame <n>]",
-        "  momentstays-convert to-live <video.mp4> --uuid <uuid> -o <out.mov> [--video-index <n>]",
+        "  momentstays-convert to-live <video.mp4> --uuid <uuid> -o <out.mov> [--video-index <n>] [--cover-time-us <us>]",
         "  momentstays-convert to-motion <still.jpg> <movie.mov> --to <vendor> -o <out.jpg> [--cover-time <us> | --cover-frame <n> | --cover-from-mett]",
         "vendors: google, xiaomi, honor (= google layout), samsung, huawei, oppo, vivo",
     ]
@@ -132,15 +135,25 @@ fn cmd_vendor(args: &[String]) -> Result<()> {
     let (input, output) = (o.rest[0].clone(), o.rest[1].clone());
     let data = fs::read(&input).map_err(|e| err(format!("读取输入失败: {e}")))?;
     let parsed = format::parse(&data)?;
-    if parsed.format.contains("heic") {
-        return Err(err("HEIC 动态照片暂不支持厂商互转，需 HEIC 写入支持"));
-    }
     let mut model = MotionModel::from_parsed(&parsed, &data)?;
     if let Some(c) = cover {
         model.cover = c;
     }
     model.cover = convert_cover(&model.video, model.cover, target)?;
-    let out = momentstays_core::model::write(&model, target)?;
+    // HEIC inputs take the HEIC assembly path (Google/Samsung only);
+    // JPEG inputs take the existing vendor writer.
+    let out = if momentstays_core::heif::matches(&model.still) {
+        if target != Vendor::Google && target != Vendor::Samsung {
+            return Err(err("HEIC 动态照片仅支持 Google 与三星目标"));
+        }
+        let time = match model.cover {
+            Cover::Time(t) => t,
+            Cover::Frame(_) => return Err(err("HEIC 目标需要封面时间")),
+        };
+        momentstays_core::heifwrite::assemble_heic(&model.still, &model.video, target, time)?
+    } else {
+        momentstays_core::model::write(&model, target)?
+    };
     fs::write(&output, &out).map_err(|e| err(format!("写出失败: {e}")))?;
     println!("{}", json!({"status": "ok", "output": output, "vendor": vendor_label(target), "bytes": out.len()}));
     Ok(())
@@ -155,14 +168,23 @@ fn cmd_to_live(args: &[String]) -> Result<()> {
         .map(|v| v.parse::<usize>().map_err(|_| err("视频索引不是整数")))
         .transpose()?
         .unwrap_or(0);
+    let cover_time_us = o
+        .take("--cover-time-us")
+        .map(|v| v.parse::<i64>().map_err(|_| err("--cover-time-us 不是整数")))
+        .transpose()?;
     if o.rest.len() != 1 {
         return Err(err("to-live 需要 <video.mp4>"));
     }
     let data = fs::read(&o.rest[0]).map_err(|e| err(format!("读取输入失败: {e}")))?;
-    let out = remux::remux_to_mov_with_identifier(&data, video_index, &uuid)?;
+    let out = match cover_time_us {
+        Some(t) => remux::remux_to_mov_with_identifier_and_mett(&data, video_index, &uuid, t)?,
+        None => remux::remux_to_mov_with_identifier(&data, video_index, &uuid)?,
+    };
     fs::write(&output, &out).map_err(|e| err(format!("写出失败: {e}")))?;
     println!("{}", json!({"status": "ok", "output": output, "bytes": out.len(), "content_identifier": uuid}));
-    eprintln!("警告：still-image-time 标记尚未写入（ROADMAP item 9b2），输出是有效且带内容标识的 MOV，尚不是完整的 Live Photo。");
+    if cover_time_us.is_none() {
+        eprintln!("警告：still-image-time 标记尚未写入（未传 --cover-time-us），输出是有效且带内容标识的 MOV，尚不是完整的 Live Photo。");
+    }
     Ok(())
 }
 

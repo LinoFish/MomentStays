@@ -83,8 +83,10 @@ parsing it back: video bytes, still coding hash and cover must match.
 
 Refusals, not guesses: a Huawei target needs a frame cover and other targets
 need a time cover; converting between the two needs the MP4 sample-table
-reader (ROADMAP item 7) and is rejected for now. HEIC writers and MOV->MP4
-remux are not implemented yet; see ROADMAP A1/A3/A5 and item 8/9b.
+reader (ROADMAP item 7) and is rejected for now. HEIC output is implemented
+for Google/Samsung targets (`heifwrite::assemble_heic`, ROADMAP A3);
+other HEIC targets are refused, and MOV->MP4 remux lives in `live2motion`
+(item 8), not in `model`.
 
 ## MP4 -> MOV remux (`remux`, ROADMAP item 9a)
 
@@ -103,15 +105,24 @@ Limits: negative presentation times are refused (no explicit edit-list
 handling for them, same rule as Swift). The movie-level content identifier
 (item 9b first half) is implemented: `remux_to_mov_with_identifier` writes
 moov/udta/meta/ilst (UTF-8 `----` item), `read_content_identifier` reads it
-back, and ffprobe independently reports the tag. The still-image-time mett
-track (item 9b second half) is deliberately NOT written: its boxed sample
-bytes are not pinned by any verifiable source and were not guessed — the
-closing step is a Mac hex dump of Swift `movie()` output (see ROADMAP Needs
-Mac check). Until then this output is a valid MOV with a content identifier
-but not yet a Live Photo. Verified on Linux: 5 remux tests (synthetic
-video+audio, mett-track drop, negative-PTS refusal, second video selection,
-real ffmpeg H.264 file) plus ffprobe on the real-file output (pts/dts/sizes
-identical to source, decodes cleanly), and 3 identifier tests.
+back, and ffprobe independently reports the tag. The still-image-time
+track (item 9b second half) is implemented in the native iPhone form
+(`remux_to_mov_with_identifier_and_mett`): a `meta`-handler track with a
+`mebx` sample entry carrying the `mdta/com.apple.quicktime.still-image-time`
+key, one 9-byte sample (value -1), mdhd timescale 600, and an edit list
+whose empty edit runs up to the cover point. The stsd/sample bytes are
+copied verbatim from MIT-licensed public samples (see `tests/SOURCES.md`);
+no AVAssetWriter-style `mett` entry exists in any verified public sample,
+so that form is NOT replicated — comparing against Swift `movie()` output
+and confirming Photos recognition remain Needs Mac check items. Verified
+on Linux: 5 remux tests (synthetic video+audio, mett-track drop,
+negative-PTS refusal, second video selection, real ffmpeg H.264 file)
+plus ffprobe on the real-file output (pts/dts/sizes identical to source,
+decodes cleanly), 3 identifier tests, and 5 still-image-time tests
+(writer round-trip incl. cover 0 and negative-cover refusal, native
+1-key/3-key reader forms, other-meta-track disambiguation) plus
+`mett_cover_time` verified against the original public iPhone files
+(1,233,333 us and 1,260,000 us covers).
 
 ## Live -> Motion assembly (`live2motion`, ROADMAP item 8)
 
@@ -122,10 +133,12 @@ at most one audio track, mett dropped, ftyp `mp42`), JPEG still cleaning
 (`pymotion::live_still_clean`: Swift `liveStill` with updateIdentifier
 false — static-only truncation, motion XMP strip, EXIF untouched,
 gain-map bytes verified), then `model::write` with its parse-back
-validation. `mett_cover_time` reads the cover from the mett track's
-sample timing through the edit list (the sample value itself is not
-checked: same open question as the mett writer). Limits: HEIC stills are
-refused (HEIC writers are a stretch item); the vendor cover kind must
+validation. `mett_cover_time` reads the cover from the marker track's
+sample timing through the edit list (accepting Swift `mett` entries and
+native `mebx` entries identified by their still-image-time key; the
+sample value itself is not checked — native files write -1, Swift
+`movie()` writes 0, and Swift's reader accepts {-1, 0, 255}). Limits: HEIC stills are
+refused (HEIC live_still is not implemented); the vendor cover kind must
 match (`Cover::Frame` for Huawei, `Cover::Time` otherwise — convert with
 `cover.rs` first). Verified on Linux: 8 tests plus ffprobe on the
 real-file MP4 (pts/dts/sizes identical to source, decodes cleanly).
@@ -145,12 +158,14 @@ all run on the Rust core, on any OS. `vendor` takes the cover from the
 input unless `--cover-time` / `--cover-frame` overrides it, converting
 Time<->Frame via the video sample tables when the target needs the other
 form (refused, never guessed, when out of tolerance). `to-motion` also
-accepts `--cover-from-mett` (marker timing from the MOV's mett track;
-the marker value itself is not checked, same open question as item 9b2).
-`to-live` writes the content identifier but NOT the still-image-time
-marker (item 9b2 open), and warns about that on every run. Vendor
+accepts `--cover-from-mett` (marker timing from the MOV's marker track;
+the marker value itself is not checked — native -1 and Swift 0 are both
+accepted). `to-live` writes the content identifier and, with
+`--cover-time-us <us>`, the native-form still-image-time track; without
+that flag it warns that the marker is missing. Vendor
 aliases: `xiaomi` and `honor` use the Google-compatible layout. HEIC
-inputs are refused (HEIC writers are a stretch item).
+inputs are supported for Google/Samsung targets (`heifwrite`); other
+HEIC targets are refused.
 
 ## Parity
 

@@ -78,6 +78,15 @@ struct TrackParts {
     stco_pos: usize,
     samples: Vec<mp4::Sample>,
     chunks: Vec<std::ops::Range<usize>>,
+    /// tkhd flags (parsed tracks: 7 = enabled|in_movie|in_preview).
+    tkhd_flags: u32,
+    /// tkhd duration in movie timescale, overriding the sample-span-derived
+    /// value when set (synthetic still-image-time track: its edit list
+    /// extends past the single sample span by the empty edit).
+    movie_duration_override: Option<u32>,
+    /// Inline sample bytes for synthetic tracks (still-image-time); when
+    /// set, assemble() copies from here instead of the source file.
+    inline_data: Option<Vec<u8>>,
 }
 
 fn parse_tkhd(d: &[u8], tkhd: &BoxRef) -> Result<(u32, u32, u32, u16, u16, u16, [u8; 36])> {
@@ -282,6 +291,9 @@ fn parse_tracks(d: &[u8], video_index: usize) -> Result<(Vec<TrackParts>, u32)> 
             stco_pos,
             samples: table.samples.clone(),
             chunks: table.chunks.clone(),
+            tkhd_flags: 7,
+            movie_duration_override: None,
+            inline_data: None,
         });
     }
     if !kept.iter().any(|t| t.handler == "vide") {
@@ -329,7 +341,7 @@ fn tkhd_box(t: &TrackParts, duration_movie: u32) -> Vec<u8> {
     p.extend(t.matrix);
     p.extend(u32b(t.width));
     p.extend(u32b(t.height));
-    full(b"tkhd", 0, 7, &p)
+    full(b"tkhd", 0, t.tkhd_flags, &p)
 }
 
 fn mdhd_box(t: &TrackParts, duration_track: u64) -> Result<Vec<u8>> {
@@ -372,7 +384,10 @@ fn build_moov(
     let mut moov_body = mvhd_box(movie_duration, next_track_id);
     for (t, offsets) in tracks.iter().zip(chunk_offsets.iter()) {
         let span = track_duration_span(&t.samples);
-        let duration_movie = rescale_to_movie(span, t.timescale)?;
+        let duration_movie = match t.movie_duration_override {
+            Some(d) => d,
+            None => rescale_to_movie(span, t.timescale)?,
+        };
         let mut mdia_body = mdhd_box(t, span)?;
         mdia_body.extend(t.hdlr.clone());
         let mut stbl_boxes = t.stbl_ordered.clone();
@@ -471,26 +486,176 @@ pub fn read_content_identifier(data: &[u8]) -> Result<Option<String>> {
     Ok(None)
 }
 
+/// Still-image-time timed-metadata track (ROADMAP item 9b2), in the form
+/// iPhone camera files actually write: handler `meta`, sample entry
+/// `mebx` with a `keys` box carrying the `mdta` /
+/// `com.apple.quicktime.still-image-time` key, one 9-byte sample
+/// (`[size 9][key 1][value 0xff = int8 -1]`), mdhd timescale 600, and an
+/// edit list whose empty edit runs up to the cover point.
+///
+/// No public sample with an AVAssetWriter-style `mett` entry was found:
+/// every verified native file uses `mebx` (see `tests/SOURCES.md`), so
+/// the writer replicates the native `mebx` form, whose stsd entry and
+/// sample bytes below are pinned by three independent sources
+/// (osxphotos MIT, logseq-livephotos-plugin MIT, plus an unlicensed
+/// corroborating file). The sample VALUE is the native -1, not Swift
+/// `movie()`'s 0; Swift's reader accepts {-1, 0, 255}, and the cover time
+/// comes from the edit list, never from the value. Photos recognition of
+/// this synthetic track is a Needs Mac check (ROADMAP item 9b2).
+pub const METT_TRACK_TIMESCALE: u32 = 600;
+
+/// The 1-key `mebx` stsd entry, byte-identical in all verified sources
+/// (logseq demo, makzan file, and the first key of the osxphotos 3-key
+/// entry). Do not "improve" these bytes: they are copied, not designed.
+const METT_STSD_ENTRY: &[u8] = &[
+    0x00, 0x00, 0x00, 0x60, 0x6d, 0x65, 0x62, 0x78, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x6b, 0x65, 0x79, 0x73,
+    0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x30,
+    0x6b, 0x65, 0x79, 0x64, 0x6d, 0x64, 0x74, 0x61, 0x63, 0x6f, 0x6d, 0x2e,
+    0x61, 0x70, 0x70, 0x6c, 0x65, 0x2e, 0x71, 0x75, 0x69, 0x63, 0x6b, 0x74,
+    0x69, 0x6d, 0x65, 0x2e, 0x73, 0x74, 0x69, 0x6c, 0x6c, 0x2d, 0x69, 0x6d,
+    0x61, 0x67, 0x65, 0x2d, 0x74, 0x69, 0x6d, 0x65, 0x00, 0x00, 0x00, 0x10,
+    0x64, 0x74, 0x79, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41,
+];
+
+/// The single still-image-time sample: `[size 9][key 1][value 0xff]`.
+const METT_SAMPLE: &[u8] = &[0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x01, 0xff];
+
+/// The `gmhd`/`gmin` media header native meta tracks carry (verbatim).
+const METT_GMHD: &[u8] = &[
+    0x00, 0x00, 0x00, 0x20, 0x67, 0x6d, 0x68, 0x64, 0x00, 0x00, 0x00, 0x18,
+    0x67, 0x6d, 0x69, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x80, 0x00,
+    0x80, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
+/// Build the synthetic still-image-time track for a cover at
+/// `cover_time_us` microseconds in the output movie timeline
+/// (MOVIE_TIMESCALE = 1_000_000, so microseconds map 1:1 to movie units).
+/// The track timescale stays 600 like native files; the edit list's
+/// second segment is 1/600 s in movie units (1667, rounded like
+/// `rescale_to_movie`), and a zero cover gets a single-segment edit list
+/// (no zero-length empty edit).
+fn mett_track_parts(track_id: u32, cover_time_us: i64) -> Result<TrackParts> {
+    if cover_time_us < 0 || cover_time_us > u32::MAX as i64 {
+        return fail("封面时间超出 still-image-time 编辑列表范围");
+    }
+    let cover = cover_time_us as u32;
+    let sample_span_movie = rescale_to_movie(1, METT_TRACK_TIMESCALE)?;
+    let mut elst_body = Vec::new();
+    let mut segments = 0u32;
+    if cover > 0 {
+        elst_body.extend(u32b(cover));
+        elst_body.extend(0xffffffffu32.to_be_bytes());
+        elst_body.extend(u16b(1));
+        elst_body.extend(u16b(0));
+        segments += 1;
+    }
+    elst_body.extend(u32b(sample_span_movie));
+    elst_body.extend(u32b(0));
+    elst_body.extend(u16b(1));
+    elst_body.extend(u16b(0));
+    segments += 1;
+    let mut count_body = u32b(segments).to_vec();
+    count_body.extend(elst_body);
+    let edts = bx(b"edts", &full(b"elst", 0, 0, &count_body));
+    let mut stsd_body = u32b(1).to_vec();
+    stsd_body.extend(METT_STSD_ENTRY);
+    let stsd = full(b"stsd", 0, 0, &stsd_body);
+    let stts = full(b"stts", 0, 0, &[u32b(1), u32b(1), u32b(1)].concat());
+    let stsc = full(b"stsc", 0, 0, &[u32b(1), u32b(1), u32b(1), u32b(1)].concat());
+    let stsz = full(b"stsz", 0, 0, &[u32b(0), u32b(1), u32b(METT_SAMPLE.len() as u32)].concat());
+    let stco = full(b"stco", 0, 0, &[u32b(1), u32b(0)].concat());
+    let url = full(b"url ", 0, 1, &[]);
+    let mut dref_body = u32b(1).to_vec();
+    dref_body.extend(url);
+    let dinf = bx(b"dinf", &full(b"dref", 0, 0, &dref_body));
+    let mut hdlr_body = u32b(0).to_vec();
+    hdlr_body.extend(b"meta");
+    hdlr_body.extend([0u8; 12]);
+    hdlr_body.push(0);
+    let hdlr = full(b"hdlr", 0, 0, &hdlr_body);
+    let mut matrix = [0u8; 36];
+    for (i, v) in [0x00010000u32, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000].iter().enumerate() {
+        matrix[i * 4..i * 4 + 4].copy_from_slice(&v.to_be_bytes());
+    }
+    Ok(TrackParts {
+        handler: "meta".to_string(),
+        timescale: METT_TRACK_TIMESCALE,
+        track_id,
+        width: 0,
+        height: 0,
+        layer: 0,
+        alternate_group: 0,
+        volume: 0,
+        matrix,
+        mdhd_language: [0x55, 0xc4],
+        hdlr,
+        edts: Some(edts),
+        minf_others: vec![METT_GMHD.to_vec(), dinf],
+        stbl_ordered: vec![stsd, stts, stsc, stsz, stco],
+        stco_is64: false,
+        stco_pos: 4,
+        samples: vec![mp4::Sample {
+            offset: 0,
+            size: METT_SAMPLE.len(),
+            decode_time: 0,
+            duration: 1,
+            presentation_time: 0,
+            sync: true,
+        }],
+        chunks: vec![0..1],
+        // Native still tracks set enabled|in_movie|in_preview|in_poster.
+        tkhd_flags: 0x0f,
+        movie_duration_override: Some(cover + sample_span_movie),
+        inline_data: Some(METT_SAMPLE.to_vec()),
+    })
+}
+
 /// Remux an MP4 to a QuickTime MOV: chosen video track (0-based among video
 /// tracks) plus all audio tracks, samples copied verbatim.
 pub fn remux_to_mov(data: &[u8], video_index: usize) -> Result<Vec<u8>> {
-    remux_impl(data, video_index, None)
+    remux_impl(data, video_index, None, None)
 }
 
 /// Same as `remux_to_mov`, plus the movie-level content identifier
 /// (`com.apple.quicktime.content.identifier`, ROADMAP item 9b first half).
-/// The still-image-time mett track is NOT added here: its boxed sample bytes
-/// are not pinned by any verifiable source yet (see ROADMAP item 9b).
+/// No still-image-time track: use `remux_to_mov_with_identifier_and_mett`
+/// when the cover time is known.
 pub fn remux_to_mov_with_identifier(data: &[u8], video_index: usize, uuid: &str) -> Result<Vec<u8>> {
     if uuid.is_empty() {
         return fail("内容标识不能为空");
     }
-    remux_impl(data, video_index, Some(uuid))
+    remux_impl(data, video_index, Some(uuid), None)
 }
 
-fn remux_impl(data: &[u8], video_index: usize, identifier: Option<&str>) -> Result<Vec<u8>> {
-    let (tracks, max_track_id) = parse_tracks(data, video_index)?;
+/// Same as `remux_to_mov_with_identifier`, plus the native-form
+/// still-image-time track for a cover at `cover_time_us` microseconds
+/// (ROADMAP item 9b2). The output is a complete Live Photo MOV modulo
+/// Photos recognition, which is a Needs Mac check.
+pub fn remux_to_mov_with_identifier_and_mett(
+    data: &[u8],
+    video_index: usize,
+    uuid: &str,
+    cover_time_us: i64,
+) -> Result<Vec<u8>> {
+    if uuid.is_empty() {
+        return fail("内容标识不能为空");
+    }
+    remux_impl(data, video_index, Some(uuid), Some(cover_time_us))
+}
+
+fn remux_impl(
+    data: &[u8],
+    video_index: usize,
+    identifier: Option<&str>,
+    mett_cover_us: Option<i64>,
+) -> Result<Vec<u8>> {
+    let (mut tracks, mut max_track_id) = parse_tracks(data, video_index)?;
     let udta = identifier.map(content_identifier_udta);
+    if let Some(cover) = mett_cover_us {
+        tracks.push(mett_track_parts(max_track_id + 1, cover)?);
+        max_track_id += 1;
+    }
     let mut ftyp_payload = b"qt  ".to_vec();
     ftyp_payload.extend(u32b(0));
     ftyp_payload.extend(b"qt  ");
@@ -541,10 +706,16 @@ fn assemble(
     let mut at = ftyp.len() + moov_len + 8;
     for t in tracks {
         let mut offsets = Vec::new();
+        let mut cursor = 0usize;
         for range in &t.chunks {
             offsets.push(at);
             for s in &t.samples[range.clone()] {
-                mdat_body.extend_from_slice(&source[s.offset..s.offset + s.size]);
+                if let Some(inline) = &t.inline_data {
+                    mdat_body.extend_from_slice(&inline[cursor..cursor + s.size]);
+                    cursor += s.size;
+                } else {
+                    mdat_body.extend_from_slice(&source[s.offset..s.offset + s.size]);
+                }
                 at += s.size;
             }
         }

@@ -41,14 +41,26 @@ fn only(d: &[u8], parent: &BoxRef, t: &[u8; 4], what: &str) -> Result<BoxRef> {
     Ok(found[0].clone())
 }
 
+/// Key box identifying a still-image-time `mebx` entry: `keyd` +
+/// namespace `mdta` + key `com.apple.quicktime.still-image-time`.
+/// Native iPhone files carry three `mebx` meta tracks
+/// (video-orientation, live-photo-info, still-image-time); only the key
+/// string tells them apart, so a bare `mebx` match is not enough.
+const STILL_IMAGE_TIME_KEYD: &[u8] = b"keydmdtacom.apple.quicktime.still-image-time";
+
 /// Cover time in microseconds from a Live Photo MOV's still-image-time
-/// mett track: the single mett sample's presentation time, mapped through
+/// track: the single marker sample's presentation time, mapped through
 /// the track's edit list into the movie timeline. Returns None when the
-/// file has no mett track.
+/// file has no marker track.
 ///
-/// The sample VALUE is deliberately not checked: its boxed payload layout
-/// is the same open question as ROADMAP item 9b2. Timing comes only from
-/// the sample tables and the edit list, never from payload bytes.
+/// Two entry forms are accepted: Swift `movie()`'s `mett` entry, and the
+/// native iPhone `mebx` entry (ROADMAP item 9b2), recognized only when
+/// its `keys` box carries the still-image-time key above.
+///
+/// The sample VALUE is deliberately not checked: native files write -1
+/// (`0xff`), Swift `movie()` writes 0, and Swift's reader accepts
+/// {-1, 0, 255}. Timing comes only from the sample tables and the edit
+/// list, never from payload bytes.
 pub fn mett_cover_time(mov: &[u8]) -> Result<Option<i64>> {
     let tables = mp4::sample_tables(mov)?;
     let top = mp4::boxes(mov, 0, mov.len())?;
@@ -83,7 +95,15 @@ pub fn mett_cover_time(mov: &[u8]) -> Result<Option<i64>> {
         let stbl = only(mov, &minf, b"stbl", "stbl")?;
         let stsd = only(mov, &stbl, b"stsd", "stsd")?;
         let entries = mp4::boxes(mov, stsd.payload + 8, stsd.end)?;
-        if entries.len() == 1 && entries[0].is(b"mett") {
+        let is_marker = if entries.len() == 1 && entries[0].is(b"mett") {
+            true
+        } else if entries.len() == 1 && entries[0].is(b"mebx") {
+            let entry = &mov[entries[0].start..entries[0].end];
+            entry.windows(STILL_IMAGE_TIME_KEYD.len()).any(|w| w == STILL_IMAGE_TIME_KEYD)
+        } else {
+            false
+        };
+        if is_marker {
             if found.is_some() {
                 return fail("多个 still-image-time 轨道");
             }
