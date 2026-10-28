@@ -83,8 +83,15 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        locally 2026-10-28 (see `tests/SOURCES.md`); not committed to the
        repo (1.6-6.5 MB each). Synthetic largesize-mpvd and LONG8
        MakerNote regression tests landed in their place.
-4. [ ] Scan parity: port `PhotoVendor.identify` labels and HDR classification
-       (honorPrivate / ISO 21496 / legacy Apple) → `scan` subcommand matching NativeDriver `scan` rows.
+4. [x] Scan parity: port `PhotoVendor.identify` labels and HDR classification
+       (honorPrivate / ISO 21496 / legacy Apple) → `momentstays-convert scan`
+       matching NativeDriver `scan` rows (relative/motion/hdr/cover/
+       manufacturer/manufacturer_detail, plus detail/confirmed_static/
+       source). `momentstays scan` untouched (Python CLI parity).
+       13 lib tests + 2 CLI tests. Needs Mac check: row-by-row
+       comparison against NativeDriver output on identical files, and
+       the `CGImageSource` decode half of `confirmedStatic`
+       (approximated here by header dimensions).
 5. [ ] Fuzzing: cargo-fuzz targets for `parse`, `jpeg::segments`, `heif::layout`; guarantee no panics
        (replace remaining slicing that can panic on hostile input with checked access).
 6. [x] `live_still` for JPEG (XMP rewrite, Apple MakerNote / Exif identifier) with parity defined on
@@ -189,8 +196,20 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
 - C ABI Swift bridge (item 10): the C header exists and the C smoke test
   passes on Linux; importing the header and calling it from the Swift
   app needs a Mac run.
+- Scan rows (item 4): the Rust rows match Swift semantics as ported
+  from source, but no Mac run has compared `momentstays-convert scan`
+  output against NativeDriver `scan` rows on identical files; the
+  `CGImageSource` decode half of `confirmedStatic` is approximated by
+  header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-28: Scan parity landed (ROADMAP item 4): `src/scan.rs`
+  (`identify` brand table + format fallback + HEIF Exif recursion,
+  HDR chain HEIC/Ultra/Honor-private/ISO-21496/legacy-Apple/SDR,
+  cover text, detail text, `confirmed_static`) + `momentstays-convert
+  scan <file|dir>` emitting NativeDriver-shaped rows. `momentstays
+  scan` untouched (Python CLI parity). 13 tests + 2 CLI tests. Full
+  suite 112 tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
 - 2026-10-28: HEIC public-sample verification (ROADMAP A3 / item 3):
   Samsung S22 Ultra mpvd HEIC (MIT, sm_motion_photo) and Google
   libmphoto largesize-mpvd HEIC (Apache-2.0) parse and writer-round-trip
