@@ -73,7 +73,8 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        JPEG matrix done (10 tests in `tests/android.rs`: five vendors, Ultra HDR gain map,
        Extended XMP keys, cross-vendor chain); HEIC round-trips done (Google/Samsung
        assemble + vendor CLI test, parse-back: video bytes, coding hash, cover);
-       MOV-remux round-trips pending.
+       MOV-remux round-trips done (MP4->MOV->MP4, per-track count/sizes/bytes/
+       presentation, synthetic video+audio and real H.264 file).
 3. [ ] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
        iloc v0/v1/v2, idat storage.
 4. [ ] Scan parity: port `PhotoVendor.identify` labels and HDR classification
@@ -172,6 +173,9 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   HEIC samples for the fixture set (item 3).
 
 ## Log
+- 2026-10-28: MOV-remux round-trip landed (ROADMAP A5): MP4->MOV->MP4
+  parse-back comparison per track (count, sizes, bytes, presentation
+  times) on synthetic video+audio and the real H.264 file. 2 tests.
 - 2026-10-28: Still-image-time track landed (`remux.rs`, ROADMAP item 9b2):
   native iPhone form (`mebx` + still-image-time key, 9-byte sample value -1,
   mdhd 600, empty-edit cover mapping) in `remux_to_mov_with_identifier_and_mett`

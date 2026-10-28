@@ -1,7 +1,7 @@
 //! MP4 -> MOV sample-copy remux tests (ROADMAP item 9a).
 
-use momentstays_core::mp4::{boxes, sample_tables};
-use momentstays_core::remux::{check_remux, remux_to_mov};
+use momentstays_core::mp4::{boxes, sample_tables, TrackSamples};
+use momentstays_core::remux::{check_remux, remux_to_mov, remux_to_mp4};
 
 fn bx(t: &str, payload: &[u8]) -> Vec<u8> {
     let mut v = ((payload.len() + 8) as u32).to_be_bytes().to_vec();
@@ -229,6 +229,59 @@ fn second_video_selection() {
     let out = remux_to_mov(&src, 1).expect("second video");
     check_remux(&src, &out, 1).expect("remux verifies");
     assert!(remux_to_mov(&src, 5).is_err());
+}
+
+fn sample_bytes_hash(t: &TrackSamples, d: &[u8]) -> String {
+    let mut all = Vec::new();
+    for s in &t.samples {
+        all.extend_from_slice(&d[s.offset..s.offset + s.size]);
+    }
+    momentstays_core::sha256_hex(&all)
+}
+
+/// MP4 -> MOV -> MP4 round-trip (ROADMAP item A5): per-track sample
+/// count, sizes, bytes and presentation times must survive both hops.
+fn assert_roundtrip(src: &[u8]) {
+    let mov = remux_to_mov(src, 0).expect("mp4->mov");
+    let back = remux_to_mp4(&mov).expect("mov->mp4");
+    assert_eq!(&back[4..8], b"ftyp");
+    assert_eq!(&back[8..12], b"mp42");
+    let src_tables = sample_tables(src).expect("src parses");
+    let back_tables = sample_tables(&back).expect("round-trip parses");
+    assert_eq!(src_tables.len(), back_tables.len());
+    for (s, o) in src_tables.iter().zip(back_tables.iter()) {
+        assert_eq!(s.handler, o.handler);
+        assert_eq!(s.timescale, o.timescale);
+        assert_eq!(s.samples.len(), o.samples.len());
+        assert_eq!(
+            s.samples.iter().map(|x| x.size).collect::<Vec<_>>(),
+            o.samples.iter().map(|x| x.size).collect::<Vec<_>>()
+        );
+        assert_eq!(sample_bytes_hash(s, src), sample_bytes_hash(o, &back));
+        assert_eq!(
+            s.samples.iter().map(|x| x.presentation_time).collect::<Vec<_>>(),
+            o.samples.iter().map(|x| x.presentation_time).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn mov_mp4_roundtrip_synthetic() {
+    let src = file(&[video_spec(), audio_spec()]);
+    assert_roundtrip(&src);
+}
+
+#[test]
+fn mov_mp4_roundtrip_real_file() {
+    use base64::Engine;
+    let text = std::fs::read_to_string(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64"),
+    )
+    .unwrap();
+    let src = base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap();
+    assert_roundtrip(&src);
 }
 
 #[test]
