@@ -139,6 +139,273 @@ pub fn image_times(d: &[u8]) -> Result<Option<ImageTimes>> {
     Ok(times.into_iter().next())
 }
 
+/// One media sample, fully located: byte range, decode and presentation
+/// time in the track timescale, and sync (keyframe) flag.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sample {
+    pub offset: usize,
+    pub size: usize,
+    pub decode_time: u64,
+    pub presentation_time: i64,
+    pub sync: bool,
+}
+
+/// All samples of one track, in file order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrackSamples {
+    pub handler: String,
+    pub timescale: u32,
+    pub samples: Vec<Sample>,
+}
+
+fn find_box(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<BoxRef> {
+    let found: Vec<BoxRef> = boxes(d, parent.payload, parent.end)?
+        .into_iter()
+        .filter(|b| b.is(t))
+        .collect();
+    if found.len() != 1 {
+        return fail(format!("MP4 采样表缺少唯一的 {}", String::from_utf8_lossy(t)));
+    }
+    Ok(found[0].clone())
+}
+
+fn find_box_opt(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<Option<BoxRef>> {
+    let found: Vec<BoxRef> = boxes(d, parent.payload, parent.end)?
+        .into_iter()
+        .filter(|b| b.is(t))
+        .collect();
+    if found.len() > 1 {
+        return fail(format!("MP4 采样表重复出现 {}", String::from_utf8_lossy(t)));
+    }
+    Ok(found.into_iter().next())
+}
+
+/// Entries of a full box (version/flags + entry count + fixed-size records).
+fn full_entries(d: &[u8], b: &BoxRef, record: usize) -> Result<Vec<usize>> {
+    if b.end - b.payload < 8 {
+        return fail("MP4 采样表被截断");
+    }
+    let count = be(d, b.payload + 4, 4)?;
+    let at = b.payload + 8;
+    if count > (b.end - at) / record {
+        return fail("MP4 采样表被截断");
+    }
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        let mut row = Vec::with_capacity(record / 4);
+        for j in 0..record / 4 {
+            row.push(be(d, at + i * record + j * 4, 4)?);
+        }
+        out.push(row);
+    }
+    // Flattened below by callers that need per-field access; kept as rows.
+    Ok(out.into_iter().flatten().collect())
+}
+
+fn table_u32(d: &[u8], b: &BoxRef) -> Result<Vec<u32>> {
+    if b.end - b.payload < 8 {
+        return fail("MP4 采样表被截断");
+    }
+    let count = be(d, b.payload + 4, 4)?;
+    let at = b.payload + 8;
+    if count > (b.end - at) / 4 {
+        return fail("MP4 采样表被截断");
+    }
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        out.push(be(d, at + i * 4, 4)? as u32);
+    }
+    Ok(out)
+}
+
+/// Sample tables of every track: stts/stsz/stsc/stco-or-co64, with optional
+/// ctts (presentation offsets) and stss (sync samples). This is the reader
+/// ROADMAP item 7 needs for cover time<->frame conversion and for remux:
+/// it locates every sample byte range and its timestamps without decoding.
+pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
+    let top = boxes(d, 0, d.len())?;
+    let moov = match top.iter().find(|b| b.is(b"moov")) {
+        Some(m) => m.clone(),
+        None => return fail("MP4 缺少 moov"),
+    };
+    let mut tracks = Vec::new();
+    for trak in boxes(d, moov.payload, moov.end)?.into_iter().filter(|b| b.is(b"trak")) {
+        let mdia = find_box(d, &trak, b"mdia")?;
+        let mdhd = find_box(d, &mdia, b"mdhd")?;
+        if mdhd.end - mdhd.payload < 4 {
+            return fail("MP4 采样表被截断");
+        }
+        let version = d[mdhd.payload];
+        let timescale_at = if version == 1 { 20 } else { 12 };
+        if mdhd.end - mdhd.payload < timescale_at + 4 {
+            return fail("MP4 采样表被截断");
+        }
+        let timescale = be(d, mdhd.payload + timescale_at, 4)? as u32;
+        let hdlr = find_box(d, &mdia, b"hdlr")?;
+        if hdlr.end - hdlr.payload < 12 {
+            return fail("MP4 采样表被截断");
+        }
+        let handler = String::from_utf8_lossy(&d[hdlr.payload + 8..hdlr.payload + 12]).into_owned();
+        let minf = find_box(d, &mdia, b"minf")?;
+        let stbl = find_box(d, &minf, b"stbl")?;
+        let stts = find_box(d, &stbl, b"stts")?;
+        let stsc = find_box(d, &stbl, b"stsc")?;
+        let stsz = find_box(d, &stbl, b"stsz")?;
+        let stco = find_box_opt(d, &stbl, b"stco")?;
+        let co64 = find_box_opt(d, &stbl, b"co64")?;
+        let (chunk_offsets, _is64) = match (stco, co64) {
+            (Some(_), Some(_)) => return fail("MP4 采样表同时出现 stco 与 co64"),
+            (None, None) => return fail("MP4 采样表缺少块偏移"),
+            (Some(b), None) => (table_u32(d, &b)?.into_iter().map(|v| v as usize).collect::<Vec<_>>(), false),
+            (None, Some(b)) => {
+                if b.end - b.payload < 8 {
+                    return fail("MP4 采样表被截断");
+                }
+                let count = be(d, b.payload + 4, 4)?;
+                let at = b.payload + 8;
+                if count > (b.end - at) / 8 {
+                    return fail("MP4 采样表被截断");
+                }
+                let mut out = Vec::with_capacity(count);
+                for i in 0..count {
+                    out.push(crate::binary::int(d, at + i * 8, 8, false)?);
+                }
+                (out, true)
+            }
+        };
+        // stts: (sample_count, sample_delta) pairs.
+        let stts_rows = full_entries(d, &stts, 8)?;
+        let mut decode_times: Vec<u64> = Vec::new();
+        {
+            let mut t: u64 = 0;
+            for pair in stts_rows.chunks_exact(2) {
+                let (count, delta) = (pair[0], pair[1] as u64);
+                for _ in 0..count {
+                    decode_times.push(t);
+                    t += delta;
+                }
+            }
+        }
+        // stsz: fixed size or per-sample sizes.
+        if stsz.end - stsz.payload < 12 {
+            return fail("MP4 采样表被截断");
+        }
+        let fixed = be(d, stsz.payload + 4, 4)?;
+        let sample_count = be(d, stsz.payload + 8, 4)?;
+        // stsz entries start at payload+12, unlike the other tables.
+        let sizes: Vec<usize> = if fixed != 0 {
+            vec![fixed; sample_count]
+        } else {
+            let at = stsz.payload + 12;
+            if sample_count > (stsz.end - at) / 4 {
+                return fail("MP4 采样表被截断");
+            }
+            let mut out = Vec::with_capacity(sample_count);
+            for i in 0..sample_count {
+                out.push(be(d, at + i * 4, 4)?);
+            }
+            out
+        };
+        if sizes.len() != sample_count || decode_times.len() != sample_count {
+            return fail("MP4 采样表样本数不一致");
+        }
+        // stsc: (first_chunk, samples_per_chunk, _) triples, 1-based chunks.
+        let stsc_rows = full_entries(d, &stsc, 12)?;
+        if stsc_rows.is_empty() && sample_count > 0 {
+            return fail("MP4 采样表缺少块样本映射");
+        }
+        if stsc_rows.chunks_exact(3).next().map_or(false, |r| r[0] != 1)
+            || stsc_rows.chunks_exact(3).collect::<Vec<_>>().windows(2).any(|w| w[0][0] >= w[1][0])
+        {
+            return fail("MP4 采样表块映射无效");
+        }
+        let total_chunks = chunk_offsets.len();
+        let mut chunk_samples: Vec<usize> = Vec::new();
+        {
+            let triples: Vec<&[usize]> = stsc_rows.chunks_exact(3).collect();
+            for (i, t) in triples.iter().enumerate() {
+                let first = t[0];
+                let last = triples.get(i + 1).map_or(total_chunks + 1, |n| n[0]);
+                if first < 1 || first > total_chunks + 1 || last < first {
+                    return fail("MP4 采样表块映射越界");
+                }
+                for _ in first..last {
+                    chunk_samples.push(t[1]);
+                }
+            }
+        }
+        if chunk_samples.len() != total_chunks {
+            return fail("MP4 采样表块数与块偏移数不一致");
+        }
+        if chunk_samples.iter().sum::<usize>() != sample_count {
+            return fail("MP4 采样表块样本数与样本总数不一致");
+        }
+        // ctts: presentation offsets (version 0 unsigned, version 1 signed).
+        let mut offsets: Vec<i64> = vec![0; sample_count];
+        if let Some(ctts) = find_box_opt(d, &stbl, b"ctts")? {
+            if ctts.end - ctts.payload < 4 {
+                return fail("MP4 采样表被截断");
+            }
+            let version = d[ctts.payload];
+            let rows = full_entries(d, &ctts, 8)?;
+            let mut idx = 0usize;
+            for pair in rows.chunks_exact(2) {
+                let (count, raw) = (pair[0], pair[1]);
+                for _ in 0..count {
+                    if idx >= sample_count {
+                        return fail("MP4 采样表样本数不一致");
+                    }
+                    offsets[idx] = if version == 1 { raw as u32 as i32 as i64 } else { raw as i64 };
+                    idx += 1;
+                }
+            }
+            if idx != sample_count {
+                return fail("MP4 采样表样本数不一致");
+            }
+        }
+        // stss: 1-based sync sample numbers; absent means all sync.
+        let mut sync = vec![true; sample_count];
+        if let Some(stss) = find_box_opt(d, &stbl, b"stss")? {
+            sync = vec![false; sample_count];
+            for n in table_u32(d, &stss)? {
+                if n < 1 || n as usize > sample_count {
+                    return fail("MP4 采样表同步样本越界");
+                }
+                sync[n as usize - 1] = true;
+            }
+        }
+        // Walk chunks in order, laying samples out by size.
+        let mut samples = Vec::with_capacity(sample_count);
+        let mut next = 0usize;
+        for (ci, per) in chunk_samples.iter().enumerate() {
+            let mut at = chunk_offsets[ci];
+            for _ in 0..*per {
+                if next >= sample_count {
+                    return fail("MP4 采样表样本数不一致");
+                }
+                let size = sizes[next];
+                if size == 0 || at > d.len() || size > d.len() - at {
+                    return fail("MP4 样本超出文件范围");
+                }
+                samples.push(Sample {
+                    offset: at,
+                    size,
+                    decode_time: decode_times[next],
+                    presentation_time: decode_times[next] as i64 + offsets[next],
+                    sync: sync[next],
+                });
+                at += size;
+                next += 1;
+            }
+        }
+        if next != sample_count {
+            return fail("MP4 采样表样本数不一致");
+        }
+        tracks.push(TrackSamples { handler, timescale, samples });
+    }
+    Ok(tracks)
+}
+
 /// Top-level box types of an embedded MP4, validating every size.
 pub fn top_level_types(video: &[u8], prefix: &str) -> Result<Vec<String>> {
     let mut pos = 0;

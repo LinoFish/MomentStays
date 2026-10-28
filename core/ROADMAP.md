@@ -70,8 +70,12 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        (replace remaining slicing that can panic on hostile input with checked access).
 6. [ ] `live_still` for JPEG (XMP rewrite, Apple MakerNote / Exif identifier) with parity defined on
        coding hash + semantic XMP fields.
-7. [ ] MP4/MOV sample-table reader (stts/stsz/stco/co64/ctts) and per-track sample hash matching
-       Swift `trackInfo` (no AVFoundation).
+7. [x] MP4/MOV sample-table reader (stts/stsz/stco/co64/ctts) and per-track sample hash matching
+       Swift `trackInfo` (no AVFoundation). Reader done: `mp4::sample_tables` (per-sample
+       offset/size/decode/presentation/sync, stss + ctts v0/v1); 6 tests incl. a real
+       H.264 file cross-checked against ffprobe (positions/sizes/sync exact; times
+       match up to the uniform edit-list shift). Per-track sample hash matching
+       against Swift `trackInfo` still needs a Mac run.
 8. [ ] Live Photo → Motion Photo assembly (AndroidExport) at byte level.
 9. [ ] Motion Photo → Live Photo remux without re-encoding (QuickTime metadata, content identifier,
        still-image-time) — largest item; split into sub-steps when reached.
@@ -84,6 +88,10 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
 
 ## Log
+- 2026-10-28: MP4/MOV sample-table reader landed (`mp4::sample_tables`, ROADMAP item 7):
+  stts/stsz/stsc/stco/co64/ctts/stss enumeration with strict count/bounds checks; 6 tests
+  (synthetic tracks + real ffmpeg H.264 file cross-checked against ffprobe). This unblocks
+  A4 (cover time<->frame) and item 9 (remux). Local only, not pushed.
 - 2026-10-28: Android writers landed (`model.rs`): neutral `MotionModel` from `format::parse`,
   JPEG writers for Google/Samsung SEF/Huawei LIVE_/OPPO/vivo with parse-back validation
   (video bytes, still coding hash, cover); Time<->Frame conversion refused, not guessed.
