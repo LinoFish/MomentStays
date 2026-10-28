@@ -130,6 +130,28 @@ match (`Cover::Frame` for Huawei, `Cover::Time` otherwise — convert with
 `cover.rs` first). Verified on Linux: 8 tests plus ffprobe on the
 real-file MP4 (pts/dts/sizes identical to source, decodes cleanly).
 
+## Cross-platform convert CLI (`momentstays-convert`, ROADMAP item 11)
+
+```bash
+cargo build --release --bin momentstays-convert
+./target/release/momentstays-convert vendor in.jpg out.jpg --to samsung
+./target/release/momentstays-convert to-live video.mp4 --uuid <uuid> -o out.mov
+./target/release/momentstays-convert to-motion still.jpg movie.mov --to google --cover-time 800000 -o out.jpg
+```
+
+Unlike `momentstays convert`, this binary never calls the macOS Swift
+helper: vendor conversion, Motion->MOV remux and Live->Motion assembly
+all run on the Rust core, on any OS. `vendor` takes the cover from the
+input unless `--cover-time` / `--cover-frame` overrides it, converting
+Time<->Frame via the video sample tables when the target needs the other
+form (refused, never guessed, when out of tolerance). `to-motion` also
+accepts `--cover-from-mett` (marker timing from the MOV's mett track;
+the marker value itself is not checked, same open question as item 9b2).
+`to-live` writes the content identifier but NOT the still-image-time
+marker (item 9b2 open), and warns about that on every run. Vendor
+aliases: `xiaomi` and `honor` use the Google-compatible layout. HEIC
+inputs are refused (HEIC writers are a stretch item).
+
 ## Parity
 
 ```bash

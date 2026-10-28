@@ -18,6 +18,10 @@ path = "src/bin/momentstays-core.rs"
 name = "momentstays"
 path = "src/bin/momentstays.rs"
 
+[[bin]]
+name = "momentstays-convert"
+path = "src/bin/momentstays-convert.rs"
+
 [dependencies]
 sha2 = "0.10"
 md-5 = "0.10"

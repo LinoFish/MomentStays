@@ -113,7 +113,15 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        those bytes. Until then the remux output is a valid MOV with a content
        identifier but not yet a Live Photo.
 10. [ ] C ABI (`cbindgen` header), universal static lib build script, optional Swift bridge behind a flag.
-11. [ ] Cross-platform `convert` CLI and release binaries via CI.
+11. [x] Cross-platform `convert` CLI (`momentstays-convert` binary, no Swift
+    helper): `vendor` (Google/Samsung/Huawei/OPPO/vivo, xiaomi/honor as
+    Google-layout aliases, Time<->Frame auto-conversion via sample
+    tables), `to-live` (MOV remux + content identifier, with a printed
+    warning that the still-image-time marker is still missing), `to-motion`
+    (Live pair assembly, cover from --cover-time/--cover-frame/
+    --cover-from-mett). Existing `momentstays` Python-compatible binary
+    untouched (its tests still pass). 5 CLI tests. Release binaries via
+    CI remain open (no CI in this repo yet).
 
 ## Needs Mac check
 - Parse layer (M1): verified by the owner on Mac 2026-10-28 and merged into the
@@ -137,6 +145,12 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
 
 ## Log
+- 2026-10-28: Cross-platform convert CLI landed (`momentstays-convert`
+  binary, ROADMAP item 11): `vendor` / `to-live` / `to-motion` on the Rust
+  core only, no Swift helper; Time<->Frame auto-conversion via sample
+  tables; `to-live` warns every run that the still-image-time marker is
+  still missing (9b2). 5 CLI tests (real binary runs); existing
+  `momentstays` Python-compatible behavior untouched.
 - 2026-10-28: Live->Motion assembly landed (`live2motion.rs`, ROADMAP
   item 8): `remux_to_mp4` (strict 1-video + <=1-audio layout, mett dropped,
   ftyp `mp42`), `live_still_clean` (Swift `liveStill` with
