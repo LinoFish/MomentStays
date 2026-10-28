@@ -6,7 +6,7 @@ MomentStays's original source, documentation and artwork are **GPL-3.0-only**, c
 
 ## 1. Application code, system dependencies and shipped assets
 
-The native build compiles the project's `native/` and `gui/` Swift files. The converter projects in section 4 are credited for their recorded research/reference roles; the current build does not link or vendor their converter libraries. The experimental Rust module has its own dependency list in section 2 and is not integrated into the macOS app.
+The native build compiles the project's `native/` and `gui/` Swift files. The converter projects in section 4 are credited for their recorded research/reference roles; the current build does not link or vendor their converter libraries. The Rust core is statically linked into the macOS app for container parsing and verification; its dependencies are listed in section 2.
 
 | Component / project | Actual use | Distribution and terms |
 | --- | --- | --- |
@@ -16,42 +16,48 @@ The native build compiles the project's `native/` and `gui/` Swift files. The co
 
 The app's brand icon and DMG background are drawn by the project's Swift artwork scripts. They are not copies of an upstream converter's logo.
 
-## 2. Experimental Rust core: third-party code dependencies
+## 2. Rust core: third-party code dependencies
 
 The following versions and license expressions are recorded by `core/Cargo.lock` and Cargo package metadata for this release. Dependencies are resolved by Cargo rather than vendored in this repository. This list includes optional, target-specific and build-time packages present in the lockfile; not every package is linked into every target.
 
 ### Direct dependencies
 
-| Crate | Locked version | License expression | Use |
-| --- | --- | --- | --- |
-| [md-5](https://github.com/RustCrypto/hashes) | 0.10.6 | `MIT OR Apache-2.0` | Extended XMP digest verification |
-| [roxmltree](https://github.com/RazrFalcon/roxmltree) | 0.20.0 | `MIT OR Apache-2.0` | XML/XMP parsing |
-| [serde_json](https://github.com/serde-rs/json) | 1.0.154 | `MIT OR Apache-2.0` | CLI JSON input/output |
-| [sha2](https://github.com/RustCrypto/hashes) | 0.10.9 | `MIT OR Apache-2.0` | SHA-256 verification |
+| Crate | Locked version | License expression |
+| --- | --- | --- |
+| [base64](https://github.com/marshallpierce/rust-base64) | 0.22.1 | `MIT OR Apache-2.0` |
+| [libc](https://github.com/rust-lang/libc) | 0.2.191 | `MIT OR Apache-2.0` |
+| [md-5](https://github.com/RustCrypto/hashes) | 0.10.6 | `MIT OR Apache-2.0` |
+| [memchr](https://github.com/BurntSushi/memchr) | 2.8.3 | `Unlicense OR MIT` |
+| [memmap2](https://github.com/RazrFalcon/memmap2-rs) | 0.9.12 | `MIT OR Apache-2.0` |
+| [roxmltree](https://github.com/RazrFalcon/roxmltree) | 0.20.0 | `MIT OR Apache-2.0` |
+| [serde_json](https://github.com/serde-rs/json) | 1.0.154 | `MIT OR Apache-2.0` |
+| [sha2](https://github.com/RustCrypto/hashes) | 0.10.9 | `MIT OR Apache-2.0` |
 
 ### Transitive and build dependencies
 
-| Crate | Locked version | License expression | Scope |
-| --- | --- | --- | --- |
-| [block-buffer](https://github.com/RustCrypto/utils) | 0.10.4 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [cfg-if](https://github.com/rust-lang/cfg-if) | 1.0.5 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [cpufeatures](https://github.com/RustCrypto/utils) | 0.2.17 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [crypto-common](https://github.com/RustCrypto/traits) | 0.1.7 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [digest](https://github.com/RustCrypto/traits) | 0.10.7 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [generic-array](https://github.com/fizyk20/generic-array) | 0.14.7 | `MIT` | Transitive, build-time, optional or target-specific dependency |
-| [itoa](https://github.com/dtolnay/itoa) | 1.0.18 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [libc](https://github.com/rust-lang/libc) | 0.2.191 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [memchr](https://github.com/BurntSushi/memchr) | 2.8.3 | `Unlicense OR MIT` | Transitive, build-time, optional or target-specific dependency |
-| [proc-macro2](https://github.com/dtolnay/proc-macro2) | 1.0.107 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [quote](https://github.com/dtolnay/quote) | 1.0.47 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [serde](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [serde_core](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [serde_derive](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [syn](https://github.com/dtolnay/syn) | 3.0.9 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [typenum](https://github.com/paholg/typenum) | 1.20.1 | `MIT OR Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [unicode-ident](https://github.com/dtolnay/unicode-ident) | 1.0.27 | `(MIT OR Apache-2.0) AND Unicode-3.0` | Transitive, build-time, optional or target-specific dependency |
-| [version_check](https://github.com/SergioBenitez/version_check) | 0.9.5 | `MIT/Apache-2.0` | Transitive, build-time, optional or target-specific dependency |
-| [zmij](https://github.com/dtolnay/zmij) | 1.0.23 | `MIT` | Transitive, build-time, optional or target-specific dependency |
+| Crate | Locked version | License expression |
+| --- | --- | --- |
+| [block-buffer](https://github.com/RustCrypto/utils) | 0.10.4 | `MIT OR Apache-2.0` |
+| [cfg-if](https://github.com/rust-lang/cfg-if) | 1.0.5 | `MIT OR Apache-2.0` |
+| [cpufeatures](https://github.com/RustCrypto/utils) | 0.2.17 | `MIT OR Apache-2.0` |
+| [crypto-common](https://github.com/RustCrypto/traits) | 0.1.7 | `MIT OR Apache-2.0` |
+| [digest](https://github.com/RustCrypto/traits) | 0.10.7 | `MIT OR Apache-2.0` |
+| [equivalent](https://github.com/indexmap-rs/equivalent) | 1.0.3 | `Apache-2.0 OR MIT` |
+| [foldhash](https://github.com/orlp/foldhash) | 0.2.0 | `Zlib` |
+| [generic-array](https://github.com/fizyk20/generic-array.git) | 0.14.7 | `MIT` |
+| [hashbrown](https://github.com/rust-lang/hashbrown) | 0.17.1 | `MIT OR Apache-2.0` |
+| [indexmap](https://github.com/indexmap-rs/indexmap) | 2.14.2 | `Apache-2.0 OR MIT` |
+| [itoa](https://github.com/dtolnay/itoa) | 1.0.18 | `MIT OR Apache-2.0` |
+| [proc-macro2](https://github.com/dtolnay/proc-macro2) | 1.0.107 | `MIT OR Apache-2.0` |
+| [quote](https://github.com/dtolnay/quote) | 1.0.47 | `MIT OR Apache-2.0` |
+| [serde](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` |
+| [serde_core](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` |
+| [serde_derive](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` |
+| [syn](https://github.com/dtolnay/syn) | 3.0.9 | `MIT OR Apache-2.0` |
+| [typenum](https://github.com/paholg/typenum) | 1.20.1 | `MIT OR Apache-2.0` |
+| [unicode-ident](https://github.com/dtolnay/unicode-ident) | 1.0.27 | `(MIT OR Apache-2.0) AND Unicode-3.0` |
+| [version_check](https://github.com/SergioBenitez/version_check) | 0.9.5 | `MIT/Apache-2.0` |
+| [zmij](https://github.com/dtolnay/zmij) | 1.0.23 | `MIT` |
 
 The `MIT/Apache-2.0` spelling is reproduced from the relevant package metadata. Each upstream crate's included license and notices remain authoritative.
 
@@ -67,7 +73,7 @@ The `MIT/Apache-2.0` spelling is reproduced from the relevant package metadata. 
 | [fontTools](https://github.com/fonttools/fonttools), [Brotli](https://github.com/google/brotli) | 4.60.1, MIT; 1.1.0, MIT | Local WOFF2 metadata inspection for this attribution inventory; their Python code is not included in the app or site. |
 | [Swift](https://github.com/swiftlang/swift) | Upstream Apache-2.0 / runtime-exception terms; Apple SDK terms separately apply. | Native compilation; SDK command-line tools also provide signing, icon and disk-image utilities. |
 | [Python](https://www.python.org/), [pip](https://github.com/pypa/pip) | PSF terms; pip MIT | Test-only format references, generated-fixture checks and local build/documentation tooling. |
-| [Rust](https://github.com/rust-lang/rust), [Cargo](https://github.com/rust-lang/cargo) | MIT OR Apache-2.0 | Builds and checks the experimental Rust module. |
+| [Rust](https://github.com/rust-lang/rust), [Cargo](https://github.com/rust-lang/cargo) | MIT OR Apache-2.0 | Builds and checks the Rust core. |
 | [Git](https://git-scm.com/), [GitHub CLI](https://github.com/cli/cli) | Git GPL-2.0; GitHub CLI MIT | Version control, publishing and release asset management. |
 
 The native app does not require users to install these Python packages, Git, Cargo, FFmpeg or ExifTool. Local tool installations, test outputs and private media are excluded from the distributed app and source.

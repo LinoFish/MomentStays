@@ -143,8 +143,8 @@ final class DeliveryStore {
                   let source = entry["source"] as? String, let path = entry["output"] as? String else { return [] }
             let input = URL(fileURLWithPath: source), folder = URL(fileURLWithPath: path)
             let files: [URL]
-            if settings.direction == .toAndroid {
-                let ext = settings.container == .heic ? "heic" : "jpg"
+            if settings.direction.exportsAndroid {
+                let ext = settings.direction == .toAndroid && settings.container == .heic ? "heic" : "jpg"
                 files = [folder.appendingPathComponent(input.deletingPathExtension().lastPathComponent + ".MP." + ext)]
             } else {
                 guard settings.exportMode != .auxiliaryOnly else { return [] }

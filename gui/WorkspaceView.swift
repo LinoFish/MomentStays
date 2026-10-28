@@ -54,7 +54,7 @@ struct WorkspaceView: View {
         SourceMenuButton(requested:$model.sourceMenuRequested,disabled:model.isBusy || model.sharing,
             title:model.sources.isEmpty ? "添加照片" : model.sourceLabel,
             details:model.sources.isEmpty ? "" : "来源：" + model.sourceLabel + "\n" + model.sources.map(\.path).joined(separator:"\n"),
-            hasSources:!model.sources.isEmpty,addFiles:actions.chooseSources,addLibrary:actions.importPhotos)
+            hasSources:!model.sources.isEmpty,allowsLibrary:model.settings.direction != .androidToAndroid,addFiles:actions.chooseSources,addLibrary:actions.importPhotos)
             .frame(width:model.sources.isEmpty ? 96 : 160)
             .fixedSize(horizontal:false,vertical:true).recordLayout("add-button")
     }
@@ -74,7 +74,8 @@ struct WorkspaceView: View {
                 if model.settings.destination.usesCache { model.settingsPresented = true }
                 else { actions.chooseOutput() }
             },chooseFolder:actions.chooseOutput,chooseAlbum:actions.chooseAlbum,
-            copyPath:{ if let output = model.output { actions.copy(output.path) } })
+            copyPath:{ if let output = model.output { actions.copy(output.path) } },
+            chooseDestination:model.settings.direction == .toApple ? actions.chooseDestination : nil)
         .frame(height:20)
         .help(outputHelp)
         .accessibilityLabel("输出：" + outputSummary)
@@ -89,13 +90,14 @@ struct WorkspaceView: View {
     }
 
     private var outputHelp: String {
+        if model.settings.direction == .toApple { return "选择相册、文件夹或相册及文件夹；取消保留当前设置" }
         let action = model.settings.destination.usesCache ? "点击打开导出设置；箭头切换保存方式" : "点击更改文件夹；箭头切换保存方式，也可拖入文件夹"
         return "输出：" + outputSummary + (model.settings.destination.usesCache ? "" : "\n" + (model.output?.path ?? "尚未选择文件夹")) + "\n" + action
     }
     private var vendorPicker: some View {
         Picker("目标手机",selection:vendor) {
             ForEach(AndroidVendor.allCases,id:\.self) { Text($0.title).tag($0) }
-        }.frame(maxWidth:220)
+        }.frame(maxWidth:220).disabled(model.isBusy || model.sharing)
     }
     private var moreOptions: some View {
         HStack(spacing:12) {
@@ -103,16 +105,17 @@ struct WorkspaceView: View {
                 .focused($settingsFocused).accessibilityIdentifier("settings-button").recordLayout("settings-button")
             Link(destination:UserGuide.url(for:locale)) { Image(systemName:"questionmark.circle").foregroundColor(InterfaceStyle.accent) }
                 .help(UserGuide.title(for:locale)).accessibilityLabel(UserGuide.title(for:locale)).accessibilityIdentifier("user-guide-button")
-        }
+        }.disabled(model.isBusy || model.sharing)
     }
     private func workspaceHeader(_ layout: WorkspaceLayout) -> some View {
         Group {
-            if layout.size.width >= 1040 {
+            if layout.size.width >= 1200 {
                 HStack(spacing:12) {
                     addButton
-                    directionPicker.frame(width:270)
+                    directionPicker.frame(width:380)
                     outputControl
                     if model.settings.direction == .toAndroid { vendorPicker.frame(maxWidth:160) }
+                    if model.settings.direction == .androidToAndroid { Text("暂仅支持 Google → 荣耀").font(.caption).foregroundColor(.secondary).fixedSize() }
                     Spacer(minLength:0)
                     moreOptions
                 }
@@ -127,12 +130,13 @@ struct WorkspaceView: View {
                         addButton
                         outputControl
                         if model.settings.direction == .toAndroid { vendorPicker.frame(maxWidth:160) }
+                        if model.settings.direction == .androidToAndroid { Text("暂仅支持 Google → 荣耀").font(.caption).foregroundColor(.secondary).fixedSize() }
                         Spacer(minLength:0)
                     }
                 }
             }
         }
-        .disabled(model.isBusy || model.sharing)
+        .disabled(!model.canSwitchDirection)
         .padding(.horizontal,layout.margin).padding(.vertical,8).recordLayout("command-bar")
     }
 
@@ -161,8 +165,10 @@ struct WorkspaceView: View {
     }
 
     private var outputSummary: String {
+        if model.settings.direction == .toApple && model.settings.outputConfirmed != true { return "询问位置" }
         switch model.settings.destination {
-        case .photos: return "系统照片图库"
+        case .ask: return "询问位置"
+        case .photos: return "相册"
         case .folderAndPhotos: return (model.output?.lastPathComponent ?? "待选择文件夹") + " ＋ 照片图库"
         case .share: return "转换后共享"
         case .folderAndShare: return "文件夹＋共享 · " + (model.output?.lastPathComponent ?? "待选择")

@@ -2,28 +2,33 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .build/gui dist
-architectures=(x86_64)
+architectures=(x86_64 arm64)
 definitions=(-D MOTIONLIVE_LIBRARY)
 optimization=(-O -whole-module-optimization)
-app="dist/MomentStays.app"
+app="dist/留刻.app"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --universal) architectures=(x86_64 arm64); shift ;;
     --arm64) architectures=(arm64); shift ;;
-    --diagnostics) definitions+=(-D UI_DIAGNOSTICS); optimization=(-Onone); app=".build/gui/preview/MomentStays.app"; shift ;;
-    --help) echo "Usage: $0 [--universal | --arm64] [--diagnostics] (default: Intel .app only)"; exit 0 ;;
+    --diagnostics) definitions+=(-D UI_DIAGNOSTICS); optimization=(-Onone); app=".build/gui/preview/留刻.app"; shift ;;
+    --help) echo "Usage: $0 [--universal | --arm64] [--diagnostics] (default: Universal .app)"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
-sources=(native/MotionLive.swift native/PhotoFormat.swift native/PhotoHEIF.swift native/PhotoHDR.swift native/BatchEngine.swift native/CoverCandidates.swift native/HEIFMetadata.swift native/AndroidHDR.swift native/AndroidExport.swift
+sources=(native/RustCore.swift native/MotionLive.swift native/PhotoFormat.swift native/PhotoHEIF.swift native/PhotoHDR.swift native/BatchEngine.swift native/CoverCandidates.swift native/HEIFMetadata.swift native/AndroidHDR.swift native/AndroidExport.swift native/AndroidTransfer.swift
   gui/ConversionSettings.swift gui/ConversionService.swift gui/WorkspaceModel.swift gui/DeliveryModels.swift gui/PhotoLibraryService.swift gui/SystemSharingService.swift
   gui/InterfaceSupport.swift gui/ExportSettingsView.swift gui/MotionPreview.swift gui/PhotoTimelineView.swift gui/PhotoQueueView.swift gui/WorkspaceView.swift gui/ReportView.swift
   gui/PhotosLibraryPicker.swift gui/MacPlatformServices.swift gui/UISnapshotSupport.swift gui/AppIconAppearance.swift gui/App.swift)
+if [[ ${#architectures[@]} -gt 1 ]]; then
+  source scripts/prepare_universal_rust.sh
+  export RUSTC="$motionlive_rustc"
+fi
 binaries=()
 for arch in "${architectures[@]}"; do
+  source scripts/rust_bridge.sh "$arch"
   echo "Building macOS 12 app: $arch"
   xcrun swiftc -parse-as-library "${definitions[@]}" "${optimization[@]}" -target "$arch-apple-macosx12.0" \
-    -module-cache-path "/private/tmp/motionlive-gui-swift-cache-$arch" "${sources[@]}" \
+    -module-cache-path "/private/tmp/motionlive-gui-swift-cache-$arch" "${sources[@]}" "${rust_bridge_flags[@]}" \
     -o ".build/gui/MomentStays-$arch"
   binaries+=(".build/gui/MomentStays-$arch")
 done

@@ -116,7 +116,7 @@ struct PhotoQueueView: View {
                         Text("任务进行中，完成后可预览动态画面").foregroundColor(.secondary)
                     } else {
                         PhotoMotionPreview(item:item,direction:model.settings.direction.rawValue,
-                            timeDomain:model.settings.timeDomain.rawValue,isDemo:model.isPreview,height:300,
+                            timeDomain:model.settings.options.timeDomain,isDemo:model.isPreview,height:300,
                             select:{ model.selection = item.id },selectedCover:model.settings.coverIndex(for:item.source),
                             chooseCover:{ model.selectCover($0,for:item.source) },allowsCoverSelection:!model.sharing && model.settings.exportMode != .auxiliaryOnly,
                             showsCandidateStatus:true).id(item.id)
@@ -314,7 +314,7 @@ struct PhotoQueueView: View {
                 Text("照片会陆续显示在这里").font(.callout).foregroundColor(.secondary)
             } else if model.items.isEmpty {
                 if !short { MomentStaysBrandIcon().frame(width:64,height:64) }
-                Text(model.settings.direction == .toApple ? "将动态照片转为 Live Photo" : "将 Live Photo 转为动态照片")
+                Text(model.settings.direction == .androidToAndroid ? "暂仅支持 Google → 荣耀" : model.settings.direction == .toApple ? "将动态照片转为 Live Photo" : "将 Live Photo 转为动态照片")
                     .font(.title3.weight(.semibold)).multilineTextAlignment(.center)
                 Text("拖入照片或文件夹，或从图库选择")
                     .font(.callout).foregroundColor(.secondary).multilineTextAlignment(.center)

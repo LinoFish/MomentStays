@@ -37,6 +37,8 @@ struct NativeDriver {
             case "format":
                 let photo = try PhotoFormat.parse(Array(Data(contentsOf:URL(fileURLWithPath:req["input"] as! String))))
                 var result: [String:Any] = ["timestamp_us":photo.timestamp.map { $0 as Any } ?? NSNull(),
+                    "format":photo.format,"cover_frame":photo.coverFrame.map { $0 as Any } ?? NSNull(),
+                    "timestamp_tag":photo.timestampTag.map { $0 as Any } ?? NSNull(),"video_sha256":sha(Data(photo.video)),
                     "ultra":photo.ultra,"coding_hash":try PhotoFormat.codingHash(photo.still)]
                 if let output = req["output"] as? String {
                     let still = try PhotoFormat.liveStill(photo.still,uuid:"CCA01975-5655-4A4C-88C6-D620975EF319")
@@ -65,7 +67,7 @@ struct NativeDriver {
                 try emit(result)
             case "scan":
                 let rows = try NativeBatch.scan(sources:inputs,direction:req["direction"] as? String ?? "to-apple",token:StopToken()) { _,_ in }
-                try emit(["rows":rows.map { ["relative":$0.relative,"motion":$0.isMotion,"hdr":$0.hdr,"cover":$0.cover,"manufacturer":$0.manufacturer,"manufacturer_detail":$0.manufacturerDetail] as [String:Any] }])
+                try emit(["rows":rows.map { ["relative":$0.relative,"motion":$0.isMotion,"hdr":$0.hdr,"cover":$0.cover,"manufacturer":$0.manufacturer,"manufacturer_detail":$0.manufacturerDetail,"detail":$0.detail,"static":$0.confirmedStatic] as [String:Any] }])
             default: throw Failure("Unknown mode")
             }
         } catch { try? emit(["error":error.localizedDescription]); exit(1) }

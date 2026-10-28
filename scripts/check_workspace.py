@@ -13,14 +13,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from tests.test_formats import motion
 
-native = ["MotionLive", "PhotoFormat", "PhotoHEIF", "PhotoHDR", "BatchEngine", "CoverCandidates", "HEIFMetadata", "AndroidHDR", "AndroidExport"]
+native = ["RustCore", "MotionLive", "PhotoFormat", "PhotoHEIF", "PhotoHDR", "BatchEngine", "CoverCandidates", "HEIFMetadata", "AndroidHDR", "AndroidExport", "AndroidTransfer"]
 sources = [str(ROOT / "native" / (name + ".swift")) for name in native]
 sources += [str(ROOT / "gui" / (name + ".swift")) for name in ["ConversionSettings", "ConversionService", "WorkspaceModel", "DeliveryModels", "PhotoLibraryService"]]
 sources.append(str(ROOT / "tests/WorkspaceModelTests.swift"))
 binary = ROOT / ".build/gui/workspace-tests"
 binary.parent.mkdir(parents=True, exist_ok=True)
 if "--skip-build" not in sys.argv:
-    subprocess.run(["xcrun", "swiftc", "-parse-as-library", "-D", "MOTIONLIVE_LIBRARY", "-Onone", "-target", "x86_64-apple-macosx12.0",
+    subprocess.run(["bash", "-c", 'source scripts/rust_bridge.sh x86_64; exec "$@" "${rust_bridge_flags[@]}"', "bash", "xcrun", "swiftc", "-parse-as-library", "-D", "MOTIONLIVE_LIBRARY", "-Onone", "-target", "x86_64-apple-macosx12.0",
         "-module-cache-path", "/private/tmp/motionlive-swift-model-cache", *sources, "-o", str(binary)], check=True)
 driver = ROOT / ".build/gui/native-tests"
 if not driver.exists():

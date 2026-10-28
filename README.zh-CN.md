@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.4.0</strong>
+  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.5.0</strong>
 </p>
 
 # 留刻（MomentStays）— 安卓动态照片转苹果实况照片（Live Photo）工具
@@ -96,8 +96,9 @@
 | 方向 | 格式与目标 |
 | --- | --- |
 | 安卓 → 苹果 | Google 兼容 Motion Photo JPEG，支持的华为/荣耀、三星 SEF、OPPO、vivo V2 容器，以及已验证的三星 HEIC 布局 → JPEG/HEIC + MOV |
-| 苹果 → 安卓，JPEG | Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2 |
+| 苹果 → 安卓，JPEG | Google/通用（新款荣耀推荐）、小米、三星、华为、荣耀（备用）、OPPO、vivo V2 |
 | 苹果 → 安卓，HEIC | 仅三星；保留已有 HEIC 编码（Google 与小米的动态照片不使用 HEIC） |
+| 安卓 → 安卓 | 暂仅支持 Google → 荣耀；可安全验证的 Google Motion Photo JPEG，保留完整原视频和源封面 |
 
 支持批量处理、进度、停止、校验后续转、跳过/覆盖、可选 JSON 清单与报告、独立辅助轨导出。单帧辅助轨不会被延长成虚构的动态画面。
 
@@ -107,16 +108,16 @@
 
 ## 构建与运行
 
-构建者需要 Xcode Command Line Tools。默认生成 Intel macOS 应用：
+构建者需要 Xcode Command Line Tools。默认生成 Universal macOS 应用：
 
 ```bash
 git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
 bash scripts/build_app.sh
-open dist/MomentStays.app
+open dist/留刻.app
 ```
 
-使用已构建的应用，无需 Python、FFmpeg、ExifTool、Homebrew 或额外运行时。其他架构需显式选择：
+使用已构建的应用，无需 Python、FFmpeg、ExifTool、Homebrew 或额外运行时。仅构建 Apple Silicon 时可显式选择：
 
 ```bash
 bash scripts/build_app.sh --arm64
@@ -196,7 +197,9 @@ python3 scripts/check_swiftui_ui.py
 
 ### iPhone 实况照片能转回安卓动态照片吗？
 
-可以。选择“苹果 → 安卓”方向，留刻读取实况照片的图片 + MOV 配对和封面标记，输出 Google/通用、小米、三星、华为/荣耀、OPPO、vivo V2 等安卓动态照片格式（JPEG），或三星格式（HEIC；Google 与小米的动态照片只有 JPEG）。
+可以。选择“苹果 → 安卓”方向，留刻读取实况照片的图片 + MOV 配对和封面标记，输出 Google/通用（新款荣耀推荐）、小米、三星、华为、荣耀（备用）、OPPO、vivo V2 等安卓动态照片格式（JPEG），或三星格式（HEIC；Google 与小米的动态照片只有 JPEG）。
+
+新款荣耀已验证可识别留刻导出的 Google 格式，现有荣耀格式仅作备用。独立的「安卓 → 安卓」方向暂仅支持 Google → 荣耀：接收可安全验证的 Google Motion Photo JPEG，保留完整原视频和源封面，拒绝不支持或有歧义的结构。
 
 ### 转换动态照片会不会掉画质、会不会重新编码？
 

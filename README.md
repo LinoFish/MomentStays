@@ -7,10 +7,10 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.4.0</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.5.0</strong>
 </p>
 
-# MomentStays（留刻）— Android Motion Photo ↔ Apple Live Photo Converter for macOS
+# 留刻— Android Motion Photo ↔ Apple Live Photo Converter for macOS
 
 Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. MomentStays preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos — JPEG, plus validated Samsung HEIC layouts.
 
@@ -94,8 +94,9 @@ Some validated private static extensions can be retained as opaque data. Retaini
 | Direction | Formats and targets |
 | --- | --- |
 | Android → Apple | Google-compatible Motion Photo JPEG, supported Huawei/Honor, Samsung SEF, OPPO and vivo V2 containers; validated Samsung HEIC layouts → JPEG/HEIC + MOV |
-| Apple → Android, JPEG | Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, vivo V2 |
+| Apple → Android, JPEG | Google/generic (recommended for newer Honor), Xiaomi, Samsung, Huawei, Honor (fallback), OPPO, vivo V2 |
 | Apple → Android, HEIC | Samsung; retains the existing HEIC encoding (Google and Xiaomi Motion Photos do not use HEIC) |
+| Android → Android | Google → Honor only; validated Google Motion Photo JPEG, preserving the complete original video and source cover |
 
 Batch processing includes progress, cancellation, verified resume, skip/overwrite decisions, optional JSON manifests/reports, and separate auxiliary-track export. A single-frame auxiliary track is never stretched into fabricated motion.
 
@@ -105,16 +106,16 @@ Vendor support applies to the layouts the parser can validate, not every device 
 
 ## Build & run
 
-Building requires Xcode Command Line Tools. The default build produces an Intel macOS app:
+Building requires Xcode Command Line Tools. The default build produces a Universal macOS app:
 
 ```bash
 git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
 bash scripts/build_app.sh
-open dist/MomentStays.app
+open dist/留刻.app
 ```
 
-A built app requires no Python, FFmpeg, ExifTool, Homebrew, or additional runtime. To build for another architecture:
+A built app requires no Python, FFmpeg, ExifTool, Homebrew, or additional runtime. To build only for Apple Silicon:
 
 ```bash
 bash scripts/build_app.sh --arm64
@@ -192,7 +193,9 @@ Add the Motion Photo file (or a folder, or a Photos-library selection) in Moment
 
 ### Can I convert an iPhone Live Photo back to an Android Motion Photo?
 
-Yes. In the Apple → Android direction, MomentStays reads the paired image + MOV and its still-image-time marker, and writes a Motion Photo for Google/generic, Xiaomi, Samsung, Huawei/Honor, OPPO, or vivo V2 layouts (JPEG), or the Samsung layout (HEIC; Google and Xiaomi Motion Photos are JPEG-only).
+Yes. In the Apple → Android direction, MomentStays reads the paired image + MOV and its still-image-time marker, and writes a Motion Photo for Google/generic (recommended for newer Honor phones), Xiaomi, Samsung, Huawei, Honor (fallback), OPPO, or vivo V2 layouts (JPEG), or the Samsung layout (HEIC; Google and Xiaomi Motion Photos are JPEG-only).
+
+Newer Honor phones have been verified to recognize Google-format files exported by MomentStays. The Honor option remains a fallback. The separate Android → Android direction supports only safely validated Google Motion Photo JPEG → Honor; unsupported or ambiguous structures are rejected.
 
 ### Does converting a Motion Photo lose quality?
 

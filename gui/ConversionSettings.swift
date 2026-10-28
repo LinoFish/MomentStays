@@ -6,19 +6,20 @@ protocol SettingsChoice: RawRepresentable, CaseIterable, Hashable, Codable where
 }
 
 enum ConversionDirection: String, SettingsChoice {
-    case toApple = "to-apple", toAndroid = "to-android"
-    var title: String { self == .toApple ? "安卓 → 苹果实况" : "苹果实况 → 安卓" }
+    case toApple = "to-apple", toAndroid = "to-android", androidToAndroid = "android-to-android"
+    var title: String { switch self { case .toApple: return "安卓 → 苹果实况"; case .toAndroid: return "苹果实况 → 安卓"; case .androidToAndroid: return "安卓 → 安卓" } }
+    var exportsAndroid: Bool { self != .toApple }
 }
 
 enum AndroidVendor: String, SettingsChoice {
     case google, xiaomi, samsung, huawei, honor, oppo, vivo
     var title: String {
         switch self {
-        case .google: return "Google / 通用"
+        case .google: return "Google / 通用（新款荣耀推荐）"
         case .xiaomi: return "小米"
         case .samsung: return "三星"
         case .huawei: return "华为"
-        case .honor: return "荣耀"
+        case .honor: return "荣耀（备用）"
         case .oppo: return "OPPO"
         case .vivo: return "vivo V2"
         }
@@ -70,9 +71,10 @@ enum CoverTimeDomain: String, SettingsChoice {
 }
 
 enum OutputDestination: String, SettingsChoice {
-    case folder, photos, folderAndPhotos, share, folderAndShare
+    case ask, folder, photos, folderAndPhotos, share, folderAndShare
     var title: String {
         switch self {
+        case .ask: return "询问位置"
         case .folder: return "文件夹"
         case .photos: return "照片图库"
         case .folderAndPhotos: return "文件夹和照片图库"
@@ -92,7 +94,8 @@ enum LibraryVersion: String, SettingsChoice {
 
 struct ConversionSettings: Equatable, Codable {
     var direction: ConversionDirection = .toApple
-    var destination: OutputDestination = .folder
+    var destination: OutputDestination = .ask
+    var outputConfirmed: Bool?
     var albumTitle = "留刻转换结果"
     var albumID: String?
     var libraryVersion: LibraryVersion = .original
@@ -112,10 +115,11 @@ struct ConversionSettings: Equatable, Codable {
     var coverSelections: [String:Int]?
     var candidateDelivery: CandidateDelivery?
 
-    func coverIndex(for source: URL) -> Int? { coverSelections?[NativeBatch.normalized(source).path] }
+    func coverIndex(for source: URL) -> Int? { direction == .toApple ? coverSelections?[NativeBatch.normalized(source).path] : nil }
 
     mutating func normalize() {
-        if direction == .toAndroid && destination.importsPhotos { destination = .folder }
+        if direction.exportsAndroid && destination == .ask { destination = .folder }
+        if direction.exportsAndroid && destination.importsPhotos { destination = .folder }
         if direction == .toApple && destination.shares { destination = .folder }
         if exportMode == .auxiliaryOnly && direction == .toApple && destination.importsPhotos { destination = .folder }
         if exportMode == .withCandidates || !(coverSelections ?? [:]).isEmpty { track = .primary }
@@ -126,6 +130,12 @@ struct ConversionSettings: Equatable, Codable {
     }
 
     var options: ConversionOptions {
+        if direction == .androidToAndroid {
+            var result = ConversionOptions()
+            result.direction = direction.rawValue
+            result.exportDataFiles = exportDataFiles
+            return result
+        }
         var result = ConversionOptions(legacyHDR: legacyHDR, missingTime: missingTime.rawValue,
             timeDomain: timeDomain.rawValue, videoTrack: track.rawValue, outputMode: exportMode.rawValue,
             repairAuxiliaryDuration: repairAuxiliaryDuration, exportDataFiles: exportDataFiles)
@@ -139,6 +149,7 @@ struct ConversionSettings: Equatable, Codable {
     }
 
     var summary: String {
+        if direction == .androidToAndroid { return "暂仅支持 Google → 荣耀 · JPEG 原编码" }
         if direction == .toAndroid { return "\(vendor.title) · \(container == .heic ? "HEIC 原编码" : "JPEG")" }
         var parts = [track.title,exportMode.title]
         if exportMode == .withCandidates { parts.append((candidateDelivery ?? .staticPhotos).title) }
@@ -147,11 +158,11 @@ struct ConversionSettings: Equatable, Codable {
     }
 
     var destinations: [OutputDestination] {
-        direction == .toAndroid ? [.folder, .share, .folderAndShare] : exportMode == .auxiliaryOnly ? [.folder] : [.folder, .photos, .folderAndPhotos]
+        direction.exportsAndroid ? [.folder, .share, .folderAndShare] : exportMode == .auxiliaryOnly ? [.ask,.folder] : [.ask,.photos,.folder,.folderAndPhotos]
     }
     var actionTitle: String {
         if destination.importsPhotos { return "转换并导入图库" }
         if destination.shares { return "转换并共享" }
-        return direction == .toAndroid ? "导出到安卓" : exportMode == .auxiliaryOnly ? "导出辅助轨" : "开始转换"
+        return direction.exportsAndroid ? "导出到安卓" : exportMode == .auxiliaryOnly ? "导出辅助轨" : "开始转换"
     }
 }

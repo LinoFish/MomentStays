@@ -48,7 +48,7 @@ final class MacPlatformServices: NSObject {
         lastTask = deliveryStore.tasks().first(where: { !$0.results.isEmpty })
         model.recentOutput = lastTask.map { URL(fileURLWithPath: $0.output) }
         model.recentTasksAvailable = lastTask != nil
-        model.shareReady = lastTask?.settings.direction == .toAndroid
+        model.shareReady = lastTask?.settings.direction.exportsAndroid == true
         model.presentExistingOutput = { [weak self] source, target, reply in
             guard let self = self else { reply(.cancel); return }
             self.presentExistingOutput(source: source, target: target, reply: reply)
@@ -60,6 +60,7 @@ final class MacPlatformServices: NSObject {
         WorkspaceActions(chooseSources: { [weak self] in self?.chooseSources() },
             clearSources: { [weak self] in self?.clearSources() },
             chooseOutput: { [weak self] in self?.chooseOutput() },
+            chooseDestination: { [weak self] destination in self?.chooseDestination(destination) },
             importPhotos: { [weak self] in self?.importPhotos() },
             start: { [weak self] in self?.start() },
             openOutput: { [weak self] in self?.openOutput() },
@@ -113,6 +114,7 @@ final class MacPlatformServices: NSObject {
     }
 
     func chooseOutput() {
+        if model.settings.direction == .toApple { chooseDestination(.folder); return }
         guard !model.isBusy, !model.sharing, !model.isPreview, let parent = settingsDialogParent else { return }
         let panel = NSOpenPanel(); panel.title = "选择输出位置"; panel.prompt = "选择"
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
@@ -123,6 +125,7 @@ final class MacPlatformServices: NSObject {
     }
 
     func importPhotos() {
+        guard model.settings.direction != .androidToAndroid else { return }
         guard let window = window, window.attachedSheet == nil, let id = model.beginLibraryImport() else { return }
         dropRequest = UUID(); stopMonitoring()
         let direction = model.settings.direction
@@ -148,7 +151,7 @@ final class MacPlatformServices: NSObject {
         guard window?.attachedSheet == nil, model.canStart, !model.sharing else { return }
         batchDecision = nil
         do {
-            var task = DeliveryTask(settings: model.settings, output: model.output!.path)
+            var task = DeliveryTask(settings: model.settings, output: model.output?.path ?? deliveryStore.root.path)
             if task.settings.destination.usesCache { task.output = deliveryStore.taskFolder(task.id).appendingPathComponent("Converted").path }
             try deliveryStore.save(task)
             activeTask = task; model.deliverySummary = ""; model.shareReady = false
@@ -172,7 +175,7 @@ final class MacPlatformServices: NSObject {
                 case .failure(let error): self.model.finishDelivery("转换结果保留，但交付准备失败", error: error)
                 case .success(let task):
                     self.lastTask = task; self.model.recentTasksAvailable = !task.results.isEmpty || self.model.recentTasksAvailable
-                    self.model.shareReady = settings.direction == .toAndroid && !task.results.isEmpty
+                    self.model.shareReady = settings.direction.exportsAndroid && !task.results.isEmpty
                     self.model.finishDelivery("已记录 \(task.results.count) 张转换结果")
                     guard !token.isCancelled, !task.results.isEmpty else { return }
                     if settings.destination.importsPhotos { self.importTask(task) }
@@ -211,7 +214,7 @@ final class MacPlatformServices: NSObject {
 
     func shareResults() {
         guard !model.isBusy, !model.sharing, let window = window, window.attachedSheet == nil,
-              var task = lastTask, task.settings.direction == .toAndroid, !task.results.isEmpty else { return }
+              var task = lastTask, task.settings.direction.exportsAndroid, !task.results.isEmpty else { return }
         let token = model.beginDelivery("正在准备完整文件共享…")
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result { try self.deliveryStore.stageShare(&task, token: token) }
@@ -234,33 +237,61 @@ final class MacPlatformServices: NSObject {
         }
     }
 
-    func chooseAlbum() {
-        guard !model.isBusy, !model.sharing, !model.isPreview, !albumSelectionPending,
+    private var outputChoiceRequest = UUID()
+    func chooseDestination(_ destination: OutputDestination) {
+        guard model.settings.direction == .toApple, !model.isBusy, !model.sharing, !model.isPreview,
+              [.folder,.photos,.folderAndPhotos].contains(destination),
+              model.settings.exportMode != .auxiliaryOnly || destination == .folder,
               let parent = settingsDialogParent else { return }
+        let request = UUID(); outputChoiceRequest = request
+        let snapshot = model.settings, sources = model.sources
+        func commit(_ folder: URL?, _ albumID: String?, _ title: String?) {
+            guard self.outputChoiceRequest == request, self.model.settings == snapshot, self.model.sources == sources else { return }
+            self.model.confirmOutput(destination:destination,folder:folder,albumID:albumID,albumTitle:title)
+        }
+        func album(_ folder: URL?) {
+            self.pickAlbum(parent:parent) { id,title in commit(folder,id,title) }
+        }
+        if destination == .photos { album(nil); return }
+        let panel = NSOpenPanel(); panel.title = "选择输出文件夹"; panel.prompt = "选择"
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.directoryURL = model.output
+        panel.beginSheetModal(for:parent) { response in
+            guard response == .OK, let folder = panel.url else { return }
+            if destination == .folder { commit(folder,nil,nil) }
+            else { DispatchQueue.main.async { album(folder) } }
+        }
+    }
+    func chooseAlbum() {
+        guard let parent = settingsDialogParent else { return }
+        pickAlbum(parent:parent) { [weak self] id,title in
+            self?.model.updateSettings { $0.albumID = id; $0.albumTitle = title }
+        }
+    }
+    private func pickAlbum(parent: NSWindow, completion: @escaping (String?,String) -> Void) {
+        guard !model.isBusy, !model.sharing, !model.isPreview, !albumSelectionPending else { return }
         albumSelectionPending = true
         PhotoLibraryService.authorize { [weak self, weak parent] result in
             guard let self = self else { return }
             defer { self.albumSelectionPending = false }
-            // Authorization may return after the settings sheet was dismissed.
-            // Don't open a dialog on an obsolete window or interrupt a new job.
-            guard let parent = parent, self.settingsDialogParent === parent,
-                  !self.model.isBusy, !self.model.sharing else { return }
+            guard let parent = parent, self.settingsDialogParent === parent, !self.model.isBusy, !self.model.sharing else { return }
             if case .failure(let error) = result { self.model.errorMessage = error.localizedDescription; return }
             let albums = PhotoLibraryService.albums()
             let alert = NSAlert(); alert.messageText = "输出相册"
             alert.informativeText = "选择已有用户相册，或输入新相册名称。仅在转换成功后创建相册。"
-            let popup = NSPopUpButton(frame: NSRect(x: 0, y: 38, width: 300, height: 28), pullsDown: false)
-            popup.addItem(withTitle: "按下方名称创建／查找")
-            popup.addItems(withTitles: albums.map { $0.localizedTitle ?? "未命名相册" })
-            let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 26)); name.stringValue = self.model.settings.albumTitle
-            let view = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 70)); view.addSubview(popup); view.addSubview(name); alert.accessoryView = view
-            alert.addButton(withTitle: "选择"); alert.addButton(withTitle: "取消")
-            alert.beginSheetModal(for: parent) { response in
+            let popup = NSPopUpButton(frame:NSRect(x:0,y:38,width:300,height:28),pullsDown:false)
+            popup.addItem(withTitle:"按下方名称创建／查找")
+            popup.addItems(withTitles:albums.map { $0.localizedTitle ?? "未命名相册" })
+            if let index = albums.firstIndex(where:{ $0.localIdentifier == self.model.settings.albumID }) { popup.selectItem(at:index + 1) }
+            let name = NSTextField(frame:NSRect(x:0,y:0,width:300,height:26)); name.stringValue = self.model.settings.albumTitle
+            let view = NSView(frame:NSRect(x:0,y:0,width:300,height:70)); view.addSubview(popup); view.addSubview(name); alert.accessoryView = view
+            alert.addButton(withTitle:"选择"); alert.addButton(withTitle:"取消")
+            alert.beginSheetModal(for:parent) { response in
                 guard response == .alertFirstButtonReturn else { return }
-                self.model.updateSettings {
-                    $0.albumID = popup.indexOfSelectedItem > 0 ? albums[popup.indexOfSelectedItem - 1].localIdentifier : nil
-                    $0.albumTitle = popup.indexOfSelectedItem > 0 ? albums[popup.indexOfSelectedItem - 1].localizedTitle ?? "未命名相册" : name.stringValue
-                }
+                let index = popup.indexOfSelectedItem
+                let title = (index > 0 ? albums[index - 1].localizedTitle ?? "未命名相册" : name.stringValue).trimmingCharacters(in:.whitespacesAndNewlines)
+                guard !title.isEmpty else { self.model.errorMessage = "请输入相册名称"; return }
+                completion(index > 0 ? albums[index - 1].localIdentifier : nil,title)
             }
         }
     }
@@ -341,7 +372,7 @@ final class MacPlatformServices: NSObject {
                 try self.deliveryStore.removeTask(task, active: [])
                 let tasks = self.deliveryStore.tasks().filter { !$0.results.isEmpty }
                 self.lastTask = tasks.first
-                self.model.shareReady = self.lastTask?.settings.direction == .toAndroid
+                self.model.shareReady = self.lastTask?.settings.direction.exportsAndroid == true
                 self.model.recentTasksAvailable = !tasks.isEmpty
                 return tasks
             }))
@@ -350,8 +381,8 @@ final class MacPlatformServices: NSObject {
             panel.contentView = nil
             guard let self = self, let task = retryTask, !self.model.isBusy, !self.model.sharing else { return }
             self.lastTask = task
-            self.model.shareReady = task.settings.direction == .toAndroid
-            if task.settings.direction == .toAndroid { self.shareResults() }
+            self.model.shareReady = task.settings.direction.exportsAndroid
+            if task.settings.direction.exportsAndroid { self.shareResults() }
             else { self.importTask(task) }
         }
     }
@@ -475,10 +506,10 @@ struct RecentTasksView: View {
         }
     }
     private func canRedeliver(_ task: DeliveryTask) -> Bool {
-        task.settings.direction == .toAndroid || task.settings.exportMode != .auxiliaryOnly
+        task.settings.direction.exportsAndroid || task.settings.exportMode != .auxiliaryOnly
     }
     private func deliveryStatus(_ task: DeliveryTask) -> String {
-        if task.settings.direction == .toAndroid { return task.shareState }
+        if task.settings.direction.exportsAndroid { return task.shareState }
         if !task.importSummary.isEmpty { return task.importSummary }
         return task.cancelled ? "任务已停止，已完成结果保留" : "转换结果已保存"
     }
@@ -581,7 +612,7 @@ struct RecentTasksView: View {
             Button("查看文件") { NSWorkspace.shared.activateFileViewerSelecting(existingFiles(task)) }
                 .disabled(existingFiles(task).isEmpty)
             if canRedeliver(task) {
-                Button(task.settings.direction == .toAndroid ? "再次共享…" : "再次导入图库…") { retry(task) }
+                Button(task.settings.direction.exportsAndroid ? "再次共享…" : "再次导入图库…") { retry(task) }
                     .disabled(!filesAvailable(task) || model.isBusy || model.sharing)
             }
         }.padding(16).recordLayout("recent-actions")

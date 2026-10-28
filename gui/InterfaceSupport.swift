@@ -21,6 +21,7 @@ struct SourceMenuButton: NSViewRepresentable {
     var title = "添加照片"
     var details = ""
     var hasSources = false
+    var allowsLibrary = true
     let addFiles: () -> Void
     let addLibrary: () -> Void
 
@@ -71,6 +72,7 @@ struct SourceMenuButton: NSViewRepresentable {
         button.toolTip = details.isEmpty ? "添加照片、文件夹或系统照片图库" : details + "\n点击继续添加照片、文件夹或图库照片"
         button.setAccessibilityLabel(hasSources ? title + "，继续添加照片" : "添加照片")
         context.coordinator.menu.items[0].title = hasSources ? "继续添加照片或文件夹…" : "选择照片或文件夹…"
+        context.coordinator.menu.items[1].isHidden = !allowsLibrary
         context.coordinator.menu.items[1].title = hasSources ? "继续从系统图库添加…" : "扫描系统照片图库…"
         button.invalidateIntrinsicContentSize()
         context.coordinator.addFiles = addFiles
@@ -95,7 +97,7 @@ struct SourceMenuButton: NSViewRepresentable {
         #if UI_DIAGNOSTICS
         func menuWillOpen(_ menu: NSMenu) {
             SourceMenuDiagnostics.opened = true
-            SourceMenuDiagnostics.titles = menu.items.map(\.title)
+            SourceMenuDiagnostics.titles = menu.items.filter { !$0.isHidden }.map(\.title)
             if CommandLine.arguments.contains("--ui-source-menu") {
                 let timer = Timer(timeInterval:0.3,repeats:false) { _ in menu.cancelTracking() }
                 RunLoop.main.add(timer,forMode:.common)
@@ -117,6 +119,7 @@ struct OutputLocationControl: NSViewRepresentable {
     let chooseFolder: () -> Void
     let chooseAlbum: () -> Void
     let copyPath: () -> Void
+    var chooseDestination: ((OutputDestination) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeNSView(context: Context) -> NSView {
@@ -163,24 +166,30 @@ struct OutputLocationControl: NSViewRepresentable {
         let primary = NSButton(), arrow = NSButton()
         var configuration: OutputLocationControl?
         private var menu = NSMenu()
-        @objc func changeLocation() { configuration?.changeLocation() }
+        @objc func changeLocation() {
+            if configuration?.chooseDestination != nil { openMenu() } else { configuration?.changeLocation() }
+        }
         @objc func openMenu() {
             guard let config = configuration else { return }
             menu = NSMenu()
-            for destination in config.destinations {
-                let item = NSMenuItem(title:destination.title,action:#selector(selectDestination(_:)),keyEquivalent:"")
+            for destination in config.destinations where destination != .ask {
+                let title = config.chooseDestination == nil ? destination.title : destination == .photos ? "相册" : destination == .folderAndPhotos ? "相册及文件夹" : "文件夹"
+                let item = NSMenuItem(title:title,action:#selector(selectDestination(_:)),keyEquivalent:"")
                 item.target = self; item.representedObject = destination.rawValue
                 item.state = destination == config.destination ? .on : .off
                 menu.addItem(item)
             }
+            if config.chooseDestination == nil {
             if !config.destination.usesCache || config.destination.importsPhotos { menu.addItem(.separator()) }
             if !config.destination.usesCache {
                 add(config.outputPath == nil ? "选择文件夹…" : "更改文件夹…",#selector(chooseFolder))
                 if config.outputPath != nil { add("复制完整路径",#selector(copyPath)) }
             }
             if config.destination.importsPhotos { add("选择目标相册…",#selector(chooseAlbum)) }
+            }
             menu.delegate = self
-            menu.popUp(positioning:nil,at:NSPoint(x:0,y:arrow.bounds.minY - 4),in:arrow)
+            let anchor = config.chooseDestination == nil ? arrow : primary
+            menu.popUp(positioning:nil,at:NSPoint(x:0,y:anchor.bounds.minY - 4),in:anchor)
         }
         #if UI_DIAGNOSTICS
         func menuWillOpen(_ menu: NSMenu) {
@@ -203,7 +212,8 @@ struct OutputLocationControl: NSViewRepresentable {
         }
         @objc private func selectDestination(_ item: NSMenuItem) {
             guard let value = item.representedObject as? String, let destination = OutputDestination(rawValue:value) else { return }
-            configuration?.destination = destination
+            if let choose = configuration?.chooseDestination { choose(destination) }
+            else { configuration?.destination = destination }
         }
         @objc private func chooseFolder() { configuration?.chooseFolder() }
         @objc private func chooseAlbum() { configuration?.chooseAlbum() }
@@ -217,12 +227,13 @@ struct SourceMenuButton: View {
     var title = "添加照片"
     var details = ""
     var hasSources = false
+    var allowsLibrary = true
     let addFiles: () -> Void
     let addLibrary: () -> Void
     var body: some View {
         Menu {
             Button("选择照片或文件夹…",action:addFiles)
-            Button("扫描系统照片图库…",action:addLibrary)
+            if allowsLibrary { Button("扫描系统照片图库…",action:addLibrary) }
         } label: { Label(title,systemImage:"plus") }
         .disabled(disabled).accessibilityIdentifier("import-button")
     }
@@ -262,6 +273,7 @@ struct WorkspaceActions {
     var chooseSources: () -> Void = {}
     var clearSources: () -> Void = {}
     var chooseOutput: () -> Void = {}
+    var chooseDestination: (OutputDestination) -> Void = { _ in }
     var importPhotos: () -> Void = {}
     var start: () -> Void = {}
     var openOutput: () -> Void = {}
@@ -437,13 +449,8 @@ enum PhotoQueueScope: String, CaseIterable, Identifiable {
 }
 
 // Uses the same official artwork as the Dock icon and the GitHub/website brand assets.
-/// 应用显示名：简体中文系统为“留刻”，其他语言为 MomentStays（来自 zh-Hans.lproj/InfoPlist.strings）。
-enum AppName {
-    static let display: String = {
-        let name = Bundle.main.localizedInfoDictionary?["CFBundleDisplayName"] as? String
-        return (name?.isEmpty == false ? name : nil) ?? "MomentStays"
-    }()
-}
+/// 面向用户的名称统一为留刻；bundle ID 和可执行文件名保持兼容。
+enum AppName { static let display = "留刻" }
 
 struct MomentStaysBrandIcon: View {
     @Environment(\.colorScheme) private var colorScheme

@@ -76,11 +76,7 @@ enum AndroidExport {
         var pending: [ScanRow] = [], lastUpdate = Date.distantPast
         BatchScheduling.perform(files:entries,limit:concurrency ?? BatchScheduling.limit(scanning:true),token:token,work:{ i in
             let url = entries[i], rel = relatives[i]
-            do {
-                let value = try pair(url), props = try properties(url)
-                let hasMap = (props[kCGImagePropertyMakerAppleDictionary as String] as? [String:Any])?["33"] != nil
-                return ScanRow(source:url,relative:rel,isMotion:true,hdr:hasMap ? "Apple HDR" : "原始图像",cover:String(format:"%.6f 秒",seconds(value.cover)),detail:"实况内容标识匹配；封面来自视频 timed metadata",manufacturer:"苹果",manufacturerDetail:"配对依据：Apple ContentIdentifier")
-            } catch { return ScanRow(source:url,relative:rel,isMotion:false,hdr:"—",cover:"—",detail:error.localizedDescription,manufacturer:"苹果 / 待检查") }
+            return scanFile(url,relative:rel)
         },receive:{ i,row in
             rows[i] = row; completed += 1; pending.append(row)
             if completed == entries.count || Date().timeIntervalSince(lastUpdate) >= 0.1 {
@@ -90,6 +86,13 @@ enum AndroidExport {
         })
         if !pending.isEmpty { rowsReady?(pending) }
         return rows.keys.sorted().compactMap { rows[$0] }
+    }
+    static func scanFile(_ url:URL, relative:String) -> ScanRow {
+            do {
+                let value = try pair(url), props = try properties(url)
+                let hasMap = (props[kCGImagePropertyMakerAppleDictionary as String] as? [String:Any])?["33"] != nil
+                return ScanRow(source:url,relative:relative,isMotion:true,hdr:hasMap ? "Apple HDR" : "原始图像",cover:String(format:"%.6f 秒",seconds(value.cover)),detail:"实况内容标识匹配；封面来自视频 timed metadata",manufacturer:"苹果",manufacturerDetail:"配对依据：Apple ContentIdentifier")
+            } catch { return ScanRow(source:url,relative:relative,isMotion:false,hdr:"—",cover:"—",detail:error.localizedDescription,manufacturer:"苹果 / 待检查") }
     }
     static func remux(_ source:URL, to destination:URL, token:StopToken) throws -> [String:Any] {
         let asset = AVURLAsset(url:source), videos = asset.tracks(withMediaType:.video), audios = asset.tracks(withMediaType:.audio)
@@ -262,7 +265,7 @@ extension AndroidExport {
         if let date = try source.resourceValues(forKeys:[.contentModificationDateKey]).contentModificationDate { try fm.setAttributes([.modificationDate:date],ofItemAtPath:file.path) }
         timing["source_still_image_time_seconds"] = seconds(paired.cover); timing["cover_timestamp_us"] = time; timing["cover_frame_index"] = paired.frame
         var warnings = config.container == "heic" ? ["HEIC 原始 HDR 编码已保留；目标安卓厂商对 Apple 私有 HDR 的显示兼容性需真机验证"] : ["厂商封装已通过本地解析校验；不同手机固件识别与 HDR 显示仍需真机验证"]
-        if config.vendor == "honor" { warnings.append("荣耀使用 Google 兼容动态封装，避免 LIVE_ 私有尾标触发视频旋转；保留原始视频方向与封面时间") }
+        if config.vendor == "honor" { warnings.append("荣耀格式仅作备用，新款荣耀推荐选择 Google / 通用。此兼容性针对留刻导出的文件，不代表能识别 Google 相机原片") }
         let manifest: [String:Any] = ["version":"1.2.1","implementation":"reverse-native-1.2.1","source":source.path,"source_sha256":sourceHash,
             "paired_video_source":paired.movie.path,"paired_video_sha256":videoHash,"options":options.json,"identifier":paired.identifier,
             "motion_layout":config.vendor == "honor" ? "google-compatible" : config.vendor,

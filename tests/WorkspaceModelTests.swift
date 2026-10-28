@@ -251,7 +251,7 @@ struct WorkspaceModelTests {
 
     static func main() throws {
         // Evaluate fetch predicates without requesting permission or accessing a real library.
-        for direction in ConversionDirection.allCases {
+        for direction: ConversionDirection in [.toApple,.toAndroid] {
             let scope = LibraryScope(direction: direction, version: .original, networkAllowed: false)
             let options = PhotoLibraryService.fetchOptions(scope)
             let image = PHAssetMediaType.image.rawValue, live = PHAssetMediaSubtype.photoLive.rawValue
@@ -279,6 +279,53 @@ struct WorkspaceModelTests {
         let missingRow = ScanRow(source:source,relative:"test.jpg",isMotion:true,hdr:"SDR",cover:"未记录",detail:"missing")
         var relaxed = ConversionSettings(); relaxed.missingTime = .midpoint
         check(PhotoQueueItem(missingRow).category(settings:ConversionSettings()) == .inspect && PhotoQueueItem(missingRow).category(settings:relaxed) == .ready,"cover classification follows the selected policy")
+        var transfer = ConversionSettings()
+        transfer.direction = .androidToAndroid; transfer.vendor = .samsung; transfer.container = .heic
+        transfer.exportMode = .withCandidates; transfer.missingTime = .midpoint
+        transfer.destination = .photos; transfer.normalize()
+        check(transfer.destination == .folder && transfer.destinations == [.folder,.share,.folderAndShare], "transfer cannot import into Apple library")
+        let transferOptions = transfer.options.json as NSDictionary
+        transfer.vendor = .vivo; transfer.exportMode = .auxiliaryOnly; transfer.coverSelections = [source.path:2]
+        check(transfer.options.json as NSDictionary == transferOptions, "hidden Apple/vendor/transcode options cannot alter transfer")
+        check(transfer.options.direction == "android-to-android" && transfer.options.android.vendor == "google", "transfer uses independent fixed Google path")
+        check(transfer.summary.contains("暂仅支持 Google → 荣耀"), "transfer states its precise scope")
+        let encodedTransfer = try JSONEncoder().encode(transfer)
+        let restoredTransfer = try JSONDecoder().decode(ConversionSettings.self,from:encodedTransfer)
+        check(restoredTransfer.direction == .androidToAndroid, "third direction settings restore")
+        let oldSettings = ConversionSettings()
+        let restoredOld = try JSONDecoder().decode(ConversionSettings.self,from:JSONEncoder().encode(oldSettings))
+        check(restoredOld.direction == .toApple, "old settings restore unchanged")
+        let transferService = ControlledService(), transferModel = WorkspaceModel(service:ControlledService())
+        transferModel.updateSettings { $0.direction = .androidToAndroid }
+        check(transferModel.beginLibraryImport() == nil, "transfer has no Apple library input")
+        let rapidService = ControlledService(), rapid = WorkspaceModel(service:ControlledService())
+        rapid.updateSettings { $0.direction = .toApple }
+        check(rapid.settings.destination == .ask && !rapid.outputIsChosen, "new forward task requires an explicit choice")
+        let switching = WorkspaceModel(service:rapidService)
+        switching.chooseSources([source]); switching.updateSettings { $0.direction = .toAndroid }
+        switching.updateSettings { $0.direction = .androidToAndroid }
+        check(rapidService.scans.count == 3 && rapidService.scans[0].token.isCancelled && rapidService.scans[1].token.isCancelled, "rapid switching cancels obsolete inspection requests")
+        rapidService.scans[0].completion(.success([row])); rapidService.scans[1].completion(.success([row]))
+        check(switching.phase == .projecting && switching.items.isEmpty, "stale direction callbacks cannot refill the current queue")
+        rapidService.scans[2].completion(.success([unknownRow]))
+        check(switching.settings.direction == .androidToAndroid && switching.items.first?.category(settings:switching.settings) == .inspect, "latest direction projection wins")
+        let pick = WorkspaceModel(service:ControlledService())
+        let initialSettings = pick.settings
+        pick.confirmOutput(destination:.folder,folder:nil,albumID:nil,albumTitle:nil)
+        check(pick.settings == initialSettings && !pick.outputIsChosen, "cancelled or incomplete output choice does not mutate settings")
+        pick.confirmOutput(destination:.folderAndPhotos,folder:root,albumID:nil,albumTitle:nil)
+        check(pick.settings == initialSettings, "combined output requires both choices before commit")
+        pick.confirmOutput(destination:.photos,folder:nil,albumID:"album",albumTitle:"chosen")
+        check(pick.settings.destination == .photos && pick.settings.outputConfirmed == true, "album selection commits an explicit output")
+        pick.updateSettings { $0.direction = .toAndroid }; pick.updateSettings { $0.direction = .toApple }
+        check(pick.settings.destination == .photos && pick.settings.albumID == "album", "direction switches restore each direction's chosen output")
+
+        let switched = WorkspaceModel(service:transferService)
+        switched.chooseSources([source]); transferService.scans[0].completion(.success([row]))
+        switched.updateSettings { $0.direction = .androidToAndroid }
+        check(transferService.scans.count == 2 && transferService.scans[1].direction == .androidToAndroid, "direction switch rescans with transfer gate")
+        transferService.scans[1].completion(.success([unknownRow]))
+        check(switched.items.first?.category(settings:switched.settings) == .inspect, "unsupported transfer input remains inspectable")
         let service = ControlledService(), model = WorkspaceModel(service: ControlledService())
         check(!model.canStart, "empty workspace cannot convert")
         let workspace = WorkspaceModel(service: service)
@@ -292,12 +339,16 @@ struct WorkspaceModelTests {
         check(workspace.settings.container == .jpeg, "unsupported vendors normalize to JPEG")
         workspace.chooseSources([source, source])
         check(service.scans.count == 1 && service.scans[0].sources.count == 1, "duplicate sources deduplicate before scan")
-        workspace.updateSettings { $0.direction = .toAndroid }
-        check(workspace.settings.direction == .toApple, "settings cannot mutate during scan")
+        workspace.updateSettings { $0.track = .primary }
+        check(workspace.settings.direction == .toApple, "non-direction settings stay locked during scan")
         service.scans[0].rowsReady([row])
         check(workspace.items.count == 1 && !workspace.canStart,"incremental rows do not allow an incomplete scan to convert")
         service.scans[0].completion(.success([row]))
-        check(workspace.canStart && workspace.phase == .ready, "successful scan enables conversion")
+        check(!workspace.canStart && workspace.settings.destination == .ask, "scan cannot silently choose an output location")
+        let confirmedFolder = root.appendingPathComponent("confirmed-output")
+        try FileManager.default.createDirectory(at:confirmedFolder,withIntermediateDirectories:true)
+        workspace.setOutput(confirmedFolder)
+        check(workspace.canStart && workspace.phase == .ready, "explicit output selection enables conversion")
         let originalOutput = workspace.output
         workspace.setOutput(source.deletingLastPathComponent())
         check(workspace.output == originalOutput && workspace.errorMessage != nil, "unsafe output rejected without changing destination")
@@ -330,7 +381,7 @@ struct WorkspaceModelTests {
         check(service.scans.count == 2 && service.scans[1].direction == .toAndroid, "direction change rescans with typed direction")
         service.runs[0].progress(update)
         service.scans[0].completion(.success([]))
-        check(workspace.phase == .scanning && workspace.items.isEmpty, "old job callbacks cannot overwrite newer scan")
+        check(workspace.phase == .projecting && workspace.items.isEmpty, "old job callbacks cannot overwrite newer projection")
         service.scans[1].completion(.success([row]))
         check(workspace.selection == source.path, "rescan preserves valid selection")
         let library = workspace.beginLibraryImport()!
@@ -363,7 +414,7 @@ struct WorkspaceModelTests {
         let model = WorkspaceModel()
         model.chooseSources([source])
         pump(until: { !model.isBusy })
-        check(model.canStart, "real service scans generated motion photo")
+        check(!model.canStart && model.items.first?.isMotion == true, "real service inspects motion photo without silently selecting output")
         let forward = root.appendingPathComponent("forward")
         try FileManager.default.createDirectory(at: forward, withIntermediateDirectories: true)
         model.setOutput(forward)
@@ -391,6 +442,62 @@ struct WorkspaceModelTests {
         reverse.setOutput(reverseOutput); reverse.start()
         pump(until: { !reverse.isBusy })
         check(reverse.report?.counts["converted"] == 1 && reverse.report?.url == nil, "real reverse conversion retains in-memory report without JSON")
+        let transferSource = reverseOutput.appendingPathComponent(still.lastPathComponent + ".motionphoto").appendingPathComponent(still.deletingPathExtension().lastPathComponent + ".MP.jpg")
+        let transfer = WorkspaceModel()
+        transfer.updateSettings { $0.direction = .androidToAndroid; $0.vendor = .samsung; $0.container = .heic; $0.destination = .folderAndShare }
+        transfer.chooseSources([transferSource]); pump(until:{ !transfer.isBusy })
+        check(transfer.items.first?.isMotion == true && transfer.canStart, "real transfer scan accepts standard Google JPEG")
+        let transferOutput = root.appendingPathComponent("transfer")
+        try FileManager.default.createDirectory(at:transferOutput,withIntermediateDirectories:true)
+        transfer.setOutput(transferOutput); transfer.start(); pump(until:{ !transfer.isBusy })
+        check(transfer.report?.counts["converted"] == 1, "model executes third direction without Apple pair")
+        let transferFolder = transferOutput.appendingPathComponent(transferSource.lastPathComponent + ".motionphoto")
+        let outputPhoto = transferFolder.appendingPathComponent(transferSource.deletingPathExtension().lastPathComponent + ".MP.jpg")
+        let outcome = BatchOutcome(counts:["converted":1],report:nil,reportData:["files":[["status":"converted","source":transferSource.path,"output":transferFolder.path],["status":"failed","source":source.path]]],cancelled:false)
+        let delivered = try DeliveryStore.collect(outcome,settings:transfer.settings,origins:[:])
+        check(delivered.count == 1 && delivered[0].files == [outputPhoto.path], "transfer shares only published JPEG despite hidden HEIC selection")
+        var task = DeliveryTask(settings:transfer.settings,output:transferOutput.path,results:delivered)
+        let share = try DeliveryStore(root:root.appendingPathComponent("transfer-share")).stageShare(&task)
+        check(share.count == 1 && share[0].pathExtension == "jpg", "transfer reuses complete-file sharing")
+        let cache = SourceInspectionCache()
+        func project(_ direction:ConversionDirection, token:StopToken = StopToken()) throws -> [ScanRow] {
+            try cache.rows(sources:[transferSource],direction:direction,token:token,rowsReady:{ _ in },progress:{ _,_ in })
+        }
+        let neutralRows = try project(.toApple)
+        check(neutralRows.first?.isMotion == true, "cache builds neutral source inspection")
+        let parsedCount = cache.parseCount
+        let transferRows = try project(.androidToAndroid)
+        check(transferRows.first?.isMotion == true, "missing transfer validation uses the neutral parse")
+        _ = try project(.toAndroid)
+        let pairCount = cache.pairValidationCount, transferCount = cache.transferValidationCount
+        _ = try project(.toApple); _ = try project(.toAndroid); _ = try project(.androidToAndroid)
+        check(cache.parseCount == parsedCount && cache.pairValidationCount == pairCount && cache.transferValidationCount == transferCount, "switching reuses neutral parsing and all valid direction projections")
+        let stopped = StopToken(); stopped.cancel(); let cancelledRows = try project(.toApple,token:stopped)
+        check(cancelledRows.isEmpty && cache.parseCount == parsedCount, "cancelled projection does not parse or return partial work")
+        let originalTransfer = try Data(contentsOf:transferSource)
+        try (originalTransfer + Data([0])).write(to:transferSource)
+        _ = try project(.toApple)
+        check(cache.parseCount == parsedCount + 1, "modified source invalidates neutral inspection")
+        try originalTransfer.write(to:transferSource)
+        _ = try project(.toApple)
+        check(cache.parseCount == parsedCount + 2, "restored bytes with a new version are inspected again")
+        let folderCache = SourceInspectionCache(), folder = root.appendingPathComponent("cache-folder")
+        try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        let first = folder.appendingPathComponent("one.jpg"), second = folder.appendingPathComponent("two.jpg")
+        try originalTransfer.write(to:first)
+        _ = try folderCache.rows(sources:[folder],direction:.toApple,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
+        try originalTransfer.write(to:second); try FileManager.default.removeItem(at:first)
+        let changedRows = try folderCache.rows(sources:[folder],direction:.toApple,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
+        check(changedRows.map(\.source) == [second] && folderCache.parseCount == 2, "folder changes inspect only additions and remove deleted files")
+        let enumerations = folderCache.enumerationCount
+        _ = try folderCache.rows(sources:[folder],direction:.toApple,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
+        check(folderCache.enumerationCount == enumerations && folderCache.parseCount == 2, "unchanged folders reuse their inventory without rescanning the directory tree")
+        _ = try cache.rows(sources:[still],direction:.toAndroid,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
+        let pairBefore = cache.pairValidationCount
+        let movie = still.deletingPathExtension().appendingPathExtension("mov")
+        let movieBytes = try Data(contentsOf:movie); try movieBytes.write(to:movie)
+        _ = try cache.rows(sources:[still],direction:.toAndroid,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
+        check(cache.pairValidationCount == pairBefore + 1, "paired video modifications invalidate only Apple pair validation")
         let finalHash = try NativeBatch.hashFile(source)
         check(finalHash == originalHash, "UI integration leaves original unchanged")
     }

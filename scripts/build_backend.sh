@@ -7,8 +7,9 @@ if [[ $# -gt 0 ]]; then
   echo "Usage: $0 (Intel backend library and headless test driver only)" >&2
   exit 2
 fi
-sources=(native/MotionLive.swift native/PhotoFormat.swift native/PhotoHEIF.swift native/PhotoHDR.swift native/BatchEngine.swift
-  native/CoverCandidates.swift native/HEIFMetadata.swift native/AndroidHDR.swift native/AndroidExport.swift
+source scripts/rust_bridge.sh
+sources=(native/RustCore.swift native/MotionLive.swift native/PhotoFormat.swift native/PhotoHEIF.swift native/PhotoHDR.swift native/BatchEngine.swift
+  native/CoverCandidates.swift native/HEIFMetadata.swift native/AndroidHDR.swift native/AndroidExport.swift native/AndroidTransfer.swift
   gui/ConversionSettings.swift gui/DeliveryModels.swift gui/PhotoLibraryService.swift)
 python3 - "${sources[@]}" tests/NativeDriver.swift <<'PY'
 import hashlib,json,sys
@@ -25,7 +26,7 @@ xcrun swiftc -parse-as-library -D MOTIONLIVE_LIBRARY -enable-testing -O -target 
   -emit-library -emit-module -module-name MomentStaysBackend \
   -emit-module-path "$build_dir/MomentStaysBackend.swiftmodule" \
   -Xlinker -install_name -Xlinker @rpath/libMomentStaysBackend.dylib \
-  "${sources[@]}" -o "$build_dir/libMomentStaysBackend.dylib"
+  "${sources[@]}" "${rust_bridge_flags[@]}" -o "$build_dir/libMomentStaysBackend.dylib"
 xcrun swiftc -parse-as-library -O -target x86_64-apple-macosx12.0 \
   -module-cache-path /private/tmp/motionlive-backend-swift-cache \
   -I "$build_dir" -L "$build_dir" -lMomentStaysBackend \

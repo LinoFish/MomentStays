@@ -12,20 +12,22 @@ struct ExportSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 settingsGroup("输出位置") {
-                    VStack(alignment: .leading, spacing: 6) {
+                    if model.settings.direction == .toApple {
+                        Menu("输出：" + (model.settings.outputConfirmed == true ? model.settings.destination.title : "询问位置")) {
+                            Button("相册") { actions.chooseDestination(.photos) }.disabled(model.settings.exportMode == .auxiliaryOnly)
+                            Button("文件夹") { actions.chooseDestination(.folder) }
+                            Button("相册及文件夹") { actions.chooseDestination(.folderAndPhotos) }.disabled(model.settings.exportMode == .auxiliaryOnly)
+                        }.accessibilityIdentifier("output-destination")
+                    } else {
                         Picker("输出方式", selection: binding(\.destination)) {
-                            ForEach(model.settings.destinations, id: \.self) { Text($0.title).tag($0) }
-                        }
-                        .accessibilityIdentifier("output-destination")
+                            ForEach(model.settings.destinations,id:\.self) { Text($0.title).tag($0) }
+                        }.accessibilityIdentifier("output-destination")
                     }
-                    if !model.settings.destination.usesCache {
-                        HStack(spacing: 8) {
-                            Text("文件夹：" + (model.output?.lastPathComponent ?? "添加照片后自动建议"))
-                                .lineLimit(1).truncationMode(.middle)
-                                .help(model.output?.path ?? "请选择原片文件夹之外的输出位置")
-                            Spacer(minLength: 0)
-                            Button("选择文件夹…", action: actions.chooseOutput)
-                                .accessibilityIdentifier("choose-output-folder")
+                    if model.settings.destination != .ask && !model.settings.destination.usesCache && (model.settings.direction != .toApple || model.settings.outputConfirmed == true) {
+                        HStack(spacing:8) {
+                            Text("文件夹：" + (model.output?.lastPathComponent ?? "尚未选择")).lineLimit(1).truncationMode(.middle)
+                            Spacer(minLength:0)
+                            Button("选择文件夹…",action:actions.chooseOutput).accessibilityIdentifier("choose-output-folder")
                         }
                     }
                     if model.settings.destination.importsPhotos {
@@ -35,13 +37,19 @@ struct ExportSettingsView: View {
                     }
                 }
                 Divider()
-                if model.settings.direction == .toApple { appleOptions } else { androidOptions }
+                if model.settings.direction == .toApple { appleOptions } else if model.settings.direction == .toAndroid { androidOptions } else {
+                    settingsGroup("Google → 荣耀") {
+                        Text("暂仅支持 Google → 荣耀")
+                        note("仅接收可安全验证的 Google Motion Photo JPEG；保留完整原视频、源封面及真实拍摄设备信息。无法无损保留的结构会报告错误。")
+                    }
+                }
                 Divider()
                 settingsGroup("校验与报告") {
                     Toggle("导出清单与 JSON 报告", isOn: binding(\.exportDataFiles))
                     note("用于校验和续转。关闭后仍可查看本次报告。")
                 }
                 Divider()
+                if model.settings.direction != .androidToAndroid {
                 DisclosureGroup(isExpanded: $model.advancedExpanded) {
                     VStack(alignment: .leading, spacing: 14) {
                         if model.settings.direction == .toApple {
@@ -56,6 +64,7 @@ struct ExportSettingsView: View {
                         note("自动检查封面位置，无法确定时报告错误。仅在熟悉原片时间轴时修改。")
                     }.padding(.top, 10)
                 } label: { Text("高级设置").font(.headline) }
+                }
             }
             .font(.body)
             .padding(16)
@@ -110,6 +119,10 @@ struct ExportSettingsView: View {
         VStack(alignment: .leading, spacing: 20) {
             settingsGroup("目标格式") {
                 choice("目标厂商", selection: binding(\.vendor))
+                if model.settings.vendor == .google || model.settings.vendor == .honor {
+                    note("新款荣耀推荐选择 Google / 通用；荣耀格式仅作备用。")
+                    note("新款荣耀已验证可识别留刻导出的 Google 格式，不代表能识别 Google 相机拍摄的原片。")
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("照片格式").foregroundColor(.secondary)
                     Picker("照片格式", selection: binding(\.container)) {

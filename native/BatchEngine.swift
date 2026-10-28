@@ -17,6 +17,7 @@ struct ConversionOptions {
     var coverSelections: [String:Int] = [:]
     var candidateDelivery = "static"
     var json: [String:Any] {
+        if direction == "android-to-android" { return ["direction":direction,"target":"honor","layout":AndroidTransfer.revision,"vendor":"google","container":"jpeg","export_data_files":exportDataFiles] }
         if direction == "to-android" { return ["direction":direction,"android":android.json,"time_domain":timeDomain,"export_data_files":exportDataFiles] }
         var result: [String:Any] = ["legacy_hdr": legacyHDR ? "auto" : "preserve", "missing_time": missingTime, "time_domain": timeDomain,
             "video_track":videoTrack,"output_mode":outputMode,"repair_auxiliary_duration":outputMode != "livephoto" && repairAuxiliaryDuration,"export_data_files":exportDataFiles]
@@ -69,6 +70,11 @@ struct SourceVersion: Equatable {
     static func read(_ url: URL) -> SourceVersion? {
         var value = stat()
         guard lstat(url.path, &value) == 0, (value.st_mode & S_IFMT) == S_IFREG else { return nil }
+        return SourceVersion(device:value.st_dev,inode:value.st_ino,size:value.st_size,modified:value.st_mtimespec,changed:value.st_ctimespec)
+    }
+    static func readDirectory(_ url:URL) -> SourceVersion? {
+        var value = stat()
+        guard lstat(url.path,&value) == 0, (value.st_mode & S_IFMT) == S_IFDIR else { return nil }
         return SourceVersion(device:value.st_dev,inode:value.st_ino,size:value.st_size,modified:value.st_mtimespec,changed:value.st_ctimespec)
     }
     static func == (a: Self, b: Self) -> Bool {
@@ -201,7 +207,7 @@ enum NativeBatch {
         var rows = [Int:ScanRow](), completed = 0
         var pending: [ScanRow] = [], lastUpdate = Date.distantPast
         BatchScheduling.perform(files:entries,limit:concurrency ?? BatchScheduling.limit(scanning:true),token:token,
-            work: { index in scanFile(entries[index],relative:relatives[index]) }, receive: { index,row in
+            work: { index in direction == "android-to-android" ? AndroidTransfer.scanFile(entries[index],relative:relatives[index]) : scanFile(entries[index],relative:relatives[index]) }, receive: { index,row in
                 rows[index] = row; completed += 1; pending.append(row)
                 if completed == entries.count || Date().timeIntervalSince(lastUpdate) >= 0.1 {
                     rowsReady?(pending); pending.removeAll(keepingCapacity:true); lastUpdate = Date()
@@ -211,13 +217,13 @@ enum NativeBatch {
         if !pending.isEmpty { rowsReady?(pending) }
         return rows.keys.sorted().compactMap { rows[$0] }
     }
-    static func scanFile(_ file: URL, relative: String) -> ScanRow {
+    static func scanFile(_ file: URL, relative: String, bytes: [UInt8]? = nil, parsed: Result<NativeMotionPhoto,Error>? = nil) -> ScanRow {
         let before = SourceVersion.read(file)
         var data: [UInt8] = []
         var row: ScanRow
         do {
-            data = Array(try Data(contentsOf:file))
-            let photo = try PhotoFormat.parse(data)
+            data = try bytes ?? Array(Data(contentsOf:file))
+            let photo = try parsed?.get() ?? PhotoFormat.parse(data)
             let maker = PhotoVendor.identify(photo.still,format:photo.format)
             let hdr: String
             if PhotoHEIF.matches(photo.still) { hdr = "HEIC（原样保留）" }
@@ -610,7 +616,7 @@ enum NativeBatch {
             BatchScheduling.perform(files: entries, limit: BatchScheduling.limit(scanning: true), token: token,
                 work: { index in
                     if let cached = snapshot[entries[index]], cached.version != nil, cached.version == SourceVersion.read(entries[index]) { return cached }
-                    return autoreleasepool { scanFile(entries[index], relative: relatives[index]) }
+                    return autoreleasepool { options.direction == "android-to-android" ? AndroidTransfer.scanFile(entries[index],relative:relatives[index]) : scanFile(entries[index], relative: relatives[index]) }
                 }, receive: { index, row in
                     if row.confirmedStatic { staticIndices.insert(index) }
                 })
@@ -625,7 +631,7 @@ enum NativeBatch {
             progress(BatchProgress(index:0,total:total,relative:relatives[index],status:"static",detail:"静态照片，已跳过"))
         }
         let active = entries.indices.filter { !staticIndices.contains($0) }
-        let targets = active.map { destination.appendingPathComponent(relatives[$0] + (options.direction == "to-android" ? ".motionphoto" : options.outputMode == "auxiliary-only" ? ".auxiliary-export" : ".livephoto")) }
+        let targets = active.map { destination.appendingPathComponent(relatives[$0] + (options.direction != "to-apple" ? ".motionphoto" : options.outputMode == "auxiliary-only" ? ".auxiliary-export" : ".livephoto")) }
         // Reserve targets before dispatch, including case-insensitive volumes.
         guard Set(targets.map { $0.path.precomposedStringWithCanonicalMapping.lowercased() }).count == targets.count else {
             throw Failure("多个来源映射到同一输出路径，请分批转换")
@@ -657,7 +663,11 @@ enum NativeBatch {
                 var result: [String:Any]
                 let timings = BatchTimings()
                 do {
+                    if options.direction == "android-to-android" {
+                        result = try AndroidTransfer.convert(source:file,target:target,options:options,token:token,overwrite:overwrite,timings:timings)
+                    } else {
                     result = try options.direction == "to-android" ? AndroidExport.convert(source:file,target:target,options:options,token:token,overwrite:overwrite,timings:timings) : convert(source:file,target:target,options:options,token:token,overwrite:overwrite,timings:timings)
+                    }
                 } catch {
                     result = ["status":"failed","source":file.path,"error":error.localizedDescription,"detail":error.localizedDescription]
                 }

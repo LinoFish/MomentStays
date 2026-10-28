@@ -11,7 +11,7 @@ sys.path.insert(0,str(ROOT))
 from scripts.check_cover_candidates import call, dual
 from tests.test_formats import motion
 
-APP = ROOT / '.build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays'
+APP = ROOT / '.build/gui/preview/留刻.app/Contents/MacOS/MomentStays'
 OUTPUT = ROOT / '.build/gui/cover-ui'
 OUTPUT.mkdir(parents=True,exist_ok=True)
 

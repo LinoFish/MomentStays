@@ -20,6 +20,7 @@ final class UISnapshotSupport {
     func prepare() {
         if let appearance = argument("--ui-appearance") { NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua) }
         if argument("--direction") == "to-android" { model.updateSettings { $0.direction = .toAndroid } }
+        if argument("--direction") == "android-to-android" { model.updateSettings { $0.direction = .androidToAndroid } }
         guard argument("--ui-snapshot") != nil else { return }
         model.loadPreview(count: Int(argument("--ui-fixtures") ?? "24") ?? 24,
             progressPreview: CommandLine.arguments.contains("--ui-progress-preview"))
@@ -38,7 +39,7 @@ final class UISnapshotSupport {
         if let destination = argument("--ui-destination"), let value = OutputDestination(rawValue: destination) {
             model.updateSettings { $0.destination = value }
             model.deliverySummary = "转换结果已保留，可在最近结果中重试交付"
-            model.recentTasksAvailable = true; model.shareReady = model.settings.direction == .toAndroid
+            model.recentTasksAvailable = true; model.shareReady = model.settings.direction.exportsAndroid
             model.libraryMonitoring = true; model.librarySummary = "监测所选相册（运行期间）"
         }
         if CommandLine.arguments.contains("--ui-preview") || CommandLine.arguments.contains("--ui-hover-preview") || argument("--ui-cover-index") != nil { model.previewVisible = true }
@@ -116,6 +117,8 @@ final class UISnapshotSupport {
         }
     }
     private func metrics() -> [String: Any] {
+        let fileMenu = NSApp.mainMenu?.items.compactMap { $0.submenu }.first(where: { $0.title == "文件" })
+        if let menu = fileMenu { menu.delegate?.menuNeedsUpdate?(menu) }
         let bounds = window.contentView?.bounds ?? .zero
         let visible = CGRect(origin: .zero, size: bounds.size).insetBy(dx:-0.5,dy:-0.5)
         let queue = frames["queue-list"] ?? .zero
@@ -134,6 +137,7 @@ final class UISnapshotSupport {
             }
         }
         return ["source_button_title": sourceButton?.title ?? "", "source_button_enabled":sourceButton?.isEnabled ?? false,
+            "file_menu_titles":fileMenu?.items.filter { !$0.isHidden }.map(\.title) ?? [],
             "output_destination":model.settings.destination.rawValue,
             "output_menu_titles":OutputMenuDiagnostics.titles,"output_menu_selected":OutputMenuDiagnostics.selected,
             "output_path":model.output?.path ?? "", "clear_enabled":!model.sources.isEmpty && !model.isBusy && !model.sharing, "source_button_color": sourceColor, "system_accent_color": systemAccentColor,

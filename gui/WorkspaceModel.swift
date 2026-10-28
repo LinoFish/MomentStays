@@ -2,8 +2,8 @@ import Foundation
 import Combine
 
 enum TaskPhase: String {
-    case idle, library, scanning, ready, converting, awaitingDecision, delivering, stopping, completed, stopped, failed
-    var isBusy: Bool { [.library, .scanning, .converting, .awaitingDecision, .delivering, .stopping].contains(self) }
+    case idle, library, scanning, projecting, ready, converting, awaitingDecision, delivering, stopping, completed, stopped, failed
+    var isBusy: Bool { [.library, .scanning, .projecting, .converting, .awaitingDecision, .delivering, .stopping].contains(self) }
 }
 
 enum PhotoState: String, CaseIterable {
@@ -134,10 +134,17 @@ final class WorkspaceModel: ObservableObject {
     private var scanComplete = false
     private var rowIndices: [String: Int] = [:]
     private var sourceOrigins: [String: LibraryOrigin] = [:]
+    private struct OutputChoice {
+        let destination: OutputDestination; let confirmed: Bool?; let folder: URL?
+        let albumID: String?; let albumTitle: String
+    }
+    private var outputChoices: [ConversionDirection:OutputChoice] = [:]
 
     init(service: ConversionServing = ConversionService()) { self.service = service }
     var isBusy: Bool { phase.isBusy }
-    var canStart: Bool { !isBusy && !sharing && scanComplete && output != nil && items.contains { $0.isMotion } }
+    var outputIsChosen: Bool { settings.destination != .ask && (settings.direction != .toApple || settings.outputConfirmed == true) && (settings.destination.usesCache || output != nil) }
+    var canStart: Bool { !isBusy && !sharing && scanComplete && outputIsChosen && items.contains { $0.isMotion } }
+    var canSwitchDirection: Bool { !sharing && (!isBusy || phase == .scanning || phase == .projecting) }
     var canRescan: Bool { !isBusy && !sharing && !sources.isEmpty && !isPreview }
     var outputToOpen: URL? { settings.destination.usesCache ? recentOutput : output }
     var canOpenOutput: Bool {
@@ -162,17 +169,31 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func updateSettings(_ change: (inout ConversionSettings) -> Void) {
-        guard !isBusy, !sharing else { return }
+        guard canSwitchDirection else { return }
         notice = nil
-        var next = settings; change(&next); next.normalize()
+        var next = settings; change(&next)
         let directionChanged = next.direction != settings.direction
+        guard !isBusy || directionChanged else { return }
+        if directionChanged {
+            outputChoices[settings.direction] = OutputChoice(destination:settings.destination,confirmed:settings.outputConfirmed,folder:output,albumID:settings.albumID,albumTitle:settings.albumTitle)
+            if let saved = outputChoices[next.direction] {
+                next.destination = saved.destination; next.outputConfirmed = saved.confirmed
+                next.albumID = saved.albumID; next.albumTitle = saved.albumTitle; output = saved.folder
+            } else {
+                next.destination = next.direction == .toApple ? .ask : .folder
+                next.outputConfirmed = false
+            }
+        }
+        next.normalize()
         let changed = next.options.json as NSDictionary != settings.options.json as NSDictionary || next.coverSelections != settings.coverSelections
         settings = next
         if changed {
             report = nil
             for index in items.indices { items[index].resultState = nil; items[index].resultDetail = nil }
         }
-        if directionChanged && !sources.isEmpty && !isPreview { rescan() }
+        if directionChanged && !sources.isEmpty && !isPreview {
+            token.cancel(); refresh(projection:true,preservingResults:false)
+        }
     }
 
     func chooseSources(_ urls: [URL], label: String? = nil, defaultOutput: URL? = nil) {
@@ -181,7 +202,7 @@ final class WorkspaceModel: ObservableObject {
         guard !sources.isEmpty else { return }
         sourceLabel = label ?? (sources.count == 1 ? sources[0].lastPathComponent : "\(sources.count) 个文件／文件夹")
         let base = NativeBatch.root(NativeBatch.normalized(first))
-        output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction == .toAndroid ? " Motion Photos" : " Live Photos"))
+        output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction.exportsAndroid ? " Motion Photos" : " Live Photos"))
         items = []; selection = nil; report = nil; sourceOrigins = [:]
         settings.coverSelections = nil
         rescan()
@@ -210,7 +231,7 @@ final class WorkspaceModel: ObservableObject {
         sourceLabel = wasEmpty ? (label ?? (merged.count == 1 ? merged[0].lastPathComponent : "\(merged.count) 个文件／文件夹")) : "多处来源 · \(merged.count) 项"
         if output == nil, let first = merged.first {
             let base = NativeBatch.root(first)
-            output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction == .toAndroid ? " Motion Photos" : " Live Photos"))
+            output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction.exportsAndroid ? " Motion Photos" : " Live Photos"))
         }
         shareReady = false; deliverySummary = ""
         rescan(preservingResults:true)
@@ -218,7 +239,7 @@ final class WorkspaceModel: ObservableObject {
 
     func clearSources() {
         guard !isBusy, !sharing else { return }
-        operation = UUID(); token.cancel()
+        operation = UUID(); token.cancel(); service.clearInspections()
         sources = []; items = []; selection = nil; rowIndices = [:]; sourceOrigins = [:]; scanComplete = false
         sourceLabel = "尚未选择原片"; settings.coverSelections = nil
         phase = .idle; status = "选择照片或文件夹，开始转换"
@@ -239,7 +260,30 @@ final class WorkspaceModel: ObservableObject {
                 for index in items.indices { items[index].resultState = nil; items[index].resultDetail = nil }
             }
             output = destination; notice = nil
+            if settings.direction == .toApple {
+                if settings.destination == .ask { settings.destination = .folder }
+                settings.outputConfirmed = true
+            }
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    func confirmOutput(destination: OutputDestination, folder: URL?, albumID: String?, albumTitle: String?) {
+        guard !isBusy, !sharing, settings.direction == .toApple,
+              [.folder,.photos,.folderAndPhotos].contains(destination),
+              settings.exportMode != .auxiliaryOnly || destination == .folder else { return }
+        if destination != .photos {
+            guard let folder = folder else { return }
+            do {
+                try NativeBatch.validateOutput(sources:sources,output:folder)
+                guard try folder.resourceValues(forKeys:[.isDirectoryKey]).isDirectory == true else { throw Failure("请选择一个输出文件夹") }
+            } catch { errorMessage = error.localizedDescription; return }
+        }
+        if destination.importsPhotos, albumTitle?.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty != false { return }
+        updateSettings {
+            $0.destination = destination; $0.outputConfirmed = true
+            if let albumTitle = albumTitle { $0.albumTitle = albumTitle; $0.albumID = albumID }
+        }
+        if let folder = folder { output = NativeBatch.normalized(folder) }
     }
 
     @discardableResult private func begin(_ phase: TaskPhase, message: String) -> UUID {
@@ -250,23 +294,28 @@ final class WorkspaceModel: ObservableObject {
 
     func rescan(preservingResults: Bool = false) {
         guard canRescan else { return }
+        refresh(projection:false,preservingResults:preservingResults)
+    }
+    private func refresh(projection:Bool, preservingResults:Bool) {
         let retained = preservingResults ? Dictionary(items.map { ($0.id,$0) },uniquingKeysWith:{ first,_ in first }) : [:]
         func queueItem(_ row: ScanRow) -> PhotoQueueItem {
             var item = PhotoQueueItem(row)
-            if let old = retained[item.id], old.relative == item.relative { item.resultState = old.resultState; item.resultDetail = old.resultDetail }
+            if let old = retained[item.id], old.relative == item.relative, old.row.version != nil, old.row.version == row.version { item.resultState = old.resultState; item.resultDetail = old.resultDetail }
             return item
         }
-        let id = begin(.scanning, message: "正在扫描照片…"), currentToken = token
+        let phase: TaskPhase = projection ? .projecting : .scanning
+        let id = begin(phase, message: projection ? "正在切换转换方向…" : "正在检查照片…"), currentToken = token
         report = nil; scanComplete = false; items = []; rowIndices = [:]
-        service.scan(sources: sources, direction: settings.direction, token: currentToken, rowsReady: { [weak self] rows in
-            guard let self = self, self.operation == id, self.phase == .scanning else { return }
+        let inspect = projection ? service.project : service.scan
+        inspect(sources,settings.direction,currentToken, { [weak self] rows in
+            guard let self = self, self.operation == id, self.phase == phase else { return }
             self.items.append(contentsOf:rows.map(queueItem))
             self.items.sort { $0.relative.localizedStandardCompare($1.relative) == .orderedAscending }
-        }, progress: { [weak self] index, total in
-            guard let self = self, self.operation == id, self.phase == .scanning else { return }
-            self.status = "正在扫描 \(index) / \(total)"
+        }, { [weak self] index, total in
+            guard let self = self, self.operation == id, self.phase == phase else { return }
+            self.status = projection ? "正在检查来源变化 \(index) / \(total)" : "正在检查 \(index) / \(total)"
             self.progress = total > 0 ? Double(index) / Double(total) : nil
-        }, completion: { [weak self] result in
+        }, { [weak self] result in
             guard let self = self, self.operation == id else { return }
             switch result {
             case .success(let rows):
@@ -334,7 +383,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func beginLibraryImport() -> UUID? {
-        guard !isBusy, !sharing, !isPreview else { return nil }
+        guard settings.direction != .androidToAndroid, !isBusy, !sharing, !isPreview else { return nil }
         return begin(.library, message: "正在选择图库资源…")
     }
 
@@ -388,7 +437,7 @@ final class WorkspaceModel: ObservableObject {
         }
         sources = count == 0 ? [] : [URL(fileURLWithPath: "/示例照片")]
         sourceLabel = count == 0 ? "尚未选择原片" : "示例照片 · \(count) 张"
-        output = count == 0 ? nil : URL(fileURLWithPath: "/转换结果/Live Photos")
+        output = count == 0 ? nil : URL(fileURLWithPath: settings.direction.exportsAndroid ? "/转换结果/Motion Photos" : "/转换结果/Live Photos")
         phase = progressPreview ? .converting : count == 0 ? .idle : .ready
         status = progressPreview ? "已处理 12 / 32" : count == 0 ? "选择照片或文件夹，开始转换" : "已就绪 · \(count) 张可转换"
         progress = progressPreview ? 0.375 : nil

@@ -30,6 +30,6 @@ with DSStore.open(str(volume / ".DS_Store"), "w+") as store:
         "ShowPathbar":False, "ShowTabView":False, "PreviewPaneVisibility":False,
     }
     store["."]["icvp"] = settings
-    for name, point in {"MomentStays.app":(180,155),"Applications":(540,155)}.items():
+    for name, point in {"留刻.app":(180,155),"Applications":(540,155)}.items():
         store[name]["Iloc"] = point
 print("Configured Finder window, background and two installer icons")

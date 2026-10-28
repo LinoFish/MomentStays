@@ -1,6 +1,6 @@
 # MomentStays User Guide
 
-> Applies to MomentStays 1.4.0 (macOS 12 or later).
+> Applies to 留刻 1.5.0 (macOS 12 or later).
 > 中文版见 [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md).
 
 > High-resolution cover selection and candidate-photo export are included from version 1.2.0. Earlier installers do not include these options.
@@ -36,10 +36,10 @@ All conversion and verification happen locally on your Mac. Nothing is uploaded.
 
 ## 1. Quick start
 
-Open the DMG and drag MomentStays into Applications, then launch it from Applications. The installer shows only the application and Applications link, with an arrow indicating the drag direction. Open the guide from the app's help button; license files are inside the app bundle.
+Open the DMG and drag 留刻 into Applications, then launch it from Applications. The installer shows only the application and Applications link, with an arrow indicating the drag direction. Open the guide from the app's help button; license files are inside the app bundle.
 
-1. Open MomentStays and click **Add Photos**, drag files into the queue, or pick **Scan Photos Library…** from the source menu.
-2. Confirm the direction: **Android → Apple Live Photo** (default) or **Apple Live Photo → Android**.
+1. Open 留刻 and click **Add Photos**, drag files into the queue, or pick **Scan Photos Library…** from the source menu.
+2. Confirm the direction: **Android → Apple Live Photo** (default), **Apple Live Photo → Android**, or **Android → Android** (Google → Honor only).
 3. Use **Save to** and **More Options…** in the top toolbar to check the destination (folder / Photos library / sharing), target format, and HDR options.
 4. Click **Start** (⌘Return). Settings are snapshotted when a task starts and locked while it runs.
 5. Review per-photo results in the report. **Recent Results…** lets you retry delivery, reveal files, or open the output folder.
@@ -49,6 +49,8 @@ Each photo produces one result folder (see §9 for naming), not loose files.
 **First launch:** the distributed app is ad-hoc signed and not notarized. If macOS blocks the first launch, allow it under System Settings → Privacy & Security, or Control-click the app in Finder and choose Open. Once installed, the app needs no Python, FFmpeg, ExifTool, or Homebrew.
 
 ## 2. Interface and importing
+
+For Android → Apple, **Ask for location** opens a choice of Photos album, folder, or both. Confirm the complete selection before starting; cancelling leaves the prior choice unchanged. Direction changes reuse valid source inspections and check only new or changed files and missing information.
 
 ### 2.1 The queue
 
@@ -110,8 +112,14 @@ Stills and MOVs are matched by Apple ContentIdentifier, and the `still-image-tim
 
 | Target | Vendors |
 |---|---|
-| JPEG | Google/generic, Xiaomi, Samsung (writes an SEF trailer), Huawei, Honor, OPPO, vivo V2 |
+| JPEG | Google/generic (recommended for newer Honor), Xiaomi, Samsung (writes an SEF trailer), Huawei, Honor (fallback), OPPO, vivo V2 |
 | HEIC | Samsung only; existing image, thumbnail, and gain-map encodings and properties are retained. JPEG is never re-encoded into HEIC for this. Google and Xiaomi Motion Photos do not use HEIC — choose JPEG for those targets |
+
+For newer Honor phones, choose **Google/generic** first; **Honor (fallback)** remains an alternative. Verified compatibility applies to MomentStays exports and does not imply support for originals shot with Google Camera.
+
+### Android → Android: Google → Honor
+
+**Currently Google → Honor only.** This separate input path accepts safely validated Google Motion Photo JPEG (legacy or modern XMP), preserves the complete original video, source cover, EXIF and supported gain maps, and writes Google A-modern packaging. HEIC, other vendor layouts, missing/conflicting cover times and structures that cannot be preserved are rejected. Save to a folder, use the system share menu, or both; Apple pairing and transcoding options do not apply. The established A samples play in both Honor Gallery and Google Photos; other devices remain extension validation.
 
 ## 4. How the cover frame is located
 
@@ -316,7 +324,7 @@ Open the settings sheet with **More Options…** in the top toolbar. Items marke
 | Content (→Apple) | Export mode | Live Photo only (default) / + auxiliary track / auxiliary only |
 | Content (→Apple) | Video track | Primary motion track (default) / Auxiliary track |
 | HDR (→Apple) | Try compatible conversion for non-Ultra HDR | On by default |
-| Target (→Android) | Target vendor | Google/generic (default), Xiaomi, Samsung, Huawei, Honor, OPPO, vivo V2 |
+| Target (→Android) | Target vendor | Google/generic (default; recommended for newer Honor), Xiaomi, Samsung, Huawei, Honor (fallback), OPPO, vivo V2 |
 | Target (→Android) | Photo format | JPEG · Ultra HDR / HEIC · keep original encoding (HEIC for Samsung only; all other vendors force JPEG) |
 | Image quality (→Android) | Keep original JPEG encoding | On by default (no recompression) |
 | Image quality (→Android) | Main image quality / gain map quality | Sliders 1%–100%, both default 95% |
@@ -372,7 +380,7 @@ The legacy Python CLI has been removed; use the app for scanning, conversion and
 
 - **Platform:** macOS 12+ only. Validation is primarily on Intel / macOS 12; Apple Silicon validation is in progress. No iOS release.
 - **Signing:** ad-hoc signature, no Developer ID, no notarization (see the first-launch note in §1).
-- **Builds:** source builds default to Intel; `--arm64` / `--universal` must be requested explicitly.
+- **Builds:** source builds default to Universal; `--arm64` builds only for Apple Silicon.
 - **Vendor formats:** only parser-validated layouts; not every device, firmware, or edited image is covered. Motion Photos stripped by editors/sharing may have lost their video irrecoverably.
 - **Real-library behavior:** real-world playback after import, re-export, HDR display, permission revocation, and similar system behaviors are under ongoing real-environment validation; automated regression uses synthetic fixtures and does not equal every real device.
 - **Monitoring scope:** library monitoring runs only while the app is open and only for the chosen scope; no background daemon.

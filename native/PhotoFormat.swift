@@ -638,11 +638,32 @@ enum VendorMotion {
             let last = String(decoding:tail[40..<60],as:UTF8.self).trimmingCharacters(in:.whitespacesAndNewlines)
             if last.hasPrefix("LIVE_") {
                 let first = String(decoding:tail[..<20],as:UTF8.self).trimmingCharacters(in:.whitespacesAndNewlines)
-                guard let regex = first.range(of:"^v[1-6]_f[0-9]+$",options:.regularExpression), regex == first.startIndex..<first.endIndex,
-                      let split = first.range(of:"_f"), let frame = Int(first[split.upperBound...]),
+                // Huawei v3 samples also use v3_f31_c; the frame index remains
+                // the decimal field before the optional, exact `_c` suffix.
+                let frameField = first.hasSuffix("_c") ? String(first.dropLast(2)) : first
+                guard let regex = frameField.range(of:"^v[1-6]_f[0-9]+$",options:.regularExpression), regex == frameField.startIndex..<frameField.endIndex,
+                      let split = frameField.range(of:"_f"), let frame = Int(frameField[split.upperBound...]),
                       let length = Int(last.dropFirst(5)), length >= 36, length <= data.count - 40 else { throw Failure("华为/荣耀 LIVE_ 尾标无效") }
-                let end = data.count - 60, start = end - (length - 20)
+                var end = data.count - 60
+                let start = end - (length - 20)
                 guard start >= imageEnd, start < end else { throw Failure("华为/荣耀视频范围与静态图片重叠") }
+                if first.hasSuffix("_c") {
+                    // v3 `_c` carries six length-prefixed private records and
+                    // their total byte count (including that final UInt32).
+                    let bytes = try Binary.int(data,end - 4,4)
+                    guard bytes >= 4, bytes <= end - start else { throw Failure("华为/荣耀私有数据长度无效") }
+                    let privateStart = end - bytes
+                    var at = privateStart
+                    for type in [5,1,0x0306,2,3,4] {
+                        guard at <= end - 12 else { throw Failure("华为/荣耀私有数据记录无效") }
+                        let size = try Binary.int(data,at,4)
+                        guard size >= 8, size <= end - 4 - at,
+                              try Binary.int(data,at + 4,4,little:true) == type else { throw Failure("华为/荣耀私有数据记录无效") }
+                        at += size
+                    }
+                    guard at == end - 4 else { throw Failure("华为/荣耀私有数据记录无效") }
+                    end = privateStart
+                }
                 return Location(start:start,end:end,frame:frame,format:"huawei-honor")
             }
         }
@@ -681,14 +702,23 @@ enum VendorMotion {
 
 enum PhotoFormat {
     static func codingHash(_ data: [UInt8]) throws -> String {
+#if MOTIONLIVE_SWIFT_REFERENCE
         try PhotoHEIF.matches(data) ? PhotoHEIF.codingHash(data) : MLJPEG.codingHash(data)
+#else
+        return try RustCore.codingHash(data)
+#endif
     }
     static func auxiliaryHashes(_ data: [UInt8]) throws -> [String] {
+#if MOTIONLIVE_SWIFT_REFERENCE
         if PhotoHEIF.matches(data) { return [] } // All HEIF image items are covered by codingHash.
         return try MLJPEG.auxiliary(data).dropFirst().map { sha(Data($0)) }
+#else
+        return try RustCore.auxiliaryHashes(data)
+#endif
     }
     static let notMotion = "不是受支持的动态照片"
     static func parse(_ data: [UInt8]) throws -> NativeMotionPhoto {
+#if MOTIONLIVE_SWIFT_REFERENCE
         if PhotoHEIF.matches(data) { return try PhotoHEIF.parse(data) }
         let packets = try MLXMP.packets(data)
         let motion = try MLXMP.integer(packets, "MotionPhoto")
@@ -771,6 +801,9 @@ enum PhotoFormat {
         let isVivo = packets.contains { !MLXMP.values($0.document,VendorMotion.vivo,"VMotionPhotoVersion").isEmpty }
         return NativeMotionPhoto(still: still, video: video, timestamp: time, timestampTag: vendor?.frame == nil ? (time == nil ? nil : tag) : "Huawei:frame-index", ultra: ultra,
             coverFrame:vendor?.frame,format:vendor?.format ?? (oppoLength != nil ? "oppo" : isVivo ? "vivo-v2" : "google-compatible"))
+#else
+        return try RustCore.parse(data)
+#endif
     }
     // Some GCam files carry one real compressed auxiliary sample but zero stts,
     // mdhd and tkhd duration. An explicit opt-in repairs only those fixed-size

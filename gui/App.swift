@@ -7,7 +7,7 @@ final class WorkspaceWindow: NSWindow {
 }
 
 // macOS host: shared UI and task state live in SwiftUI/model files.
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation, NSMenuDelegate {
     let model = WorkspaceModel()
     private(set) var window: NSWindow!
     private lazy var platform = MacPlatformServices(model: model)
@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if startupArgument("--direction") == "to-android" { model.updateSettings { $0.direction = .toAndroid } }
+        if startupArgument("--direction") == "android-to-android" { model.updateSettings { $0.direction = .androidToAndroid } }
         buildMenu()
         AppIconAppearance.shared.start()
         window = WorkspaceWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 700),
@@ -74,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         app.addItem(.separator())
         app.addItem(withTitle: "退出 \(AppName.display)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let file = section("文件")
+        file.delegate = self
         command(file, "选择照片或文件夹…", #selector(chooseSources), "o")
         command(file, "扫描系统照片图库…", #selector(importPhotos))
         command(file, "更改输出位置…", #selector(chooseOutput))
@@ -105,12 +107,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NSApp.mainMenu = menu
     }
 
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        for item in menu.items where item.action == #selector(importPhotos) || item.action == #selector(stopMonitoring) {
+            item.isHidden = model.settings.direction == .androidToAndroid
+        }
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(start): return model.canStart && !model.sharing && window?.attachedSheet == nil
         case #selector(stop): return model.canStop
         case #selector(rescan): return model.canRescan
-        case #selector(chooseSources), #selector(importPhotos): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
+        case #selector(importPhotos): return model.settings.direction != .androidToAndroid && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
+        case #selector(chooseSources): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
         case #selector(chooseOutput): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
         case #selector(shareResults): return model.shareReady && !model.isBusy && !model.sharing
         case #selector(recentResults): return !model.isBusy && !model.sharing
@@ -140,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func about() {
         guard window.attachedSheet == nil else { return }
         let alert = NSAlert(); alert.messageText = AppName.display
-        alert.informativeText = (AppName.display == "MomentStays" ? "" : "MomentStays\n") + "Android 动态照片 ↔ Apple Live Photo\n\n原生 SwiftUI 界面，适用于 macOS 12 或更新版本。\n转换在本机完成，原片只读。\n图库中的 iCloud 原件可能需要下载。"
+        alert.informativeText = "Android 动态照片 ↔ Apple Live Photo\n\n原生 SwiftUI 界面，适用于 macOS 12 或更新版本。\n转换在本机完成，原片只读。\n图库中的 iCloud 原件可能需要下载。"
         alert.addButton(withTitle: "好"); alert.beginSheetModal(for: window)
     }
 

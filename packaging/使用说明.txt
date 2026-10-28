@@ -1,11 +1,11 @@
-留刻（MomentStays）1.4.0 — Android 动态照片 ↔ Apple Live Photo
+留刻1.5.0 — Android 动态照片 ↔ Apple Live Photo
 
 系统要求
 macOS 12 Monterey 或更新系统。GitHub 发布的通用版同时支持 Intel 与 Apple Silicon。
 使用应用无需 Python、Swift、Xcode、FFmpeg 或其他额外环境。
 
 开始
-先把 DMG 中的 MomentStays（留刻）拖入 Applications，然后从「应用程序」打开。
+先把 DMG 中的 留刻拖入 Applications，然后从「应用程序」打开。
 1. 点击「添加照片」选择文件、文件夹或系统图库，再选择转换方向。
 2. 在保存位置菜单选择交付目标，在「导出设置」中选择格式；输出文件夹必须在原片目录之外。
 3. 点击开始，在队列与报告中查看进度、已有结果和错误；需要时停止。
