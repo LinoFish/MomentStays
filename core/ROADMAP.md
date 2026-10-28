@@ -80,7 +80,17 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        H.264 file cross-checked against ffprobe (positions/sizes/sync exact; times
        match up to the uniform edit-list shift). Per-track sample hash matching
        against Swift `trackInfo` still needs a Mac run.
-8. [ ] Live Photo → Motion Photo assembly (AndroidExport) at byte level.
+8. [x] Live Photo → Motion Photo assembly (AndroidExport) at byte level
+   (`live2motion.rs`): MOV->MP4 sample-copy remux (`remux_to_mp4`, exactly
+   one video + at most one audio track like Swift, mett dropped, ftyp
+   `mp42`, edit list copied), JPEG still cleaning
+   (`pymotion::live_still_clean`: Swift `liveStill(uuid:"", updateIdentifier:
+   false)` — static-only truncation, motion XMP strip for GCamera + OPPO/
+   vivo keys and MotionPhoto directory items, EXIF untouched, gain-map
+   bytes verified), then existing `model::write` with its parse-back
+   validation. `mett_cover_time` reads the cover from the mett track's
+   sample timing through the edit list (sample value NOT checked: same
+   open question as 9b2). HEIC stills refused (need HEIC writers). 8 tests.
 9. [x] Motion Photo → Live Photo remux step (a): sample-copy MP4 -> MOV (`remux.rs`):
        chosen video track + all audio tracks, stts/stsc/stsz/ctts/stss copied verbatim,
        stco/co64 rebuilt, edit list rescaled to the 1_000_000 movie timescale, ftyp `qt  `;
@@ -118,10 +128,25 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   sample — those bytes are the ground truth for the Rust encoder. Do not
   guess them; the 2012 QuickTime spec predates mett tracks and ffmpeg's
   demuxer does not parse still-image-time samples.
+- Live->Motion assembly (item 8): container-level validity verified on
+  Linux (ffprobe + decode, sample-for-sample vs source); needs a Mac run
+  on a real Live Photo pair (JPEG still + MOV) to confirm the output opens
+  as a Motion Photo in vendor galleries and matches Swift `convert`
+  byte-for-byte on the still and video portions.
 - `model` writers: verify against real vendor samples (especially Samsung SEF on-device
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
 
 ## Log
+- 2026-10-28: Live->Motion assembly landed (`live2motion.rs`, ROADMAP
+  item 8): `remux_to_mp4` (strict 1-video + <=1-audio layout, mett dropped,
+  ftyp `mp42`), `live_still_clean` (Swift `liveStill` with
+  updateIdentifier:false: static-only truncation, GCamera + OPPO/vivo
+  motion XMP strip, EXIF untouched, gain-map check; HEIC refused), then
+  `model::write`; plus `mett_cover_time` (edit-list-mapped mett timing,
+  value unchecked per 9b2). 8 tests (synthetic MOV incl. elst-mapped mett
+  cover, hand-built motion-XMP JPEG cleaning, Google + Huawei end-to-end
+  assembly); ffprobe on the real-file MP4 shows pts/dts/sizes identical
+  to source and it decodes cleanly.
 - 2026-10-28: Content identifier landed (`remux.rs`, ROADMAP item 9b first
   half): `remux_to_mov_with_identifier` writes moov/udta/meta/ilst with a
   UTF-8 `----` item (mean `com.apple.quicktime.metadata`), `read_content_

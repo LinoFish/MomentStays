@@ -491,6 +491,41 @@ pub fn remux_to_mov_with_identifier(data: &[u8], video_index: usize, uuid: &str)
 fn remux_impl(data: &[u8], video_index: usize, identifier: Option<&str>) -> Result<Vec<u8>> {
     let (tracks, max_track_id) = parse_tracks(data, video_index)?;
     let udta = identifier.map(content_identifier_udta);
+    let mut ftyp_payload = b"qt  ".to_vec();
+    ftyp_payload.extend(u32b(0));
+    ftyp_payload.extend(b"qt  ");
+    assemble(&tracks, max_track_id, udta, bx(b"ftyp", &ftyp_payload), data)
+}
+
+/// MOV -> MP4 sample-copy remux (ROADMAP item 8, first half), mirroring
+/// Swift `AndroidExport.remux`: exactly one video track and at most one
+/// audio track, metadata (mett) tracks dropped, samples copied verbatim,
+/// movie timescale 1_000_000, ftyp `mp42`. The edit list is copied, so
+/// playback timing matches the source; raw sample-table times are unchanged.
+pub fn remux_to_mp4(data: &[u8]) -> Result<Vec<u8>> {
+    let tables = mp4::sample_tables(data)?;
+    let n_video = tables.iter().filter(|t| t.handler == "vide").count();
+    let n_audio = tables.iter().filter(|t| t.handler == "soun").count();
+    if n_video != 1 || n_audio > 1 {
+        return fail("实况视频轨道布局不受支持");
+    }
+    let (tracks, max_track_id) = parse_tracks(data, 0)?;
+    let mut ftyp_payload = b"mp42".to_vec();
+    ftyp_payload.extend(u32b(0));
+    ftyp_payload.extend(b"mp42");
+    ftyp_payload.extend(b"isom");
+    assemble(&tracks, max_track_id, None, bx(b"ftyp", &ftyp_payload), data)
+}
+
+/// Shared two-pass assembly: build moov once with zero chunk offsets to
+/// measure it, lay out mdat chunks, then rebuild moov with real offsets.
+fn assemble(
+    tracks: &[TrackParts],
+    max_track_id: u32,
+    udta: Option<Vec<u8>>,
+    ftyp: Vec<u8>,
+    source: &[u8],
+) -> Result<Vec<u8>> {
     // First build with zero offsets to measure moov, then rebuild with real ones.
     let zero: Vec<Vec<usize>> = tracks.iter().map(|t| vec![0; t.chunks.len()]).collect();
     let movie_duration = tracks
@@ -500,26 +535,22 @@ fn remux_impl(data: &[u8], video_index: usize, identifier: Option<&str>) -> Resu
         .into_iter()
         .max()
         .unwrap_or(0);
-    let moov_len = build_moov(&tracks, &zero, movie_duration, max_track_id + 1, udta.as_deref())?.len();
-    let mut ftyp_payload = b"qt  ".to_vec();
-    ftyp_payload.extend(u32b(0));
-    ftyp_payload.extend(b"qt  ");
-    let ftyp = bx(b"ftyp", &ftyp_payload);
+    let moov_len = build_moov(tracks, &zero, movie_duration, max_track_id + 1, udta.as_deref())?.len();
     let mut chunk_offsets: Vec<Vec<usize>> = Vec::new();
     let mut mdat_body: Vec<u8> = Vec::new();
     let mut at = ftyp.len() + moov_len + 8;
-    for t in &tracks {
+    for t in tracks {
         let mut offsets = Vec::new();
         for range in &t.chunks {
             offsets.push(at);
             for s in &t.samples[range.clone()] {
-                mdat_body.extend_from_slice(&data[s.offset..s.offset + s.size]);
+                mdat_body.extend_from_slice(&source[s.offset..s.offset + s.size]);
                 at += s.size;
             }
         }
         chunk_offsets.push(offsets);
     }
-    let moov = build_moov(&tracks, &chunk_offsets, movie_duration, max_track_id + 1, udta.as_deref())?;
+    let moov = build_moov(tracks, &chunk_offsets, movie_duration, max_track_id + 1, udta.as_deref())?;
     debug_assert_eq!(moov.len(), moov_len);
     let mut out = ftyp;
     out.extend(moov);

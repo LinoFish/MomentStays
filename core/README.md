@@ -113,6 +113,23 @@ video+audio, mett-track drop, negative-PTS refusal, second video selection,
 real ffmpeg H.264 file) plus ffprobe on the real-file output (pts/dts/sizes
 identical to source, decodes cleanly), and 3 identifier tests.
 
+## Live -> Motion assembly (`live2motion`, ROADMAP item 8)
+
+`live2motion::assemble` takes an Apple Live Photo pair (JPEG still + MOV)
+and a target vendor plus cover, and returns a vendor Motion Photo JPEG:
+MOV->MP4 sample-copy remux (`remux::remux_to_mp4`: exactly one video and
+at most one audio track, mett dropped, ftyp `mp42`), JPEG still cleaning
+(`pymotion::live_still_clean`: Swift `liveStill` with updateIdentifier
+false — static-only truncation, motion XMP strip, EXIF untouched,
+gain-map bytes verified), then `model::write` with its parse-back
+validation. `mett_cover_time` reads the cover from the mett track's
+sample timing through the edit list (the sample value itself is not
+checked: same open question as the mett writer). Limits: HEIC stills are
+refused (HEIC writers are a stretch item); the vendor cover kind must
+match (`Cover::Frame` for Huawei, `Cover::Time` otherwise — convert with
+`cover.rs` first). Verified on Linux: 8 tests plus ffprobe on the
+real-file MP4 (pts/dts/sizes identical to source, decodes cleanly).
+
 ## Parity
 
 ```bash

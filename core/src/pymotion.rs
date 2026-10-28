@@ -465,6 +465,127 @@ pub fn live_still(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
     Ok(output)
 }
 
+/// Swift `PhotoFormat.liveStill(uuid:"", updateIdentifier:false)` for JPEG:
+/// keep the still, strip only motion metadata. Steps, in Swift order:
+/// 1. `staticOnly`: keep only the image ranges (primary JPEG through EOI,
+///    plus MPF auxiliary images when present) and drop trailing data
+///    (appended video tails, stale vendor markers). Non-contiguous image
+///    ranges are refused rather than rebuilt. The Honor private EHDR
+///    extension is not handled here: it is metadata Swift re-appends, and
+///    no verified Rust EHDR writer exists yet.
+/// 2. Strip motion XMP: GCamera keys (MotionPhoto, MotionPhotoVersion,
+///    MotionPhotoPresentationTimestampUs, MicroVideo, MicroVideoVersion,
+///    MicroVideoOffset, MicroVideoPresentationTimestampUs, MediaDataOffset)
+///    and OPPO/vivo keys (MotionPhotoPrimaryPresentationTimestampUs,
+///    MotionPhotoOwner, OLivePhotoVersion, VideoLength, MediaDataOffset,
+///    VMotionPhotoVersion, VMotionPhotoSource, VMediaKitVersion), as
+///    attributes or elements, plus any rdf:li whose Item:Semantic values
+///    contain "MotionPhoto".
+/// 3. EXIF is left untouched (updateIdentifier is false: no identifier is
+///    injected or replaced), and auxiliary (gain-map) bytes must hash-match
+///    before/after, like Swift.
+/// HEIC stills are refused: HEIC output needs the HEIC writers (ROADMAP
+/// stretch item), and a HEIC still cannot be cleaned into a JPEG without
+/// re-encoding the still itself.
+pub fn live_still_clean(still: &[u8]) -> Result<Vec<u8>> {
+    if still.len() >= 12 && &still[4..8] == b"ftyp" {
+        let brand = &still[8..12];
+        if [b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs", b"mif1", b"msf1"]
+            .iter()
+            .any(|b| brand == *b)
+        {
+            return fail("HEIC 静态图暂不支持 Live→Motion 清理，需 HEIC 写入支持");
+        }
+    }
+    let ranges = pyjpeg::mpf_images(still)?;
+    let end = if ranges.is_empty() {
+        let segs = pyjpeg::segments(still)?;
+        match segs.last() {
+            Some(s) => s.end,
+            None => return fail("Not a JPEG"),
+        }
+    } else {
+        if ranges[0].start != 0 {
+            return fail("图片范围不连续，拒绝清理");
+        }
+        for w in ranges.windows(2) {
+            if w[1].start != w[0].end {
+                return fail("图片范围不连续，拒绝清理");
+            }
+        }
+        ranges.last().map(|r| r.end).unwrap_or(0)
+    };
+    let truncated = &still[..end];
+    let motion_names = [
+        "MotionPhoto",
+        "MotionPhotoVersion",
+        "MotionPhotoPresentationTimestampUs",
+        "MicroVideo",
+        "MicroVideoVersion",
+        "MicroVideoOffset",
+        "MicroVideoPresentationTimestampUs",
+        "MediaDataOffset",
+    ];
+    let vendor_names = [
+        "MotionPhotoPrimaryPresentationTimestampUs",
+        "MotionPhotoOwner",
+        "OLivePhotoVersion",
+        "VideoLength",
+        "MediaDataOffset",
+        "VMotionPhotoVersion",
+        "VMotionPhotoSource",
+        "VMediaKitVersion",
+    ];
+    let mut motion: HashSet<(String, String)> = HashSet::new();
+    for n in motion_names {
+        motion.insert((CAMERA.to_string(), n.to_string()));
+    }
+    for ns in ["http://ns.oplus.com/photos/1.0/camera/", "http://ns.vivo.com/photos/1.0/camera/"] {
+        for n in vendor_names {
+            motion.insert((ns.to_string(), n.to_string()));
+        }
+    }
+    let mut packets = xmp_packets(truncated)?;
+    let mut changed: HashSet<usize> = HashSet::new();
+    for (i, packet) in packets.iter_mut().enumerate() {
+        let mut touched = false;
+        visit_mut(&mut packet.root, &mut |el| {
+            let before = el.attrib.len();
+            el.attrib.retain(|(n, l, _)| !motion.contains(&(n.clone(), l.clone())));
+            if el.attrib.len() != before {
+                touched = true;
+            }
+        });
+        let removed = pyxml::remove_children_where(&mut packet.root, &|child| {
+            motion.contains(&(child.ns.clone(), child.local.clone()))
+        });
+        if removed > 0 {
+            touched = true;
+        }
+        let removed = pyxml::remove_children_where(&mut packet.root, &|child| {
+            child.ns == RDF
+                && child.local == "li"
+                && pyxml::values(child, ITEM, "Semantic").iter().any(|v| v == "MotionPhoto")
+        });
+        if removed > 0 {
+            touched = true;
+        }
+        if touched {
+            changed.insert(i);
+        }
+    }
+    let replacements = xmp_rewrites(&mut packets, &mut changed)?;
+    let output = pyjpeg::edit_header(truncated, &replacements, &[])?;
+    let before = pyjpeg::mpf_images(truncated)?;
+    let after = pyjpeg::mpf_images(&output)?;
+    let before_hashes: Vec<String> = before.get(1..).unwrap_or(&[]).iter().map(|r| sha256_hex(&truncated[r.clone()])).collect();
+    let after_hashes: Vec<String> = after.get(1..).unwrap_or(&[]).iter().map(|r| sha256_hex(&output[r.clone()])).collect();
+    if before_hashes != after_hashes {
+        return fail("Auxiliary image bytes changed");
+    }
+    Ok(output)
+}
+
 pub fn ultra_from_apple(still: &[u8], gain_jpeg: &[u8], stops: f64) -> Result<Vec<u8>> {
     // Repackage a converted legacy gain map; primary JPEG coding is unchanged.
     let mut gain_root = Element::new(XMPMETA, "xmpmeta");

@@ -16,6 +16,7 @@ pub mod format;
 pub mod hdr;
 pub mod heif;
 pub mod jpeg;
+pub mod live2motion;
 pub mod model;
 pub mod mp4;
 pub mod remux;
