@@ -68,6 +68,22 @@ Fixtures are stored base64-encoded (`.b64`) so they can go through the
 text-only file push; the test decodes them, and the scan test decodes the
 `.jpg` files into a temp dir before scanning.
 
+## Android writers (`model`, JPEG path)
+
+`model::MotionModel` is the neutral model: still JPEG bytes, MP4 bytes and a
+cover (`Time(us)` or Huawei `Frame`), built from any file `format::parse`
+understands. `model::write` writes it back out for Google, Samsung SEF,
+Huawei LIVE_, OPPO or vivo JPEG, reusing the Swift `AndroidExport` layout
+(XMP motion document, SEF directory, LIVE_ tail). Video bytes are copied,
+never re-encoded; the still keeps its coding data and gain map (only XMP
+segments are rewritten, MPF offsets repaired). Every write is validated by
+parsing it back: video bytes, still coding hash and cover must match.
+
+Refusals, not guesses: a Huawei target needs a frame cover and other targets
+need a time cover; converting between the two needs the MP4 sample-table
+reader (ROADMAP item 7) and is rejected for now. HEIC writers and MOV->MP4
+remux are not implemented yet; see ROADMAP A1/A3/A5 and item 8/9.
+
 ## Parity
 
 ```bash

@@ -70,7 +70,7 @@ fn py_float_str(v: f64) -> String {
     }
 }
 
-fn visit_mut(e: &mut Element, f: &mut dyn FnMut(&mut Element)) {
+pub(crate) fn visit_mut(e: &mut Element, f: &mut dyn FnMut(&mut Element)) {
     f(e);
     for c in &mut e.children {
         visit_mut(c, f);
@@ -187,7 +187,7 @@ pub fn integer_unique(packets: &[Packet], name: &str) -> Result<Option<i64>> {
     Ok(parsed.first().copied())
 }
 
-fn xmp_rewrites(packets: &mut [Packet], changed: &mut HashSet<usize>) -> Result<HashMap<usize, Vec<u8>>> {
+pub(crate) fn xmp_rewrites(packets: &mut [Packet], changed: &mut HashSet<usize>) -> Result<HashMap<usize, Vec<u8>>> {
     let mut replacements: HashMap<usize, Vec<u8>> = HashMap::new();
     let mut ids: Vec<(String, String)> = Vec::new();
     let mut ordered: Vec<usize> = changed.iter().copied().collect();

@@ -4,6 +4,9 @@
 //! Scope: parse and validate Android Motion Photos (Google/Ultra HDR JPEG,
 //! Huawei/Honor LIVE_, Samsung SEF JPEG/HEIC, OPPO, vivo), split the still and
 //! the embedded MP4, and compute the same coding hashes the app verifies with.
+//! `model` adds the reverse direction: a neutral model built from any parsed
+//! vendor file, written back out for Google / Samsung / Huawei / OPPO / vivo
+//! (JPEG path; video bytes are copied, never re-encoded).
 //! No pixel decode, no AVFoundation: those stay in the Swift app.
 //! Error messages intentionally match the Swift implementation verbatim.
 
@@ -12,6 +15,7 @@ pub mod format;
 pub mod hdr;
 pub mod heif;
 pub mod jpeg;
+pub mod model;
 pub mod mp4;
 pub mod pyjpeg;
 pub mod pymotion;

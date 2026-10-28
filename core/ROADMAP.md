@@ -49,15 +49,19 @@ P2. [~] Zero-copy I/O: mmap inputs (memmap2) DONE; remaining: `MotionPhoto.still
 P3. [x] Parallel batch: `inspect`/`extract` accept many files/dirs, rayon pool (default = cores),
        JSON Lines output in input order.
 P4. [~] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3-4x faster; fewer XML parses, no per-segment Vec).
-A1. [ ] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
+A1. [~] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
        cover: Time(us) | Frame(n), source vendor, preserved vendor XMP } built by every reader.
+       JPEG path done (`model.rs`, built from `format::parse`); HEIC writers pending.
 A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
        `cdylib` + UniFFI (or JNI) Kotlin bindings, smoke test calling parse from Kotlin.
-A3. [ ] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
+A3. [~] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
        Samsung SEF (JPEG + HEIC mpvd), Huawei/Honor LIVE_ tail, OPPO, vivo; video bytes never re-encoded.
+       JPEG writers done (all five vendors); HEIC mpvd writer pending.
 A4. [ ] Cover conversion between time and frame index (Huawei uses frames) via the MP4 sample-table
        reader (item 7); refuse rather than guess when timing is ambiguous.
-A5. [ ] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
+A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
+       JPEG matrix done (10 tests in `tests/android.rs`: five vendors, Ultra HDR gain map,
+       Extended XMP keys, cross-vendor chain); HEIC and MOV-remux round-trips pending.
 3. [ ] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
        iloc v0/v1/v2, idat storage.
 4. [ ] Scan parity: port `PhotoVendor.identify` labels and HDR classification
@@ -76,8 +80,17 @@ A5. [ ] Round-trip matrix tests: every vendor → every vendor → parse back, c
 
 ## Needs Mac check
 - Run `scripts/check_rust_core.py --swift ... --samples <real photos>` once M1 lands.
+- `model` writers: verify against real vendor samples (especially Samsung SEF on-device
+  recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
 
 ## Log
+- 2026-10-28: Android writers landed (`model.rs`): neutral `MotionModel` from `format::parse`,
+  JPEG writers for Google/Samsung SEF/Huawei LIVE_/OPPO/vivo with parse-back validation
+  (video bytes, still coding hash, cover); Time<->Frame conversion refused, not guessed.
+  10 round-trip tests pass (five vendors, Ultra HDR gain map, Extended XMP keys,
+  cross-vendor chain); full suite 45 tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
+  Found and fixed while testing: SEF mpv2 pointer/length are big-endian while the rest
+  of the SEF directory is little-endian. Local only, not pushed (waiting on owner's push decision).
 - 2026-10-28: Python CLI port landed as `momentstays` binary (pyxml/pyjpeg/pymotion + CLI): scan/verify cross-platform, convert via the macOS Swift helper like Python. 6 parity tests vs the Python reference (parse, live_still/ultra/legacy bytes, full scan JSON); full suite 35 tests pass, `check_rust_core.py` 16 inputs 0 mismatches. Needs Mac check: `convert` end-to-end and the Swift helper cache path.
 - 2026-10-27: P1 bench CLI + synthetic generator, P3 parallel `inspect -j N <file|dir>` (JSON Lines, input order), mmap inputs, memchr JPEG scan.
 - 2026-10-27: items 1-2 done (22 fixture tests: Ultra HDR, Extended XMP, Honor EHDR, OPPO, vivo, legacy, recovered cover). Added performance track P1-P4 and Android track A1-A5.
