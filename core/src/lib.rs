@@ -11,6 +11,7 @@
 //! Error messages intentionally match the Swift implementation verbatim.
 
 pub mod binary;
+pub mod cover;
 pub mod format;
 pub mod hdr;
 pub mod heif;

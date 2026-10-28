@@ -57,8 +57,12 @@ A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 
 A3. [~] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
        Samsung SEF (JPEG + HEIC mpvd), Huawei/Honor LIVE_ tail, OPPO, vivo; video bytes never re-encoded.
        JPEG writers done (all five vendors); HEIC mpvd writer pending.
-A4. [ ] Cover conversion between time and frame index (Huawei uses frames) via the MP4 sample-table
+A4. [x] Cover conversion between time and frame index (Huawei uses frames) via the MP4 sample-table
        reader (item 7); refuse rather than guess when timing is ambiguous.
+       Done: `cover.rs` (frame = presentation-sorted index, same as Swift `pair()`;
+       half-duration + 2 us tolerance, ties refused, single video track required;
+       raw stbl times, edit list not applied). 5 tests incl. B-frame order and
+       the real H.264 file.
 A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
        JPEG matrix done (10 tests in `tests/android.rs`: five vendors, Ultra HDR gain map,
        Extended XMP keys, cross-vendor chain); HEIC and MOV-remux round-trips pending.
@@ -83,22 +87,28 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
 11. [ ] Cross-platform `convert` CLI and release binaries via CI.
 
 ## Needs Mac check
-- Run `scripts/check_rust_core.py --swift ... --samples <real photos>` once M1 lands.
+- Parse layer (M1): verified by the owner on Mac 2026-10-28 and merged into the
+  main program locally; that merge is NOT pushed yet, so remote main does not
+  have it. Do not claim it until the push lands.
 - `model` writers: verify against real vendor samples (especially Samsung SEF on-device
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
 
 ## Log
+- 2026-10-28: Cover time<->frame conversion landed (`cover.rs`, ROADMAP A4): frame is the
+  presentation-sorted index (Swift `pair()` convention), half-duration + 2 us tolerance,
+  ties/out-of-range refused; 5 tests (B-frame order, real H.264 file, strict video-track
+  selection). Carries the owner's Mac parse-layer verification note (see Needs Mac check).
 - 2026-10-28: MP4/MOV sample-table reader landed (`mp4::sample_tables`, ROADMAP item 7):
   stts/stsz/stsc/stco/co64/ctts/stss enumeration with strict count/bounds checks; 6 tests
   (synthetic tracks + real ffmpeg H.264 file cross-checked against ffprobe). This unblocks
-  A4 (cover time<->frame) and item 9 (remux). Local only, not pushed.
+  A4 (cover time<->frame) and item 9 (remux). Pushed as a1c20813.
 - 2026-10-28: Android writers landed (`model.rs`): neutral `MotionModel` from `format::parse`,
   JPEG writers for Google/Samsung SEF/Huawei LIVE_/OPPO/vivo with parse-back validation
   (video bytes, still coding hash, cover); Time<->Frame conversion refused, not guessed.
   10 round-trip tests pass (five vendors, Ultra HDR gain map, Extended XMP keys,
   cross-vendor chain); full suite 45 tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
   Found and fixed while testing: SEF mpv2 pointer/length are big-endian while the rest
-  of the SEF directory is little-endian. Local only, not pushed (waiting on owner's push decision).
+  of the SEF directory is little-endian. Pushed as fabf38dc.
 - 2026-10-28: Python CLI port landed as `momentstays` binary (pyxml/pyjpeg/pymotion + CLI): scan/verify cross-platform, convert via the macOS Swift helper like Python. 6 parity tests vs the Python reference (parse, live_still/ultra/legacy bytes, full scan JSON); full suite 35 tests pass, `check_rust_core.py` 16 inputs 0 mismatches. Needs Mac check: `convert` end-to-end and the Swift helper cache path.
 - 2026-10-27: P1 bench CLI + synthetic generator, P3 parallel `inspect -j N <file|dir>` (JSON Lines, input order), mmap inputs, memchr JPEG scan.
 - 2026-10-27: items 1-2 done (22 fixture tests: Ultra HDR, Extended XMP, Honor EHDR, OPPO, vivo, legacy, recovered cover). Added performance track P1-P4 and Android track A1-A5.

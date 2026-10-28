@@ -146,6 +146,8 @@ pub struct Sample {
     pub offset: usize,
     pub size: usize,
     pub decode_time: u64,
+    /// Decode duration (stts delta) in track timescale units.
+    pub duration: u64,
     pub presentation_time: i64,
     pub sync: bool,
 }
@@ -276,12 +278,14 @@ pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
         // stts: (sample_count, sample_delta) pairs.
         let stts_rows = full_entries(d, &stts, 8)?;
         let mut decode_times: Vec<u64> = Vec::new();
+        let mut durations: Vec<u64> = Vec::new();
         {
             let mut t: u64 = 0;
             for pair in stts_rows.chunks_exact(2) {
                 let (count, delta) = (pair[0], pair[1] as u64);
                 for _ in 0..count {
                     decode_times.push(t);
+                    durations.push(delta);
                     t += delta;
                 }
             }
@@ -391,6 +395,7 @@ pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
                     offset: at,
                     size,
                     decode_time: decode_times[next],
+                    duration: durations[next],
                     presentation_time: decode_times[next] as i64 + offsets[next],
                     sync: sync[next],
                 });
