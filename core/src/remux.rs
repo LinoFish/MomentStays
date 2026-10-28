@@ -20,7 +20,8 @@ use crate::mp4::{self, BoxRef};
 use crate::{fail, sha256_hex, Result};
 use std::collections::HashSet;
 
-pub const MOVIE_TIMESCALE: u32 = 1_000_000;
+/// Output movie timescale. Internal: part of the file format, not API.
+const MOVIE_TIMESCALE: u32 = 1_000_000;
 
 fn bx(t: &[u8; 4], payload: &[u8]) -> Vec<u8> {
     let mut v = ((payload.len() + 8) as u32).to_be_bytes().to_vec();
@@ -502,7 +503,8 @@ pub fn read_content_identifier(data: &[u8]) -> Result<Option<String>> {
 /// `movie()`'s 0; Swift's reader accepts {-1, 0, 255}, and the cover time
 /// comes from the edit list, never from the value. Photos recognition of
 /// this synthetic track is a Needs Mac check (ROADMAP item 9b2).
-pub const METT_TRACK_TIMESCALE: u32 = 600;
+/// Native still-track timescale. Internal, like MOVIE_TIMESCALE.
+const METT_TRACK_TIMESCALE: u32 = 600;
 
 /// The 1-key `mebx` stsd entry, byte-identical in all verified sources
 /// (logseq demo, makzan file, and the first key of the osxphotos 3-key

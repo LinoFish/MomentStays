@@ -134,7 +134,14 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
        1,233,333 us and 1,260,000 us). Remaining Mac items: Photos
        recognition of the synthetic track, and comparison with Swift
        `movie()` output (see Needs Mac check).
-10. [ ] C ABI (`cbindgen` header), universal static lib build script, optional Swift bridge behind a flag.
+10. [x] C ABI: `src/capi.rs` (`inspect` over FFI: version / inspect /
+    free-string, panics caught at the boundary so none unwind across
+    FFI), committed header `core/include/momentstays_core.h`, staticlib
+    (`crate-type` already included it; `cargo build --release --lib`),
+    C smoke program `tests/cabi_smoke.c` + Rust test `tests/cabi.rs`
+    (builds the staticlib on demand when missing or stale, links it,
+    runs version + real Motion Photo fixture + invalid bytes). 1 test.
+    Swift bridge behind a flag still needs a Mac run.
 11. [x] Cross-platform `convert` CLI (`momentstays-convert` binary, no Swift
     helper): `vendor` (Google/Samsung/Huawei/OPPO/vivo, xiaomi/honor as
     Google-layout aliases, Time<->Frame auto-conversion via sample
@@ -171,8 +178,19 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
 - HEIC writers (A3): synthetic-fixture verified only; needs a Mac run to
   confirm vendor galleries recognize the HEIC mpvd outputs, and public
   HEIC samples for the fixture set (item 3).
+- C ABI Swift bridge (item 10): the C header exists and the C smoke test
+  passes on Linux; importing the header and calling it from the Swift
+  app needs a Mac run.
 
 ## Log
+- 2026-10-28: C ABI landed (ROADMAP item 10): `src/capi.rs` (`inspect`
+  over FFI: version / inspect / free-string, panics caught at the
+  boundary), cbindgen header `core/include/momentstays_core.h` (config
+  `core/cbindgen.toml`, three-function whitelist; two remux constants
+  made private after cbindgen first leaked them into the header), C
+  smoke program + Rust test (staticlib built on demand when missing or
+  stale). 1 test. Full suite 95 tests pass, `check_rust_core.py`
+  16 inputs 0 mismatches. Swift bridge still Needs Mac check.
 - 2026-10-28: MOV-remux round-trip landed (ROADMAP A5): MP4->MOV->MP4
   parse-back comparison per track (count, sizes, bytes, presentation
   times) on synthetic video+audio and the real H.264 file. 2 tests.
