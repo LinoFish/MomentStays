@@ -156,7 +156,7 @@ fn samsung_mpvd_sef_fixture_parses() {
 }
 
 #[test]
-fn sefd_fixture_shape_and_locate() {
+fn sefd_fixture_parses() {
     // Still with NO mime item, mirroring the real S20 file: the SEF
     // record, not XMP, declares the motion photo.
     let items = vec![
@@ -168,15 +168,18 @@ fn sefd_fixture_shape_and_locate() {
     let video = real_mp4();
     let mut file = still.clone();
     file.extend(sefd_box(&video));
-    // The SEF directory locates the video even before the parser does.
+    // The SEF directory locates the video.
     let loc = vendor::locate(&file, 0).expect("locate").expect("sef record");
     assert_eq!(loc.format, "samsung-sef");
     assert_eq!(&file[loc.start..loc.end], video.as_slice());
     // sefd is the last top-level box and runs to EOF.
     assert!(file.ends_with(b"SEFT"));
-    // Parser support for sefd lands in milestone 2; until then the
-    // file is (correctly) not a motion photo to this parser.
-    assert!(format::parse(&file).is_err(), "sefd not yet parsed");
+    // Parser acceptance for sefd (milestone 2): no XMP gate, no
+    // timestamp without a mime item.
+    let back = format::parse(&file).expect("parse sefd fixture");
+    assert_eq!(back.format, "samsung-heic-sef");
+    assert_eq!(back.video(&file), video.as_slice());
+    assert_eq!(back.timestamp, None);
 }
 
 #[test]

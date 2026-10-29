@@ -139,6 +139,7 @@ fn parse_heif(d: &[u8]) -> Result<MotionPhoto> {
     let vendor = locate(d, 0)?;
     let mut p = 0;
     let mut mpvd: Option<(usize, usize, usize)> = None;
+    let mut sefd: Option<(usize, usize, usize)> = None;
     while p < d.len() {
         if d.len() - p < 8 { return fail("HEIC 顶层 box 被截断"); }
         let mut size = crate::binary::be(d, p, 4)?;
@@ -146,26 +147,59 @@ fn parse_heif(d: &[u8]) -> Result<MotionPhoto> {
         if size == 1 { size = crate::binary::be(d, p + 8, 8)?; header = 16; }
         if size < header || size > d.len() - p { return fail("HEIC 顶层 box 长度无效"); }
         if &d[p + 4..p + 8] == b"mpvd" { mpvd = Some((p, p + size, header)); break; }
+        if &d[p + 4..p + 8] == b"sefd" { sefd = Some((p, p + size, header)); break; }
         p += size;
     }
-    let (boundary, mpvd_end, mpvd_header) = match mpvd { Some(v) => v, None => return fail(NOT_MOTION) };
-    let consistent = mpvd_end == d.len()
-        && vendor.as_ref().map_or(true, |v| v.format == "samsung-sef" && v.start == boundary + mpvd_header && v.end <= mpvd_end);
-    if !consistent { return fail("三星 HEIC 的 mpvd/SEF 视频边界不一致"); }
+    // Two motion forms: mpvd (Google + Samsung S22) and sefd (Samsung
+    // S20: top-level sefd, no mpvd, no XMP in the still). The mpvd path
+    // keeps its strict XMP gate; the sefd path trusts the SEF record
+    // as the motion declaration and treats XMP only as an optional
+    // timestamp source — the real S20 file has no mime item at all.
+    let (boundary, range, time) = if let Some((b, mpvd_end, mpvd_header)) = mpvd {
+        let consistent = mpvd_end == d.len()
+            && vendor.as_ref().map_or(true, |v| v.format == "samsung-sef" && v.start == b + mpvd_header && v.end <= mpvd_end);
+        if !consistent { return fail("三星 HEIC 的 mpvd/SEF 视频边界不一致"); }
+        let still = &d[..b];
+        let l = heif::layout(still)?;
+        let mut xmps = Vec::new();
+        for item in l.items.iter().filter(|i| i.ty == "mime") {
+            let w = wrap_xmp(&heif::item_bytes(still, item))?;
+            if integer(&packets(&w)?, "MotionPhoto")? == Some(1) { xmps.push(item); }
+        }
+        if xmps.len() != 1 { return fail("HEIC 缺少唯一动态照片 XMP 项目"); }
+        let pk = packets(&wrap_xmp(&heif::item_bytes(still, xmps[0]))?)?;
+        if integer(&pk, "MotionPhoto")? != Some(1) { return fail(NOT_MOTION); }
+        let mut time = integer(&pk, "MotionPhotoPresentationTimestampUs")?;
+        if time.map_or(true, |t| t < 0) { time = integer(&pk, "MicroVideoPresentationTimestampUs")?; }
+        if time.map_or(false, |t| t < 0) { time = None; }
+        let range = match &vendor { Some(v) => v.start..v.end, None => b + mpvd_header..mpvd_end };
+        (b, range, time)
+    } else if let Some((b, sefd_end, sefd_header)) = sefd {
+        if sefd_end != d.len() { return fail("三星 HEIC 的 sefd 未延伸至文件末尾"); }
+        let v = match &vendor { Some(v) if v.format == "samsung-sef" => v, _ => return fail(NOT_MOTION) };
+        // Unlike mpvd, the video does not start right after the sefd
+        // header: other records (Image_UTC_Data, MCC_Data) come first.
+        // The SEF record's own range is authoritative; it only has to
+        // lie inside the sefd payload.
+        if v.start < b + sefd_header || v.end > sefd_end { return fail("三星 HEIC 的 sefd/SEF 视频边界不一致"); }
+        let still = &d[..b];
+        let l = heif::layout(still)?;
+        let mut time = None;
+        for item in l.items.iter().filter(|i| i.ty == "mime") {
+            let t = (|| -> Option<i64> {
+                let w = wrap_xmp(&heif::item_bytes(still, item)).ok()?;
+                let pk = packets(&w).ok()?;
+                let mut t = integer(&pk, "MotionPhotoPresentationTimestampUs").ok().flatten();
+                if t.map_or(true, |x| x < 0) { t = integer(&pk, "MicroVideoPresentationTimestampUs").ok().flatten(); }
+                t.filter(|x| *x >= 0)
+            })();
+            if t.is_some() { time = t; break; }
+        }
+        (b, v.start..v.end, time)
+    } else {
+        return fail(NOT_MOTION);
+    };
     let still = &d[..boundary];
-    let l = heif::layout(still)?;
-    let mut xmps = Vec::new();
-    for item in l.items.iter().filter(|i| i.ty == "mime") {
-        let w = wrap_xmp(&heif::item_bytes(still, item))?;
-        if integer(&packets(&w)?, "MotionPhoto")? == Some(1) { xmps.push(item); }
-    }
-    if xmps.len() != 1 { return fail("HEIC 缺少唯一动态照片 XMP 项目"); }
-    let pk = packets(&wrap_xmp(&heif::item_bytes(still, xmps[0]))?)?;
-    if integer(&pk, "MotionPhoto")? != Some(1) { return fail(NOT_MOTION); }
-    let mut time = integer(&pk, "MotionPhotoPresentationTimestampUs")?;
-    if time.map_or(true, |t| t < 0) { time = integer(&pk, "MicroVideoPresentationTimestampUs")?; }
-    if time.map_or(false, |t| t < 0) { time = None; }
-    let range = match &vendor { Some(v) => v.start..v.end, None => boundary + mpvd_header..mpvd_end };
     let video = &d[range.clone()];
     let top = boxes(video, 0, video.len())?;
     if top.first().map_or(true, |b| !b.is(b"ftyp")) || !top.iter().any(|b| b.is(b"moov")) || !top.iter().any(|b| b.is(b"mdat")) {

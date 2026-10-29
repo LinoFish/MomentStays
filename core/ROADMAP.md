@@ -87,8 +87,8 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
        iloc v1 idat-only, mixed mdat/idat, nonzero extent index
        rejected, hand-built Google mpvd and Samsung mpvd+SEF fixtures
        parsing with video bytes + timestamp, sefd-shape fixture located
-       via `vendor::locate` (parser acceptance lands with item 2 of the
-       2026-10-29 sequence), coding hash stable under Exif content /
+       via `vendor::locate` and parsed (sefd acceptance landed
+       2026-10-29, see Log), coding hash stable under Exif content /
        length / removal and XMP changes. Public samples located and
        verified locally 2026-10-28 (see `tests/SOURCES.md`); not
        committed to the repo (1.6-6.5 MB each). Full suite 121 tests
@@ -213,6 +213,17 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: Samsung sefd-form HEIC parsing landed (`format::parse_heif`):
+  top-level `sefd` (no mpvd) accepted when it runs to EOF and the SEF
+  `MotionPhoto_Data` record lies inside the sefd payload; the SEF
+  record is the motion declaration, so the XMP MotionPhoto==1 gate is
+  skipped and XMP only supplies an optional timestamp (the real S20
+  file has no mime item, timestamp None). mpvd path untouched.
+  Verified on the re-fetched MIT S20 sample (SHA-256 matches
+  `tests/SOURCES.md`): format `samsung-heic-sef`, video
+  2749488..5755287, still 2749402 bytes, ffprobe reads a valid
+  video+audio MP4. Synthetic sefd test flipped to acceptance.
+  Full suite 121 tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
 - 2026-10-29: HEIF fixtures landed (ROADMAP item 3): `tests/heif_fixtures.rs`
   (9 tests) + parameterized `build_still_spec` / `sef_tail_mpv2` /
   `sefd_box` in `tests/common/mod.rs` (iloc v0/v1/v2, mdat/idat,
