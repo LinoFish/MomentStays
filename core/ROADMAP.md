@@ -44,11 +44,22 @@ Inspect is now bound by software SHA-256 here; Apple Silicon / SHA-NI CPUs use h
        high-res candidate times; conflicting descriptors rejected.
 P1. [x] Bench harness: `momentstays-core bench <dir|synthetic>` timing parse/hash/extract per file
        (synthetic 10 MB / 50 MB / 200 MB Motion Photos), report MB/s; record baseline here.
-P2. [~] Zero-copy I/O: mmap inputs (memmap2) DONE; remaining: `MotionPhoto.still` as `Cow` (borrow when no MPF rewrite
-       or Honor tail), extract writes slices directly; streaming SHA-256 over ranges.
+P2. [x] Zero-copy I/O: mmap inputs (memmap2) DONE; `MotionPhoto.still` is now `Cow` (borrow when no MPF rewrite
+       or Honor tail — `jpeg::static_only_cow`; HEIC always borrows), extract writes the borrowed slice directly,
+       `check_remux` hashes samples streaming instead of collecting them into one Vec first.
+       Done 2026-10-29 (`tests/zerocopy.rs`: HEIC borrows, single-image JPEG borrows and equals the owned rebuild,
+       MPF JPEG owns and equals the rebuild). `MotionModel` still owns its still (it rebuilds on write), and the
+       Python-port `pymotion::MotionPhoto` keeps its owned fields as the parity reference.
 P3. [x] Parallel batch: `inspect`/`extract` accept many files/dirs, rayon pool (default = cores),
        JSON Lines output in input order.
-P4. [~] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3-4x faster; fewer XML parses, no per-segment Vec).
+P4. [x] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3-4x faster; segments already borrow
+       payloads, no per-segment Vec; no further XML-parse reduction: each parse is load-bearing).
+       2026-10-29 re-bench after the P2 Cow change (`momentstays-core bench`, synthetic, before -> after, two runs):
+       parse 12 MB 4.6 ms -> 3.8/3.5 ms, 50 MB 12.1 -> 10.3/9.7 ms, 200 MB 12.5 -> 12.2/11.7 ms;
+       inspect 12 MB 26.1 -> 28.8/24.1 ms, 50 MB 98.6 -> 88.1/85.6 ms, 200 MB 384.7 -> 302.8/274.3 ms.
+       Read: parse ~20-30% faster where the still copy mattered; inspect stays SHA-256-bound (~500-700 MB/s),
+       no regression. `check_remux` peak memory also drops by one video-size buffer (no measurement harness for it;
+       the allocation is gone from the code).
 A1. [x] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
        cover: Time(us) | Frame(n), source vendor, preserved vendor XMP } built by every reader.
        Done: `model.rs` built from `format::parse` for every reader (JPEG all vendors,
@@ -261,6 +272,13 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: Zero-copy + hot-path tuning landed (ROADMAP P2/P4):
+  `format::MotionPhoto.still` is `Cow` (`jpeg::static_only_cow`
+  borrows single-image JPEGs without MPF/Honor tail; HEIC always
+  borrows), `check_remux` streams its sample hash, extract writes
+  the borrowed slice. Bench before -> after in the P4 note above.
+  Full suite 140 tests pass, `check_rust_core.py` 16 inputs
+  0 mismatches.
 - 2026-10-29: Android build landed (ROADMAP A2): NDK r27c +
   cargo-ndk 4.1.2 installed locally (outside the repo),
   `aarch64-linux-android` / `armv7-linux-androideabi` /

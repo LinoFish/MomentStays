@@ -3,15 +3,22 @@ use crate::mp4::{boxes, image_times, top_level_types};
 use crate::vendor::{locate, OPPO, VIVO};
 use crate::xmp::{integer, packets, vendor_integer, HDR, HEADER};
 use crate::{fail, heif, jpeg, sha256_hex, Error, Result};
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ops::Range;
 
 pub const NOT_MOTION: &str = "不是受支持的动态照片";
 
 #[derive(Clone, Debug)]
-pub struct MotionPhoto {
-    /// Static image bytes (JPEG rebuilt from marker-delimited images, or the HEIF before `mpvd`).
-    pub still: Vec<u8>,
+pub struct MotionPhoto<'a> {
+    /// Static image bytes. Borrowed from the input whenever the
+    /// still needs no rebuild (HEIC: always; JPEG: single image,
+    /// no MPF segment, no Honor tail — see `jpeg::static_only_cow`);
+    /// owned only when MPF re-indexing or a tail changes bytes.
+    /// Callers that must own the bytes (e.g. `MotionModel`) copy
+    /// explicitly with `to_vec()`; hot paths (inspect, extract)
+    /// read the slice directly.
+    pub still: Cow<'a, [u8]>,
     /// Byte range of the embedded MP4 inside the source file.
     pub video: Range<usize>,
     pub timestamp: Option<i64>,
@@ -21,7 +28,7 @@ pub struct MotionPhoto {
     pub format: String,
 }
 
-impl MotionPhoto {
+impl MotionPhoto<'_> {
     pub fn video<'a>(&self, source: &'a [u8]) -> &'a [u8] { &source[self.video.clone()] }
 }
 
@@ -85,7 +92,7 @@ pub fn parse(d: &[u8]) -> Result<MotionPhoto> {
         (start, end)
     };
     if start < image_end || end > d.len() || end < start || end - start < 16 { return fail("视频与 JPEG 图像范围重叠"); }
-    let still = jpeg::static_only(&d[..start])?;
+    let still = jpeg::static_only_cow(&d[..start])?;
     let video = &d[start..end];
     if &video[4..8] != b"ftyp" { return fail("XMP 偏移没有指向 MP4 视频"); }
     let types: HashSet<String> = top_level_types(video, "MP4")?.into_iter().collect();
@@ -211,7 +218,7 @@ fn parse_heif(d: &[u8]) -> Result<MotionPhoto> {
     // above; `heif::exif` stays available for callers that need it
     // (e.g. `inspect`'s make/model, which tolerates its absence).
     Ok(MotionPhoto {
-        still: still.to_vec(), video: range, timestamp: time,
+        still: Cow::Borrowed(still), video: range, timestamp: time,
         timestamp_tag: time.map(|_| "MotionPhotoPresentationTimestampUs".to_string()),
         ultra: false, cover_frame: None,
         format: if vendor.is_none() { "google-heic".into() } else { "samsung-heic-sef".into() },

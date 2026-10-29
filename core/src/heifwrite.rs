@@ -312,7 +312,7 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
         return fail("不是 HEIC 文件");
     }
     let base: Vec<u8> = match format::parse(still) {
-        Ok(back) => back.still,
+        Ok(back) => back.still.into_owned(),
         Err(_) => {
             heif::layout(still)?;
             still.to_vec()

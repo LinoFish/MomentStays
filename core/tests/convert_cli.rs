@@ -70,8 +70,9 @@ fn vendor_google_to_samsung() {
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let bytes = std::fs::read(&output).unwrap();
     let parsed = format::parse(&bytes).expect("output parses");
-    let src = format::parse(&fixture("motion.jpg.b64")).expect("input parses");
-    assert_eq!(parsed.video(&bytes), src.video(&fixture("motion.jpg.b64")));
+    let input_bytes = fixture("motion.jpg.b64");
+    let src = format::parse(&input_bytes).expect("input parses");
+    assert_eq!(parsed.video(&bytes), src.video(&input_bytes));
 }
 
 #[test]
@@ -83,7 +84,8 @@ fn vendor_google_to_vivo_keeps_time() {
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let bytes = std::fs::read(&output).unwrap();
     let parsed = format::parse(&bytes).expect("output parses");
-    let src = format::parse(&fixture("motion.jpg.b64")).expect("input parses");
+    let input_bytes = fixture("motion.jpg.b64");
+    let src = format::parse(&input_bytes).expect("input parses");
     assert_eq!(parsed.timestamp, src.timestamp);
 }
 
