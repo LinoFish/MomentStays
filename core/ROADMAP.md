@@ -49,40 +49,50 @@ P2. [~] Zero-copy I/O: mmap inputs (memmap2) DONE; remaining: `MotionPhoto.still
 P3. [x] Parallel batch: `inspect`/`extract` accept many files/dirs, rayon pool (default = cores),
        JSON Lines output in input order.
 P4. [~] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3-4x faster; fewer XML parses, no per-segment Vec).
-A1. [~] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
+A1. [x] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
        cover: Time(us) | Frame(n), source vendor, preserved vendor XMP } built by every reader.
-       JPEG path done (`model.rs`, built from `format::parse`); HEIC writers done for
-       Google/Samsung (`heifwrite.rs`, public samples verified locally
-       2026-10-28, see item 3 and `tests/SOURCES.md`).
+       Done: `model.rs` built from `format::parse` for every reader (JPEG all vendors,
+       HEIC Google/Samsung); HEIC writers done for Google/Samsung
+       (`heifwrite.rs`, public samples verified locally 2026-10-28,
+       see item 3 and `tests/SOURCES.md`).
 A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
        `cdylib` + UniFFI (or JNI) Kotlin bindings, smoke test calling parse from Kotlin.
-A3. [~] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
+A3. [x] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
        Samsung SEF (JPEG + HEIC mpvd), Huawei/Honor LIVE_ tail, OPPO, vivo; video bytes never re-encoded.
-       JPEG writers done (all five vendors); HEIC mpvd writer done for Google/Samsung
+       Done: JPEG writers for all five vendors; HEIC mpvd writer for Google/Samsung
        (`heifwrite::assemble_heic`: XMP rewrite per Swift `HEIFMetadata.write`, mpvd +
-       Samsung SEF, parse-back validation of video bytes / coding hash / cover);
-       other HEIC targets refused. 6 tests (synthetic fixtures + largesize mpvd
-       regression) + 1 CLI test; public-sample verification done locally
-       2026-10-28 (Samsung S22 mpvd + Google libmphoto largesize mpvd parse
-       and writer round-trip, see `tests/SOURCES.md`); gallery recognition
-       still Needs Mac check.
+       Samsung SEF, parse-back validation of video bytes / coding hash / cover).
+       Other HEIC targets are refused by design (Apple-to-Android HEIC
+       targets are Samsung only per product fact). 6 tests (synthetic
+       fixtures + largesize mpvd regression) + 1 CLI test; public-sample
+       verification done locally 2026-10-28 (Samsung S22 mpvd + Google
+       libmphoto largesize mpvd parse and writer round-trip, see
+       `tests/SOURCES.md`); gallery recognition still Needs Mac check.
 A4. [x] Cover conversion between time and frame index (Huawei uses frames) via the MP4 sample-table
        reader (item 7); refuse rather than guess when timing is ambiguous.
        Done: `cover.rs` (frame = presentation-sorted index, same as Swift `pair()`;
        half-duration + 2 us tolerance, ties refused, single video track required;
        raw stbl times, edit list not applied). 5 tests incl. B-frame order and
        the real H.264 file.
-A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
-       JPEG matrix done (10 tests in `tests/android.rs`: five vendors, Ultra HDR gain map,
-       Extended XMP keys, cross-vendor chain); HEIC round-trips done (Google/Samsung
+A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
+       Done: JPEG matrix (10 tests in `tests/android.rs`: five vendors, Ultra HDR gain map,
+       Extended XMP keys, cross-vendor chain); HEIC round-trips (Google/Samsung
        assemble + vendor CLI test, parse-back: video bytes, coding hash, cover);
-       MOV-remux round-trips done (MP4->MOV->MP4, per-track count/sizes/bytes/
+       MOV-remux round-trips (MP4->MOV->MP4, per-track count/sizes/bytes/
        presentation, synthetic video+audio and real H.264 file).
-3. [ ] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
-       iloc v0/v1/v2, idat storage. Public samples located and verified
-       locally 2026-10-28 (see `tests/SOURCES.md`); not committed to the
-       repo (1.6-6.5 MB each). Synthetic largesize-mpvd and LONG8
-       MakerNote regression tests landed in their place.
+3. [x] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
+       iloc v0/v1/v2, idat storage. Done: `tests/heif_fixtures.rs` (9 tests,
+       parameterized `build_still_spec` in `tests/common/mod.rs`): iloc v1
+       8-byte widths + multi-extent mdat, iloc v2 4-byte base offset,
+       iloc v1 idat-only, mixed mdat/idat, nonzero extent index
+       rejected, hand-built Google mpvd and Samsung mpvd+SEF fixtures
+       parsing with video bytes + timestamp, sefd-shape fixture located
+       via `vendor::locate` (parser acceptance lands with item 2 of the
+       2026-10-29 sequence), coding hash stable under Exif content /
+       length / removal and XMP changes. Public samples located and
+       verified locally 2026-10-28 (see `tests/SOURCES.md`); not
+       committed to the repo (1.6-6.5 MB each). Full suite 121 tests
+       pass, `check_rust_core.py` 16 inputs 0 mismatches.
 4. [x] Scan parity: port `PhotoVendor.identify` labels and HDR classification
        (honorPrivate / ISO 21496 / legacy Apple) → `momentstays-convert scan`
        matching NativeDriver `scan` rows (relative/motion/hdr/cover/
@@ -203,6 +213,16 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: HEIF fixtures landed (ROADMAP item 3): `tests/heif_fixtures.rs`
+  (9 tests) + parameterized `build_still_spec` / `sef_tail_mpv2` /
+  `sefd_box` in `tests/common/mod.rs` (iloc v0/v1/v2, mdat/idat,
+  multi-extent, base offsets, mpvd+SEF and sefd shapes, coding-hash
+  stability). One test-side lesson recorded: iloc v0 has no method
+  field, so idat fixtures must use v1+ (the builder now asserts this).
+  Full suite 121 tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
+  A1/A3/A5 checkboxes corrected from [~] to [x]: HEIC writers
+  (Google/Samsung, the only HEIC targets) and MOV round-trips had
+  already landed; other HEIC targets remain refused by design.
 - 2026-10-28: Scan parity landed (ROADMAP item 4): `src/scan.rs`
   (`identify` brand table + format fallback + HEIF Exif recursion,
   HDR chain HEIC/Ultra/Honor-private/ISO-21496/legacy-Apple/SDR,
