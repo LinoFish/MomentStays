@@ -218,6 +218,7 @@ enum NativeBatch {
         return rows.keys.sorted().compactMap { rows[$0] }
     }
     static func scanFile(_ file: URL, relative: String, bytes: [UInt8]? = nil, parsed: Result<NativeMotionPhoto,Error>? = nil) -> ScanRow {
+        #if MOTIONLIVE_SWIFT_REFERENCE
         let before = SourceVersion.read(file)
         var data: [UInt8] = []
         var row: ScanRow
@@ -246,6 +247,37 @@ enum NativeBatch {
             row = ScanRow(source:file,relative:relative,isMotion:false,hdr:"—",cover:"—",detail:"扫描期间来源发生变化，请重新扫描")
         }
         return row
+        #else
+        // Row fields come from Rust (same strings as the old Swift row);
+        // the source-change guard and the CGImageSource full-decode
+        // confirmation for "confirmed static" stay in Swift, because
+        // FFI confirmed_static is byte-level only.
+        let before = SourceVersion.read(file)
+        var row: ScanRow
+        do {
+            let data = try bytes ?? Array(Data(contentsOf:file))
+            let ffi = try RustCore.scanRow(data)
+            var detail = ffi.detail ?? ""
+            var confirmed = ffi.confirmed_static ?? false
+            if confirmed {
+                do { _ = try PhotoFormat.parse(data) } catch {
+                    if !confirmedStatic(data) { confirmed = false; detail = error.localizedDescription }
+                }
+            }
+            row = ScanRow(source:file,relative:relative,isMotion:ffi.is_motion ?? false,
+                hdr:ffi.hdr ?? "—",cover:ffi.cover ?? "—",detail:detail,
+                manufacturer:ffi.manufacturer ?? "未知",manufacturerDetail:ffi.manufacturer_detail ?? "",
+                confirmedStatic:confirmed)
+        } catch {
+            row = ScanRow(source:file,relative:relative,isMotion:false,hdr:"—",cover:"—",
+                detail:error.localizedDescription,manufacturer:"未知")
+        }
+        if let before = before, before == SourceVersion.read(file) { row.version = before }
+        else {
+            row = ScanRow(source:file,relative:relative,isMotion:false,hdr:"—",cover:"—",detail:"扫描期间来源发生变化，请重新扫描")
+        }
+        return row
+        #endif
     }
     static func confirmedStatic(_ data: [UInt8]) -> Bool {
         do {
@@ -401,6 +433,7 @@ enum NativeBatch {
             }
             throw Failure("同名输出已存在且内容或设置不同；未覆盖，请选择新的输出目录")
         }
+        #if MOTIONLIVE_SWIFT_REFERENCE
         let photo = try timings.measure("source_parse") { try PhotoFormat.parse(Array(Data(contentsOf:source))) }
         if options.outputMode != "auxiliary-only" && options.coverIndex == nil && photo.timestamp == nil && photo.coverFrame == nil && options.missingTime == "error" { throw Failure("原片没有有效封面时间戳或封面帧号，未使用推测位置") }
         if token.isCancelled { throw Failure("已停止") }
@@ -586,6 +619,251 @@ enum NativeBatch {
             "output_files":names,
             "detail":(warnings.isEmpty ? (hdr["reason"] as? String ?? "已转换并校验") : warnings.joined(separator:"；")) +
                 (options.outputMode == "livephoto+candidates" ? "；另存 \(candidatePhotos.count) 张" + (options.candidateDelivery == "livephoto" ? "独立实况照片" : "独立高清静态照片") : "")]
+        #else
+        // Rust conversion core. The resumed check above, the manifest /
+        // publish shell, and the candidate JPEG decoding stay in Swift;
+        // auxiliary export, HDR handling, still cleaning, and MOV
+        // remux move to the C ABI.
+        let motionData = Array(try Data(contentsOf:source))
+        let photo = try timings.measure("source_parse") { try PhotoFormat.parse(motionData) }
+        if options.outputMode != "auxiliary-only" && options.coverIndex == nil && photo.timestamp == nil && photo.coverFrame == nil && options.missingTime == "error" { throw Failure("原片没有有效封面时间戳或封面帧号，未使用推测位置") }
+        if token.isCancelled { throw Failure("已停止") }
+        try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let stage = target.deletingLastPathComponent().appendingPathComponent(".motionlive-" + UUID().uuidString)
+        let work = fm.temporaryDirectory.appendingPathComponent("motionlive-" + UUID().uuidString)
+        try fm.createDirectory(at: stage, withIntermediateDirectories: false)
+        defer { try? fm.removeItem(at: stage); try? fm.removeItem(at: work) }
+        try fm.createDirectory(at: work, withIntermediateDirectories: false)
+        var names = expectedNames(source,options:options)
+        let wantsCandidates = options.coverIndex != nil || options.outputMode == "livephoto+candidates"
+        let candidateSession = try wantsCandidates ? CoverCandidateSession.prepare(video:photo.video,folder:work) : nil
+        if let index = options.coverIndex {
+            guard let session = candidateSession else { throw Failure("原片没有辅助高清候选，请使用原始封面") }
+            _ = try session.candidate(index)
+        }
+        var warnings: [String] = []
+        // Auxiliary export.
+        var auxiliary: [String:Any]? = nil
+        if let auxiliaryName = names["auxiliary"] {
+            let auxiliaryURL = stage.appendingPathComponent(auxiliaryName)
+            if options.repairAuxiliaryDuration {
+                let exported = try RustCore.exportAuxiliary(motion: motionData)
+                try Data(exported.mov).write(to:auxiliaryURL)
+                // Track info for the manifest/detail comes from a system
+                // read of the exported file (same keys as the helper).
+                let auxAsset = AVURLAsset(url:auxiliaryURL)
+                guard let auxTrack = auxAsset.tracks(withMediaType:.video).first else { throw Failure("辅助轨导出失败") }
+                let auxInfo = try trackInfo(auxAsset,auxTrack)
+                let sourceFile = work.appendingPathComponent("aux-source.mp4")
+                try Data(photo.video).write(to:sourceFile)
+                let sourceAsset = AVURLAsset(url:sourceFile)
+                let sourceTrackId = sourceAsset.tracks(withMediaType:.video).dropFirst().first?.trackID
+                var auxDict: [String:Any] = ["frames":auxInfo.pts.count,
+                    "width":auxTrack.naturalSize.width,"height":auxTrack.naturalSize.height,
+                    "duration_seconds":seconds(auxTrack.timeRange.duration),
+                    "compressed_sha256":auxInfo.hash,"max_pts_shift_seconds":0,"audio_included":false]
+                if let sourceTrackId = sourceTrackId { auxDict["source_track_id"] = sourceTrackId }
+                if exported.repaired {
+                    auxDict["duration_repair"] = ["method":exported.repairMethod as Any,
+                        "original_duration_seconds":0,
+                        "repaired_duration_seconds":exported.repairedDurationSeconds as Any,
+                        "sample_pts_unchanged":true,
+                        "original_sample_sha256":exported.originalSampleSha256 as Any]
+                }
+                auxiliary = auxDict
+            } else {
+                // Repair off: export the auxiliary track verbatim via the
+                // helper (the FFI entry always repairs when applicable).
+                let exportSource = work.appendingPathComponent("auxiliary-input.mp4")
+                try Data(photo.video).write(to:exportSource)
+                auxiliary = try exportAuxiliary(["input":exportSource.path,"output":auxiliaryURL.path])
+            }
+            if let date = try source.resourceValues(forKeys:[.contentModificationDateKey]).contentModificationDate {
+                try fm.setAttributes([.modificationDate:date],ofItemAtPath:auxiliaryURL.path)
+            }
+        }
+        if options.outputMode == "auxiliary-only" {
+            let name = names["auxiliary"]!
+            let manifest: [String:Any] = ["version":"1.1.4","implementation":revision,"source":source.path,"source_sha256":sourceHash,
+                "original_filename":source.lastPathComponent,"options":options.json,"output_files":names,
+                "output_sha256":[name:try hashFile(stage.appendingPathComponent(name))],"timing":auxiliary!,
+                "auxiliary_video":auxiliary!,"hdr":["status":"not-applicable"],"warnings":[]]
+            try json(manifest,to:stage.appendingPathComponent("manifest.json"))
+            try timings.measure("validation_and_publish") { try publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles) }
+            return ["status":"converted","source":source.path,"output":target.path,"detail":"辅助轨已单独导出：\(auxiliary!["width"]!) × \(auxiliary!["height"]!)，\(auxiliary!["frames"]!) 帧，\(auxiliary!["duration_seconds"]!) 秒；无音频，未重新编码" + (auxiliary?["duration_repair"] == nil ? "" : "；已按设置修复零时长，画面数据未改变"),"auxiliary_video":auxiliary!]
+        }
+        if auxiliary?["duration_repair"] != nil { warnings.append("已按高级设置修复独立辅助视频的零时长，压缩画面与主封面时间未改变") }
+        var image = photo.still
+        var selectedCandidate: [String:Any]?
+        if let index = options.coverIndex, let session = candidateSession {
+            let selected = work.appendingPathComponent("selected-cover.jpg")
+            selectedCandidate = try session.writeJPEG(index,to:selected)
+            image = Array(try Data(contentsOf:selected))
+        }
+        let uuid = UUID().uuidString
+        var liveOpts: [String:Any] = ["uuid":uuid,"missing_time":options.missingTime,"time_domain":options.timeDomain,"video_track":options.videoTrack]
+        if let index = options.coverIndex, let candidate = try candidateSession?.candidate(index) {
+            liveOpts["timestamp_us"] = candidate.timestampUs
+            liveOpts["time_domain"] = "presentation"
+            liveOpts["timestamp_source"] = "high-res-candidate"
+        } else {
+            if let timestamp = photo.timestamp { liveOpts["timestamp_us"] = timestamp }
+            if let frame = photo.coverFrame { liveOpts["cover_frame_index"] = frame }
+        }
+        if options.coverIndex == nil && photo.timestampTag == "MP4:motionphoto-image-meta" {
+            liveOpts["timestamp_source"] = "video-metadata"
+            warnings.append("主 XMP 缺失；已从内嵌视频元数据恢复原始封面时间")
+        }
+        func timingDict(_ cover: RustCore.CoverMapping, _ tracks: Int, _ requestedUs: Int?, _ identifier: String) -> [String:Any] {
+            let requested = requestedUs ?? cover.frame_time_us ?? 0
+            return ["requested_seconds":Double(requested) / 1e6,
+                "mapped_source_seconds":Double(cover.mapped_us ?? cover.frame_time_us ?? 0) / 1e6,
+                "timestamp_domain":cover.domain as Any,"cover_seconds":Double(cover.frame_time_us ?? 0) / 1e6,
+                "source_frame_duration_seconds":Double(cover.frame_duration_us ?? 0) / 1e6,
+                "cover_duration_seconds":Double(cover.frame_duration_us ?? 0) / 1e6,
+                "snap_error_seconds":Double(cover.error_us ?? 0) / 1e6,
+                "timing_policy":cover.policy as Any,"tracks":tracks,"identifier":identifier]
+        }
+        let still: [UInt8]
+        let mov: [UInt8]
+        var hdr: [String:Any]
+        var timing: [String:Any]
+        let mainRequested = liveOpts["timestamp_us"] as? Int
+        if options.coverIndex != nil {
+            var candOpts = liveOpts; candOpts["still_override_kind"] = "candidate"
+            let result = try timings.measure("media_remux_and_validation") {
+                try RustCore.toLive(motion:motionData,optsJSON:try RustCore.optsJSON(candOpts),stillOverride:image)
+            }
+            still = result.still; mov = result.mov; hdr = RustCore.hdrDictionary(result.hdr)
+            timing = timingDict(result.cover,result.videoTracks,mainRequested,uuid)
+        } else {
+            do {
+                let result = try timings.measure("media_remux_and_validation") {
+                    try RustCore.toLive(motion:motionData,optsJSON:try RustCore.optsJSON(liveOpts),stillOverride:nil)
+                }
+                still = result.still; mov = result.mov; hdr = RustCore.hdrDictionary(result.hdr)
+                timing = timingDict(result.cover,result.videoTracks,mainRequested,uuid)
+            } catch is RustCore.NeedsPixelWork {
+                // Legacy Apple HDR: pixel LUT via the helper, attach via
+                // Rust, retry with the preconverted still.
+                if options.legacyHDR {
+                    do {
+                        let (legacy,_) = try PhotoHDR.legacy(image)
+                        guard let legacy = legacy else { throw Failure("旧版增益图无法转换") }
+                        let oldMap = work.appendingPathComponent("old-gain.jpg"), newMap = work.appendingPathComponent("gain.jpg")
+                        try Data(legacy.image).write(to:oldMap)
+                        var gainResult = try legacyGain(["input":oldMap.path,"gain_output":newMap.path,"stops":legacy.stops])
+                        let icc = (gainResult.removeValue(forKey:"srgb_icc_base64") as? String).flatMap { Data(base64Encoded:$0) }
+                        guard gainResult["status"] as? String == "converted", let icc = icc else {
+                            throw Failure(gainResult["reason"] as? String ?? "旧版增益图无法转换，已保留原始数据")
+                        }
+                        let ultra = try RustCore.attachGain(base:image,gain:Array(Data(contentsOf:newMap)),stops:legacy.stops,srgbICC:Array(icc))
+                        var retryOpts = liveOpts; retryOpts["still_override_kind"] = "preconverted-ultra"
+                        let result = try timings.measure("media_remux_and_validation") {
+                            try RustCore.toLive(motion:motionData,optsJSON:try RustCore.optsJSON(retryOpts),stillOverride:ultra)
+                        }
+                        still = result.still; mov = result.mov; hdr = RustCore.hdrDictionary(result.hdr)
+                        timing = timingDict(result.cover,result.videoTracks,mainRequested,uuid)
+                    } catch {
+                        // Old behavior: a failed legacy attempt keeps the
+                        // original still and still converts.
+                        warnings.append(error.localizedDescription)
+                        var fallbackOpts = liveOpts; fallbackOpts["still_override_kind"] = "candidate"
+                        let cleaned = try RustCore.liveStill(image,uuid:uuid,updateIdentifier:true)
+                        let result = try timings.measure("media_remux_and_validation") {
+                            try RustCore.toLive(motion:motionData,optsJSON:try RustCore.optsJSON(fallbackOpts),stillOverride:cleaned)
+                        }
+                        still = result.still; mov = result.mov
+                        hdr = ["input":"legacy-or-sdr","status":"unchanged","reason":"旧 HDR 尝试转换未完成，原格式已保留"]
+                        timing = timingDict(result.cover,result.videoTracks,mainRequested,uuid)
+                    }
+                } else {
+                    // Legacy conversion off: keep the original still.
+                    var fallbackOpts = liveOpts; fallbackOpts["still_override_kind"] = "candidate"
+                    let cleaned = try RustCore.liveStill(image,uuid:uuid,updateIdentifier:true)
+                    let result = try timings.measure("media_remux_and_validation") {
+                        try RustCore.toLive(motion:motionData,optsJSON:try RustCore.optsJSON(fallbackOpts),stillOverride:cleaned)
+                    }
+                    still = result.still; mov = result.mov
+                    hdr = ["input":"legacy-or-sdr","status":"unchanged","reason":"旧版 HDR 转换已关闭"]
+                    timing = timingDict(result.cover,result.videoTracks,mainRequested,uuid)
+                }
+            }
+        }
+        // Shell guards (the C ABI verifies internally as well).
+        guard try PhotoHDR.honorPrivate(still) == PhotoHDR.honorPrivate(image) else { throw Failure("荣耀私有 HDR 静态扩展字节校验失败") }
+        guard try (PhotoHEIF.matches(still) ? (PhotoHEIF.layout(still).boxes.allSatisfy { !["mpvd","moov"].contains($0.type) }) : MLJPEG.staticOnly(still) == still) else { throw Failure("导出静态图片仍包含图片范围之外的数据") }
+        if hdr["status"] as? String != "converted" {
+            guard try PhotoFormat.codingHash(still) == PhotoFormat.codingHash(image) else { throw Failure("静态主图压缩数据发生变化") }
+        }
+        let jpg = stage.appendingPathComponent(names["still"]!), movFile = stage.appendingPathComponent(names["video"]!)
+        try Data(still).write(to:jpg)
+        try Data(mov).write(to:movFile)
+        var candidatePhotos: [[String:Any]] = []
+        if options.outputMode == "livephoto+candidates" {
+            let stem = source.deletingPathExtension().lastPathComponent
+            func pairCandidate(role: String, name: String, timestamp: Int?, frame: Int?, domain: String) throws -> [String:Any]? {
+                guard options.candidateDelivery == "livephoto" else { return nil }
+                if token.isCancelled { throw Failure("已停止") }
+                let stillURL = stage.appendingPathComponent(name)
+                let id = UUID().uuidString
+                let bytes = try RustCore.liveStill(Array(Data(contentsOf:stillURL)),uuid:id,updateIdentifier:true)
+                try Data(bytes).write(to:stillURL)
+                let movieName = URL(fileURLWithPath:name).deletingPathExtension().lastPathComponent + ".mov"
+                var candOpts: [String:Any] = ["uuid":id,"missing_time":options.missingTime,"time_domain":domain,"video_track":"primary","still_override_kind":"candidate"]
+                if let timestamp = timestamp { candOpts["timestamp_us"] = timestamp }
+                if let frame = frame { candOpts["cover_frame_index"] = frame }
+                if role != "original" { candOpts["timestamp_source"] = "high-res-candidate" }
+                let result = try timings.measure("media_remux_and_validation") {
+                    try RustCore.toLive(motion:motionData,optsJSON:try RustCore.optsJSON(candOpts),stillOverride:bytes)
+                }
+                try Data(result.mov).write(to:stage.appendingPathComponent(movieName))
+                names[candidateVideoRole(role)] = movieName
+                return timingDict(result.cover,result.videoTracks,timestamp,id)
+            }
+            if options.coverIndex != nil {
+                let name = stem + ".original." + source.pathExtension
+                let original = try RustCore.liveStill(photo.still,uuid:uuid,updateIdentifier:false)
+                try Data(original).write(to:stage.appendingPathComponent(name))
+                names["original"] = name
+                var info: [String:Any] = ["role":"original","file":name,"encoding":"original-photo-preserved"]
+                if let timing = try pairCandidate(role:"original",name:name,timestamp:photo.timestamp,frame:photo.coverFrame,domain:options.timeDomain) { info["timing"] = timing }
+                candidatePhotos.append(info)
+            }
+            for candidate in candidateSession?.candidates ?? [] where candidate.index != options.coverIndex {
+                if token.isCancelled { throw Failure("已停止") }
+                let role = "candidate_\(candidate.index)", name = stem + String(format:".candidate-%03d.jpg",candidate.index + 1)
+                var info = try candidateSession!.writeJPEG(candidate.index,to:stage.appendingPathComponent(name))
+                info["role"] = role; info["file"] = name
+                names[role] = name; candidatePhotos.append(info)
+                if let timing = try pairCandidate(role:role,name:name,timestamp:candidate.timestampUs,frame:nil,domain:"presentation") {
+                    candidatePhotos[candidatePhotos.count - 1]["timing"] = timing
+                }
+            }
+        }
+        if let date = try source.resourceValues(forKeys:[.contentModificationDateKey]).contentModificationDate {
+            for url in [jpg,movFile] { try fm.setAttributes([.modificationDate:date], ofItemAtPath:url.path) }
+        }
+        var hashes: [String:String] = [:]
+        for name in names.values { hashes[name] = try hashFile(stage.appendingPathComponent(name)) }
+        var manifest: [String:Any] = ["version":"1.1.4","implementation":revision,"source":source.path,
+            "source_sha256":sourceHash,"identifier":uuid,"options":options.json,
+            "output_files":names,"original_filename":source.lastPathComponent,
+            "source_timestamp_us":photo.timestamp.map { $0 as Any } ?? NSNull(),
+            "source_timestamp_tag":photo.timestampTag.map { $0 as Any } ?? NSNull(),
+            "source_cover_frame_index":photo.coverFrame.map { $0 as Any } ?? NSNull(),"source_format":photo.format,"still_contains_embedded_media":false,
+            "timing":timing,"hdr":hdr,"warnings":warnings,"primary_coding_sha256":try PhotoFormat.codingHash(still),
+            "auxiliary_sha256":try PhotoFormat.auxiliaryHashes(still),"output_sha256":hashes]
+        if let auxiliary = auxiliary { manifest["auxiliary_video"] = auxiliary }
+        if let selectedCandidate = selectedCandidate { manifest["selected_cover"] = selectedCandidate }
+        if options.outputMode == "livephoto+candidates" { manifest["candidate_photos"] = candidatePhotos }
+        try json(manifest,to:stage.appendingPathComponent("manifest.json"))
+        try timings.measure("validation_and_publish") { try publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles) }
+        return ["status":"converted","source":source.path,"output":target.path,"timing":timing,"hdr":hdr,"warnings":warnings,
+            "output_files":names,
+            "detail":(warnings.isEmpty ? (hdr["reason"] as? String ?? "已转换并校验") : warnings.joined(separator:"；")) +
+                (options.outputMode == "livephoto+candidates" ? "；另存 \(candidatePhotos.count) 张" + (options.candidateDelivery == "livephoto" ? "独立实况照片" : "独立高清静态照片") : "")]
+        #endif
     }
     static func run(source: URL, output: URL, options: ConversionOptions, token: StopToken,
                     progress: @escaping (BatchProgress)->Void) throws -> BatchOutcome {

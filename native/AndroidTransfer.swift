@@ -15,6 +15,7 @@ enum AndroidTransfer {
         return Failure(classified ? reason : "文件损坏：" + reason)
     }
     private static func inspectStructure(_ data: [UInt8], parsed: NativeMotionPhoto?) throws -> NativeMotionPhoto {
+        #if MOTIONLIVE_SWIFT_REFERENCE
         guard data.starts(with:[255,216]) else { throw Failure("来源不支持：暂仅支持 Google → 荣耀的 Motion Photo JPEG，不支持 HEIC") }
         guard let image = CGImageSourceCreateWithData(Data(data) as CFData,nil), CGImageSourceGetStatus(image) == .statusComplete, CGImageSourceCreateImageAtIndex(image,0,[kCGImageSourceShouldCacheImmediately:true] as CFDictionary) != nil else { throw Failure("文件损坏：JPEG 图像无法完整读取") }
         let packets = try MLXMP.packets(data)
@@ -82,6 +83,19 @@ enum AndroidTransfer {
         let result = try AndroidExport.assemble(still:photo.still,video:photo.video,options:AndroidOptions(vendor:"google"),time:times[0],frame:0)
         try validate(photo, result:result)
         return photo
+        #else
+        // Strict structure check + write via Rust; the two checks that
+        // cannot move stay in Swift: the CGImageSource full-decode
+        // check, and the XMP metadata tree comparison in validate().
+        // Rust strict errors reuse the Swift category prefixes, so
+        // rejection() classifies them unchanged.
+        guard data.starts(with:[255,216]) else { throw Failure("来源不支持：暂仅支持 Google → 荣耀的 Motion Photo JPEG，不支持 HEIC") }
+        guard let image = CGImageSourceCreateWithData(Data(data) as CFData,nil), CGImageSourceGetStatus(image) == .statusComplete, CGImageSourceCreateImageAtIndex(image,0,[kCGImageSourceShouldCacheImmediately:true] as CFDictionary) != nil else { throw Failure("文件损坏：JPEG 图像无法完整读取") }
+        let photo = try parsed ?? PhotoFormat.parse(data)
+        let (bytes, _) = try RustCore.vendorConvert(motion:data,target:"google")
+        try validate(photo, result:bytes)
+        return photo
+        #endif
     }
 
     static func metadata(_ still:[UInt8]) throws -> [String] {
@@ -153,6 +167,7 @@ enum AndroidTransfer {
               try metadata(after.still) == metadata(photo.still) else { throw Failure("结构无法无损保留：图像、EXIF、增益图或必要元数据校验失败") }
     }
     static func cover(_ photo:NativeMotionPhoto, folder:URL) throws -> [String:Any] {
+        #if MOTIONLIVE_SWIFT_REFERENCE
         let file = folder.appendingPathComponent("source.mp4")
         try Data(photo.video).write(to:file)
         let asset = AVURLAsset(url:file)
@@ -166,6 +181,19 @@ enum AndroidTransfer {
             let timing = try sourceCoverTiming(["timestamp_us":photo.timestamp!,"time_domain":"auto","missing_time":"error"],video:info,selection:"primary",primaryInfo:{info})
             return ["cover_timestamp_us":photo.timestamp!,"mapped_seconds":seconds(timing.mapped),"domain":timing.domain,"video_sha256":sha(Data(photo.video))]
         } catch { throw Failure("封面时间不明确：" + error.localizedDescription) }
+        #else
+        // Edit-list-aware mapping from bytes; the folder argument is
+        // kept for the callers but no longer needs a source.mp4 file.
+        let mapping: RustCore.CoverMapping
+        do {
+            mapping = try RustCore.coverMap(video:photo.video,optsJSON:try RustCore.optsJSON(
+                ["timestamp_us":photo.timestamp!,"time_domain":"auto","missing_time":"error"]))
+        } catch { throw Failure("封面时间不明确：" + error.localizedDescription) }
+        guard let mapped = mapping.mapped_us, let domain = mapping.domain else {
+            throw Failure("封面时间不明确：映射结果不完整")
+        }
+        return ["cover_timestamp_us":photo.timestamp!,"mapped_seconds":Double(mapped) / 1e6,"domain":domain,"video_sha256":sha(Data(photo.video))]
+        #endif
     }
     static func scanFile(_ source:URL, relative:String, bytes:[UInt8]? = nil, parsed:Result<NativeMotionPhoto,Error>? = nil) -> ScanRow {
         let before = SourceVersion.read(source)
@@ -197,10 +225,17 @@ enum AndroidTransfer {
         let stage = target.deletingLastPathComponent().appendingPathComponent(".motionlive-" + UUID().uuidString)
         defer { try? fm.removeItem(at:stage) }
         try fm.createDirectory(at:stage,withIntermediateDirectories:true)
-        let photo = try timings.measure("input_validation") { try inspect(Array(Data(contentsOf:source))) }
+        let data = Array(Data(contentsOf:source))
+        let photo = try timings.measure("input_validation") { try inspect(data) }
         let timing = try cover(photo,folder:stage)
+        #if MOTIONLIVE_SWIFT_REFERENCE
         try fm.removeItem(at:stage.appendingPathComponent("source.mp4"))
         let result = try AndroidExport.assemble(still:photo.still,video:photo.video,options:AndroidOptions(vendor:"google"),time:photo.timestamp!,frame:0)
+        #else
+        // The new cover() writes no source.mp4, so there is nothing to
+        // remove; the conversion bytes come from Rust directly.
+        let (result, _) = try RustCore.vendorConvert(motion:data,target:"google")
+        #endif
         let name = source.deletingPathExtension().lastPathComponent + ".MP.jpg", file = stage.appendingPathComponent(name)
         try Data(result).write(to:file)
         try validate(photo,result:Array(Data(contentsOf:file)))

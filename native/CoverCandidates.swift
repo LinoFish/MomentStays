@@ -28,7 +28,38 @@ final class CoverCandidateSession {
         let asset = AVURLAsset(url:url), videos = asset.tracks(withMediaType:.video)
         guard videos.count <= 2 else { throw Failure("高清候选需要唯一的辅助视频轨") }
         guard videos.count == 2 else { return nil }
+        #if MOTIONLIVE_SWIFT_REFERENCE
         return try CoverCandidateSession(asset:asset,track:videos[1],metadata:MotionVideoMetadata.imageTimes(video),repair:repaired?.1)
+        #else
+        // Candidate timestamps come from Rust (same sample table, edit-list
+        // and high-resolution descriptor rules); the decode copy above and
+        // the AVAssetImageGenerator decoding below stay in Swift. FFI
+        // sample times are media microseconds; the generator path maps
+        // them through presented() again, and a sub-microsecond rounding
+        // cannot cross a millisecond-scale frame boundary.
+        let (_, list) = try RustCore.candidates(video: video)
+        let choices = try list.map { c -> CoverCandidate in
+            guard let index = c.index, let us = c.timestamp_us, let source = c.time_source, let sample = c.sample_time_us else {
+                throw Failure("Rust bridge: invalid candidates response")
+            }
+            return CoverCandidate(index:index,timestampUs:us,timeSource:source,
+                sampleTime:CMTime(value:CMTimeValue(sample),timescale:1_000_000))
+        }
+        return try CoverCandidateSession(asset:asset,track:videos[1],choices:choices,repair:repaired?.1)
+        #endif
+    }
+
+    private init(asset: AVAsset, track: AVAssetTrack, choices: [CoverCandidate], repair: [String:Any]?) throws {
+        self.track = track; durationRepair = repair
+        candidates = choices
+        let composition = AVMutableComposition()
+        guard let output = composition.addMutableTrack(withMediaType:.video,preferredTrackID:kCMPersistentTrackID_Invalid) else { throw Failure("无法读取高清候选画面") }
+        try output.insertTimeRange(track.timeRange,of:track,at:.zero)
+        output.preferredTransform = track.preferredTransform
+        generator = AVAssetImageGenerator(asset:composition)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
     }
 
     private init(asset: AVAsset, track: AVAssetTrack, metadata: MotionVideoMetadata.ImageTimes?, repair: [String:Any]?) throws {

@@ -130,7 +130,7 @@ pub fn identify(data: &[u8], format: &str) -> Identity {
 
 /// Port of Swift `PhotoHDR.hasISO`: an APP2 segment carrying the
 /// ISO 21496-1 urn, in the still or any MPF auxiliary image.
-fn has_iso(still: &[u8]) -> Result<bool> {
+pub(crate) fn has_iso(still: &[u8]) -> Result<bool> {
     const ISO_URN: &[u8] = b"urn:iso:std:iso:ts:21496:-1\0";
     let mut images: Vec<&[u8]> = vec![still];
     for r in pyjpeg::mpf_images(still)?.iter().skip(1) {

@@ -855,6 +855,7 @@ enum PhotoFormat {
             "original_sample_sha256":sha(Data(data[offset..<offset + size]))])
     }
     static func liveStill(_ original: [UInt8], uuid: String, updateIdentifier: Bool = true) throws -> [UInt8] {
+        #if MOTIONLIVE_SWIFT_REFERENCE
         if PhotoHEIF.matches(original) { return try PhotoHEIF.liveStill(original,uuid:uuid) }
         let data = try MLJPEG.staticOnly(original)
         var replacements: [Int:[UInt8]] = [:], insertion: [UInt8] = []
@@ -886,5 +887,10 @@ enum PhotoFormat {
         let after = try MLJPEG.auxiliary(result).dropFirst().map { sha(Data($0)) }
         guard before == after else { throw Failure("增益图字节校验失败") }
         return result
+        #else
+        // HEIC input always takes the HEIC path inside (identifier always
+        // written), matching the old PhotoHEIF.liveStill behavior.
+        return try RustCore.liveStill(original, uuid: uuid, updateIdentifier: updateIdentifier)
+        #endif
     }
 }

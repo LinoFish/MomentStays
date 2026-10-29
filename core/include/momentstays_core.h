@@ -32,9 +32,12 @@
  * - A Rust panic inside inspect/parse is caught at the FFI boundary
  *   and reported as failure, never unwound across FFI.
  *
- * NOTE: the parse/free_bytes declarations below were added by hand in
- * cbindgen style (cbindgen is not installed on the Linux builder);
- * regenerate with cbindgen to confirm byte-identical output.
+ * NOTE: the parse/free_bytes declarations and the conversion
+ * entries below (to_live/to_motion/attach_gain/live_still/
+ * scan_row/cover_map/export_auxiliary/vendor_convert/candidates/
+ * live_pair) were added by hand in cbindgen style (cbindgen is not
+ * installed on the Linux builder); regenerate with cbindgen to
+ * confirm byte-identical output.
  */
 
 #ifndef momentstays_core_h
@@ -94,5 +97,115 @@ int32_t momentstays_coding_hash(const uint8_t *data, uintptr_t len, char **out_j
  * {"error": ...} JSON on failure. HEIC input yields an empty list.
  */
 int32_t momentstays_auxiliary_hashes(const uint8_t *data, uintptr_t len, char **out_json);
+
+/**
+ * Conversion entries (ROADMAP wiring): all return 0 with a JSON
+ * string in *out_json (free with momentstays_free_string) whose
+ * `status` is "ok", "needs_pixel_work" (only for conversion
+ * entries that can ask the caller for a pixel step), or "error"
+ * (with an `error` message). On a non-ok status, byte outputs are
+ * NULL/0. NULL out-pointers, or NULL input with nonzero length,
+ * are a hard failure (nonzero, outputs untouched); NULL input with
+ * zero length is treated as empty input (soft error JSON). A NULL
+ * opts_json means the default (empty) options object. A Rust panic
+ * is caught and reported as return value 2.
+ */
+
+/**
+ * Android motion photo -> Apple Live Photo: JSON carries cover
+ * (frame/frame_time_us/frame_duration_us/mapped_us/domain/policy),
+ * hdr (input/status/reason/output), and video_tracks; still and
+ * mov bytes are freed with momentstays_free_bytes. opts_json:
+ * uuid (required), timestamp_us, cover_frame_index,
+ * timestamp_source, time_domain (default "auto"), video_track
+ * (default "primary"), missing_time (default "error"),
+ * still_override_kind. When has_override is nonzero, still_override
+ * replaces the motion still (the caller performs the pixel step,
+ * e.g. legacy gain LUT, then retries with the preconverted still).
+ */
+int32_t momentstays_to_live(const uint8_t *motion, uintptr_t motion_len, const char *opts_json, const uint8_t *still_override, uintptr_t still_override_len, int32_t has_override, char **out_json, const uint8_t **out_still, uintptr_t *out_still_len, const uint8_t **out_mov, uintptr_t *out_mov_len);
+
+/**
+ * Apple Live Photo -> Android motion photo: JSON carries hdr
+ * (input/status/output), cover_time_us, and cover_frame. opts_json:
+ * vendor (required), container (default "jpeg"), cover_time_us,
+ * cover_frame, preserve_jpeg (default true). A needs_pixel_work
+ * result names the reason ("legacy-hdr" is not possible here;
+ * "heic-to-jpeg" when a HEIC still must be re-encoded to JPEG,
+ * "reencode-requested" when preserve_jpeg is false) and the caller
+ * retries with prepared bytes.
+ */
+int32_t momentstays_to_motion(const uint8_t *still, uintptr_t still_len, const uint8_t *movie, uintptr_t movie_len, const char *opts_json, char **out_json, const uint8_t **out_bytes, uintptr_t *out_bytes_len);
+
+/**
+ * Attach a (caller-converted) gain map to a base still and write
+ * the Ultra HDR XMP + MPF index. `stops` is the gain map headroom
+ * in stops. When has_icc is nonzero, srgb_icc is inserted as the
+ * APP2 ICC profile first (the legacy color-profile step).
+ */
+int32_t momentstays_attach_gain(const uint8_t *base, uintptr_t base_len, const uint8_t *gain, uintptr_t gain_len, double stops, const uint8_t *srgb_icc, uintptr_t srgb_icc_len, int32_t has_icc, char **out_json, const uint8_t **out_bytes, uintptr_t *out_bytes_len);
+
+/**
+ * Clean a still for Live Photo use (strip motion XMP keys). When
+ * update_identifier is nonzero, uuid is written as the EXIF
+ * MakerNote content identifier (tag 0x11); otherwise the existing
+ * identifier is left untouched. HEIC input always takes the HEIC
+ * path and ignores the flag.
+ */
+int32_t momentstays_live_still(const uint8_t *still, uintptr_t still_len, const char *uuid, int32_t update_identifier, char **out_json, const uint8_t **out_bytes, uintptr_t *out_bytes_len);
+
+/**
+ * One scan row for a file, mirroring the Swift scanner: JSON
+ * carries is_motion, hdr, cover, detail, manufacturer,
+ * manufacturer_detail, and confirmed_static. Unparseable files
+ * yield an error row inside the JSON (status stays "ok");
+ * relative/source paths are filled in by the Swift shell.
+ */
+int32_t momentstays_scan_row(const uint8_t *data, uintptr_t len, char **out_json);
+
+/**
+ * Map a cover request onto a video's sample table (edit-list
+ * aware): opts_json carries cover_frame_index, timestamp_us,
+ * timestamp_source, time_domain (default "auto"), video_track
+ * (default "primary"), and missing_time (default "error").
+ * JSON carries cover (same shape as momentstays_to_live).
+ */
+int32_t momentstays_cover_map(const uint8_t *video, uintptr_t video_len, const char *opts_json, char **out_json);
+
+/**
+ * Export the auxiliary (second) video track of a motion file as a
+ * silent MOV, repairing a zero-duration auxiliary track first when
+ * its layout allows it. JSON carries repaired, repair_method,
+ * repaired_duration_seconds, and original_sample_sha256.
+ */
+int32_t momentstays_export_auxiliary(const uint8_t *motion, uintptr_t motion_len, char **out_json, const uint8_t **out_mov, uintptr_t *out_mov_len);
+
+/**
+ * Strict Google motion-photo conversion (Google -> Honor layout):
+ * structural XMP/Directory/range/timestamp checks, then model
+ * write with a parse-back verification. target is currently only
+ * "google". The CGImageSource full-decode check and the XMP
+ * metadata tree comparison stay in the Swift caller (see
+ * AndroidTransfer.validate).
+ */
+int32_t momentstays_vendor_convert(const uint8_t *motion, uintptr_t motion_len, const char *target, char **out_json, const uint8_t **out_bytes, uintptr_t *out_bytes_len);
+
+/**
+ * Candidate cover timestamps for a two-track video: JSON carries
+ * repaired and candidates (index/timestamp_us/time_source/
+ * sample_time_us). The caller still decodes candidate JPEGs with
+ * AVAssetImageGenerator.
+ */
+int32_t momentstays_candidates(const uint8_t *video, uintptr_t video_len, char **out_json);
+
+/**
+ * Pair a Live Photo still with its movie (the Swift
+ * AndroidExport.pair path): JSON carries still_identifier,
+ * movie_identifier, cover_time_us, cover_frame, domain, policy,
+ * and maker33 (whether MakerNote tag 33 is present).
+ * time_domain (NULL = "auto") is the cover-time interpretation
+ * domain ("auto" | "media" | "presentation").
+ */
+int32_t momentstays_live_pair(const uint8_t *still, uintptr_t still_len, const uint8_t *movie, uintptr_t movie_len, const char *time_domain, char **out_json);
 
 #endif  /* momentstays_core_h */

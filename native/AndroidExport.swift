@@ -30,6 +30,7 @@ enum AndroidExport {
         return values[0]
     }
     static func pair(_ still: URL, domain: String = "auto") throws -> Pair {
+        #if MOTIONLIVE_SWIFT_REFERENCE
         let id = try imageIdentifier(still)
         let files = try FileManager.default.contentsOfDirectory(at:still.deletingLastPathComponent(),includingPropertiesForKeys:nil)
             .filter { ["mov","mp4"].contains($0.pathExtension.lowercased()) }
@@ -54,6 +55,23 @@ enum AndroidExport {
         }
         guard matches.count == 1, let index = matches.first, seconds(sorted[index]) >= 0 else { throw Failure("封面时间越界或编辑时间线存在歧义；未使用中点猜测，请检查高级时间域选项") }
         return Pair(still:still,movie:matching[0],identifier:id,cover:sorted[index],frame:index)
+        #else
+        // File discovery still uses the system (CGImageSource identifier +
+        // AVAsset metadata match); cover mapping moves to Rust.
+        let id = try imageIdentifier(still)
+        let files = try FileManager.default.contentsOfDirectory(at:still.deletingLastPathComponent(),includingPropertiesForKeys:nil)
+            .filter { ["mov","mp4"].contains($0.pathExtension.lowercased()) }
+        let matching = files.filter { (try? videoIdentifier($0)) == id }
+        guard matching.count == 1 else { throw Failure(matching.isEmpty ? "未找到内容标识匹配的视频；仅分享静态图不能恢复实况" : "多个视频使用同一内容标识，请将正确配对单独放入文件夹") }
+        let result = try RustCore.livePair(still:Array(try Data(contentsOf:still)),movie:Array(try Data(contentsOf:matching[0])),domain:domain)
+        guard let movieId = result.movie_identifier, movieId == id,
+              let stillId = result.still_identifier, stillId == id,
+              let coverUs = result.cover_time_us, let frame = result.cover_frame else {
+            throw Failure("实况配对或封面映射失败")
+        }
+        return Pair(still:still,movie:matching[0],identifier:id,
+            cover:CMTime(value:CMTimeValue(coverUs),timescale:1_000_000),frame:frame)
+        #endif
     }
     static func selection(_ sources: [URL]) throws -> (base:URL,entries:[URL]) {
         var images: [URL] = []
@@ -244,6 +262,7 @@ extension AndroidExport {
                   let oldMovie = previous["paired_video_source"] as? String, let oldHash = previous["paired_video_sha256"] as? String, try NativeBatch.hashFile(URL(fileURLWithPath:oldMovie)) == oldHash else { throw Failure("已有输出的输入或设置不同，请选择覆盖或跳过") }
             return ["status":"resumed","source":source.path,"output":target.path,"detail":"已验证安卓动态照片，跳过重复转换"]
         }
+        #if MOTIONLIVE_SWIFT_REFERENCE
         let paired = try pair(source,domain:options.timeDomain), videoHash = try NativeBatch.hashFile(paired.movie)
         let work = fm.temporaryDirectory.appendingPathComponent("motionlive-reverse-" + UUID().uuidString)
         let stage = target.deletingLastPathComponent().appendingPathComponent(".motionlive-" + UUID().uuidString)
@@ -274,5 +293,64 @@ extension AndroidExport {
         guard try NativeBatch.hashFile(paired.movie) == videoHash else { throw Failure("配对视频在转换期间发生变化，未发布") }
         try timings.measure("validation_and_publish") { try NativeBatch.publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles) }
         return ["status":"converted","source":source.path,"output":target.path,"detail":"已导出 \(config.vendor) \(config.container.uppercased()) 动态照片；封面 \(Double(time) / 1_000_000) 秒","hdr":hdr,"timing":timing,"warnings":warnings]
+        #else
+        // Rust conversion core. File discovery (pair) and the manifest /
+        // publish shell stay in Swift; remux, HDR preparation, vendor
+        // writing, and read-back verification move to the C ABI.
+        let paired = try pair(source,domain:options.timeDomain), videoHash = try NativeBatch.hashFile(paired.movie)
+        let stage = target.deletingLastPathComponent().appendingPathComponent(".motionlive-" + UUID().uuidString)
+        defer { try? fm.removeItem(at:stage) }
+        try fm.createDirectory(at:stage,withIntermediateDirectories:true)
+        if token.isCancelled { throw Failure("已停止") }
+        let stillBytes = Array(try Data(contentsOf:source)), movieBytes = Array(try Data(contentsOf:paired.movie))
+        let time = Int((seconds(paired.cover) * 1_000_000).rounded())
+        // Huawei takes the frame number, every other vendor the time:
+        // this mirrors the old assemble inputs and their verification.
+        var motionOpts: [String:Any] = ["vendor":config.vendor,"container":config.container,"preserve_jpeg":config.preserveJPEG]
+        if config.vendor == "huawei" { motionOpts["cover_frame"] = paired.frame }
+        else { motionOpts["cover_time_us"] = time }
+        let result: RustCore.ToMotionResult
+        var hdr: [String:Any]
+        do {
+            result = try RustCore.toMotion(still:stillBytes,movie:movieBytes,optsJSON:try RustCore.optsJSON(motionOpts))
+            hdr = RustCore.hdrDictionary(result.hdr)
+        } catch is RustCore.NeedsPixelWork {
+            // Pixel step stays in Swift (system decode/re-encode and the
+            // legacy gain LUT); AndroidHDR.prepare covers all three
+            // pixel reasons (heic-to-jpeg, reencode-requested,
+            // legacy-hdr). The prepared still is retried once with
+            // preserve_jpeg forced on, so a second NeedsPixelWork is a
+            // hard failure, never a loop.
+            let (prepared, preparedHdr) = try AndroidHDR.prepare(source,options:config)
+            var retryOpts: [String:Any] = ["vendor":config.vendor,"container":config.container,"preserve_jpeg":true]
+            if config.vendor == "huawei" { retryOpts["cover_frame"] = paired.frame }
+            else { retryOpts["cover_time_us"] = time }
+            result = try RustCore.toMotion(still:prepared,movie:movieBytes,optsJSON:try RustCore.optsJSON(retryOpts))
+            hdr = preparedHdr
+        }
+        let bytes = result.bytes
+        // Shell read-back check (the C ABI verifies internally as well):
+        // parse + cover, exactly as the old convert verified.
+        let decoded = try PhotoFormat.parse(bytes)
+        if config.vendor == "huawei" { guard decoded.coverFrame == paired.frame else { throw Failure("厂商封面帧号校验失败") } }
+        else { guard decoded.timestamp == time else { throw Failure("安卓封面时间校验失败") } }
+        let name = source.deletingPathExtension().lastPathComponent + ".MP." + (config.container == "heic" ? "heic" : "jpg")
+        let file = stage.appendingPathComponent(name); try Data(bytes).write(to:file)
+        if let date = try source.resourceValues(forKeys:[.contentModificationDateKey]).contentModificationDate { try fm.setAttributes([.modificationDate:date],ofItemAtPath:file.path) }
+        var timing: [String:Any] = ["video_reencoded":false,"audio_reencoded":false,
+            "source_still_image_time_seconds":seconds(paired.cover),"cover_timestamp_us":time,"cover_frame_index":paired.frame]
+        if let coverTime = result.coverTimeUs { timing["cover_time_us"] = coverTime }
+        if let coverFrame = result.coverFrame { timing["cover_frame"] = coverFrame }
+        var warnings = config.container == "heic" ? ["HEIC 原始 HDR 编码已保留；目标安卓厂商对 Apple 私有 HDR 的显示兼容性需真机验证"] : ["厂商封装已通过本地解析校验；不同手机固件识别与 HDR 显示仍需真机验证"]
+        if config.vendor == "honor" { warnings.append("荣耀格式仅作备用，新款荣耀推荐选择 Google / 通用。此兼容性针对留刻导出的文件，不代表能识别 Google 相机原片") }
+        let manifest: [String:Any] = ["version":"1.2.1","implementation":"reverse-native-1.2.1","source":source.path,"source_sha256":sourceHash,
+            "paired_video_source":paired.movie.path,"paired_video_sha256":videoHash,"options":options.json,"identifier":paired.identifier,
+            "motion_layout":config.vendor == "honor" ? "google-compatible" : config.vendor,
+            "output_files":["motionphoto":name],"output_sha256":[name:sha(Data(bytes))],"timing":timing,"hdr":hdr,"warnings":warnings]
+        try NativeBatch.json(manifest,to:stage.appendingPathComponent("manifest.json"))
+        guard try NativeBatch.hashFile(paired.movie) == videoHash else { throw Failure("配对视频在转换期间发生变化，未发布") }
+        try timings.measure("validation_and_publish") { try NativeBatch.publish(stage,target:target,source:source,sourceHash:sourceHash,token:token,overwrite:overwrite,exportDataFiles:options.exportDataFiles) }
+        return ["status":"converted","source":source.path,"output":target.path,"detail":"已导出 \(config.vendor) \(config.container.uppercased()) 动态照片；封面 \(Double(time) / 1_000_000) 秒","hdr":hdr,"timing":timing,"warnings":warnings]
+        #endif
     }
 }

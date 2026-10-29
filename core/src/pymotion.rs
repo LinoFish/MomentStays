@@ -621,6 +621,15 @@ pub fn ultra_from_apple(still: &[u8], gain_jpeg: &[u8], stops: f64) -> Result<Ve
     gain.extend_from_slice(&pyjpeg::app(0xE1, &gain_payload)?);
     gain.extend_from_slice(gain_jpeg.get(2..).unwrap_or(&[]));
 
+    attach_gain_jpeg(still, &gain)
+}
+
+/// Attach a gain-map JPEG (already carrying its hdrgm XMP) to a primary
+/// JPEG as its second MPF image: Swift `PhotoHDR.packGainMap`. The primary's
+/// coding data is unchanged (verified by image hash) and the MPF index is
+/// rebuilt with a fresh two-image Directory. Shared by the legacy-Apple
+/// conversion and the ISO 21496-1 upgrade below.
+pub fn attach_gain_jpeg(still: &[u8], gain: &[u8]) -> Result<Vec<u8>> {
     let primary_end = pyjpeg::segments(still)?.last().map(|s| s.end).unwrap_or(0);
     let mut primary = still[..primary_end].to_vec();
     let mut replacements: HashMap<usize, Vec<u8>> = HashMap::new();
@@ -710,10 +719,185 @@ pub fn ultra_from_apple(still: &[u8], gain_jpeg: &[u8], stops: f64) -> Result<Ve
     }
     let out_images = pyjpeg::mpf_images(&output)?;
     match out_images.get(1) {
-        Some(r) if &output[r.clone()] == gain.as_slice() => {}
+        Some(r) if &output[r.clone()] == gain => {}
         _ => return fail("Generated Ultra HDR MPF index is invalid"),
     }
     Ok(output)
+}
+
+/// Attach a pixel-converted legacy gain map to a base still: Swift's
+/// `BatchEngine` legacy branch (`colorProfile` then `ultra`) and
+/// `AndroidHDR.convert`'s attach step. The pixel LUT itself stays in the
+/// app (ImageIO decode/encode); everything byte-level lives here. When an
+/// sRGB ICC blob is supplied, it is inserted first when the base still
+/// lacks an ICC profile and declares EXIF sRGB (Swift `colorProfile`);
+/// without one, the attach runs directly (Swift `AndroidHDR.convert` path).
+pub fn attach_preconverted_gain(
+    still: &[u8],
+    gain_jpeg: &[u8],
+    stops: f64,
+    srgb_icc: Option<&[u8]>,
+) -> Result<Vec<u8>> {
+    let base = match srgb_icc {
+        Some(icc) if !icc.is_empty() => legacy_color_profile(still, icc)?,
+        _ => still.to_vec(),
+    };
+    ultra_from_apple(&base, gain_jpeg, stops)
+}
+
+/// ISO 21496-1 gain-map upgrade, port of Swift `PhotoHDR.upgradeISO`
+/// (byte-level: parse the ISO gain parameters from the gain JPEG's APP2
+/// ISO box, build the hdrgm XMP, attach via [`attach_gain_jpeg`]).
+/// Returns None when the still is not a two-image JPEG with exactly one
+/// ISO box on its gain map; errors when the parameters are present but
+/// invalid (the app keeps the original in that case, per Swift).
+pub fn iso_upgrade(still: &[u8]) -> Result<Option<Vec<u8>>> {
+    const ISO_URN: &[u8] = b"urn:iso:std:iso:ts:21496:-1\0";
+    let images = pyjpeg::mpf_images(still)?;
+    if images.len() != 2 {
+        return Ok(None);
+    }
+    let gain_image = &still[images[1].clone()];
+    let mut iso_boxes: Vec<&[u8]> = Vec::new();
+    for s in pyjpeg::segments(gain_image)? {
+        if s.marker == 0xE2 && s.payload(gain_image).starts_with(ISO_URN) {
+            iso_boxes.push(&s.payload(gain_image)[ISO_URN.len()..]);
+        }
+    }
+    if iso_boxes.len() != 1 {
+        return Ok(None);
+    }
+    let bytes = iso_boxes[0];
+    if bytes.len() < 5 {
+        return fail("ISO HDR 增益参数被截断");
+    }
+    let version = ((bytes[0] as u32) << 8) | bytes[1] as u32;
+    if version != 0 {
+        return fail("ISO HDR 增益图版本尚不支持，原数据已保留");
+    }
+    let flags = bytes[4];
+    let channels = if flags & 0x80 == 0 { 1usize } else { 3usize };
+    if flags & 0x40 == 0 || flags & 0x04 != 0 || flags & 0x33 != 0 {
+        return fail("ISO HDR 色彩空间或反向增益不适合无损补充 Ultra HDR 元数据，原格式已保留");
+    }
+    let mut pos = 5usize;
+    let word = |bytes: &[u8], pos: &mut usize, signed: bool| -> Result<f64> {
+        if *pos + 4 > bytes.len() {
+            return fail("ISO HDR 增益参数被截断");
+        }
+        let raw = u32::from_be_bytes([
+            bytes[*pos],
+            bytes[*pos + 1],
+            bytes[*pos + 2],
+            bytes[*pos + 3],
+        ]);
+        *pos += 4;
+        Ok(if signed {
+            raw as i32 as f64
+        } else {
+            raw as f64
+        })
+    };
+    let common: Option<f64> = if flags & 0x08 != 0 {
+        let c = word(bytes, &mut pos, false)?;
+        if c == 0.0 {
+            return fail("ISO HDR 参数分母为零");
+        }
+        Some(c)
+    } else {
+        None
+    };
+    let mut ratio = |signed: bool| -> Result<f64> {
+        let n = word(bytes, &mut pos, signed)?;
+        let d = match common {
+            Some(c) => c,
+            None => word(bytes, &mut pos, false)?,
+        };
+        if d <= 0.0 {
+            return fail("ISO HDR 参数分母为零");
+        }
+        Ok(n / d)
+    };
+    let capacity_min = ratio(false)?;
+    let capacity_max = ratio(false)?;
+    let mut values: Vec<[f64; 5]> = Vec::new();
+    for _ in 0..channels {
+        values.push([
+            ratio(true)?,
+            ratio(true)?,
+            ratio(false)?,
+            ratio(true)?,
+            ratio(true)?,
+        ]);
+    }
+    let invalid = pos != bytes.len()
+        || capacity_min < 0.0
+        || capacity_max <= capacity_min
+        || capacity_max > 16.0
+        || !capacity_min.is_finite()
+        || !capacity_max.is_finite()
+        || values.iter().any(|v| {
+            !v.iter().all(|x| x.is_finite())
+                || v[0] < -16.0
+                || v[1] > 16.0
+                || v[1] < v[0]
+                || v[2] <= 0.0
+                || v[2] > 16.0
+                || v[3].abs() > 1.0
+                || v[4].abs() > 1.0
+        });
+    if invalid {
+        return fail("ISO HDR 增益参数无效或超出支持范围，原数据已保留");
+    }
+    let mut gain_root = Element::new(XMPMETA, "xmpmeta");
+    let mut rdf = Element::new(RDF, "RDF");
+    let mut desc = Element::new(RDF, "Description");
+    desc.set_attr(HDR, "Version", "1.0");
+    desc.set_attr(HDR, "BaseRenditionIsHDR", "False");
+    desc.set_attr(HDR, "HDRCapacityMin", &py_float_str(capacity_min));
+    desc.set_attr(HDR, "HDRCapacityMax", &py_float_str(capacity_max));
+    for (i, name) in [
+        "GainMapMin",
+        "GainMapMax",
+        "Gamma",
+        "OffsetSDR",
+        "OffsetHDR",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let column: Vec<f64> = values.iter().map(|v| v[i]).collect();
+        let mut field = Element::new(HDR, name);
+        if column.len() == 1 {
+            field.text = Some(py_float_str(column[0]));
+        } else {
+            let mut seq = Element::new(RDF, "Seq");
+            for v in &column {
+                let mut li = Element::new(RDF, "li");
+                li.text = Some(py_float_str(*v));
+                seq.children.push(li);
+            }
+            field.children.push(seq);
+        }
+        desc.children.push(field);
+    }
+    rdf.children.push(desc);
+    gain_root.children.push(rdf);
+    let mut gain = gain_image.get(..2).unwrap_or(gain_image).to_vec();
+    let mut payload = XMP_HDR.to_vec();
+    payload.extend_from_slice(&pyxml::tostring(&gain_root));
+    gain.extend_from_slice(&pyjpeg::app(0xE1, &payload)?);
+    gain.extend_from_slice(gain_image.get(2..).unwrap_or(&[]));
+    let output = attach_gain_jpeg(still, &gain)?;
+    let out_images = pyjpeg::mpf_images(&output)?;
+    let out_gain = match out_images.get(1) {
+        Some(r) => &output[r.clone()],
+        None => return fail("ISO HDR 增益图压缩数据发生变化"),
+    };
+    if crate::format::coding_hash(gain_image)? != crate::format::coding_hash(out_gain)? {
+        return fail("ISO HDR 增益图压缩数据发生变化");
+    }
+    Ok(Some(output))
 }
 
 pub fn legacy_color_profile(still: &[u8], srgb_icc: &[u8]) -> Result<Vec<u8>> {
@@ -896,4 +1080,92 @@ pub fn legacy_apple(still: &[u8]) -> Result<(Option<LegacyGain>, String)> {
         }
     }
     Ok((None, "Legacy HDR map present, but valid Apple 33/48 headroom unavailable; original retained".to_string()))
+}
+
+/// Read one Apple MakerNote entry's raw value bytes, if the tag exists.
+/// Layout mirrors `legacy_apple`'s note walk: EXIF -> 0x8769 -> 0x927C
+/// (type 7) -> "Apple iOS" note with its own TIFF directory at offset 14.
+fn maker_note_value(still: &[u8], want: usize) -> Result<Option<Vec<u8>>> {
+    for segment in pyjpeg::segments(still)? {
+        if segment.marker != 0xE1 || !segment.payload(still).starts_with(pyjpeg::EXIF_HDR) {
+            continue;
+        }
+        let t = Tiff::new(&segment.payload(still)[6..])?;
+        let (root, _) = t.root()?;
+        let ptr = match Tiff::tag(&root, t.little, 0x8769) {
+            Some(p) => p,
+            None => continue,
+        };
+        let (exif, _) = t.directory(ptr.value(t.little))?;
+        let entry = match Tiff::tag(&exif, t.little, 0x927C) {
+            Some(e) => e,
+            None => continue,
+        };
+        let ty = entry.ty(t.little);
+        let count = entry.count(t.little);
+        let offset = entry.value(t.little);
+        if ty != 7 || offset + count > t.data.len() {
+            return fail("Invalid Apple MakerNote");
+        }
+        let note = &t.data[offset..offset + count];
+        if !note.starts_with(b"Apple iOS\0\0\x01") {
+            continue;
+        }
+        let little = match note.get(12..14) {
+            Some(b"MM") => false,
+            Some(b"II") => true,
+            _ => return fail("Invalid Apple MakerNote byte order"),
+        };
+        if note.len() < 16 {
+            return fail("Truncated Apple MakerNote");
+        }
+        let n = tiff_u16(note, 14, little);
+        if 16 + n * 12 + 4 > note.len() {
+            return fail("Truncated Apple MakerNote");
+        }
+        for i in 0..n {
+            let at = 16 + i * 12;
+            if tiff_u16(note, at, little) != want {
+                continue;
+            }
+            let field_type = tiff_u16(note, at + 2, little);
+            let length = tiff_u32(note, at + 4, little);
+            let size = match field_type {
+                1 | 2 | 6 | 7 => 1usize,
+                3 | 8 => 2,
+                4 | 9 | 11 | 13 => 4,
+                5 | 10 | 12 => 8,
+                16 | 17 => 8,
+                _ => return fail("Unknown Apple MakerNote field type"),
+            };
+            let total = size.saturating_mul(length);
+            if total <= 4 {
+                return Ok(Some(note[at + 8..at + 8 + total].to_vec()));
+            }
+            let position = tiff_u32(note, at + 8, little);
+            if position < 16 + n * 12 + 4 || position + total > note.len() {
+                return fail("Invalid Apple MakerNote value offset");
+            }
+            return Ok(Some(note[position..position + total].to_vec()));
+        }
+    }
+    Ok(None)
+}
+
+/// Apple MakerNote tag 17 (content identifier) as a string, if present.
+/// Mirrors Swift `AndroidExport`'s MakerNote "17" identifier read.
+pub fn maker_note_identifier(still: &[u8]) -> Result<Option<String>> {
+    match maker_note_value(still, 0x11)? {
+        Some(raw) => {
+            let end = raw.iter().position(|b| *b == 0).unwrap_or(raw.len());
+            Ok(Some(String::from_utf8_lossy(&raw[..end]).into_owned()))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Whether an Apple MakerNote tag is present (e.g. 33 for Swift's
+/// `properties` "Apple HDR" scan text).
+pub fn maker_note_has_tag(still: &[u8], tag: usize) -> Result<bool> {
+    Ok(maker_note_value(still, tag)?.is_some())
 }

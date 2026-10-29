@@ -12,6 +12,7 @@
 
 pub mod binary;
 pub mod capi;
+pub mod convert;
 pub mod cover;
 pub mod format;
 pub mod hdr;

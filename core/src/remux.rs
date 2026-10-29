@@ -188,7 +188,7 @@ fn maybe_edts(d: &[u8], trak: &BoxRef, movie_ts: usize) -> Result<Option<Vec<u8>
     Ok(Some(bx(b"edts", &elst_new)))
 }
 
-fn parse_tracks(d: &[u8], video_index: usize) -> Result<(Vec<TrackParts>, u32)> {
+fn parse_tracks(d: &[u8], video_index: usize, keep_audio: bool) -> Result<(Vec<TrackParts>, u32)> {
     let tables = mp4::sample_tables(d)?;
     let top = mp4::boxes(d, 0, d.len())?;
     let moov = match top.iter().find(|b| b.is(b"moov")) {
@@ -234,6 +234,8 @@ fn parse_tracks(d: &[u8], video_index: usize) -> Result<(Vec<TrackParts>, u32)> 
             }
             video_seen += 1;
         } else if !is_audio {
+            continue;
+        } else if !keep_audio {
             continue;
         }
         if is_video && table.samples.is_empty() {
@@ -652,7 +654,24 @@ fn remux_impl(
     identifier: Option<&str>,
     mett_cover_us: Option<i64>,
 ) -> Result<Vec<u8>> {
-    let (mut tracks, mut max_track_id) = parse_tracks(data, video_index)?;
+    remux_impl_audio(data, video_index, identifier, mett_cover_us, true)
+}
+
+/// Same as [`remux_to_mov`], but audio tracks are dropped: mirrors Swift
+/// `PhotoFormat.exportAuxiliary`, which remuxes only the auxiliary video
+/// track into a silent MOV.
+pub fn remux_to_mov_video_only(data: &[u8], video_index: usize) -> Result<Vec<u8>> {
+    remux_impl_audio(data, video_index, None, None, false)
+}
+
+fn remux_impl_audio(
+    data: &[u8],
+    video_index: usize,
+    identifier: Option<&str>,
+    mett_cover_us: Option<i64>,
+    keep_audio: bool,
+) -> Result<Vec<u8>> {
+    let (mut tracks, mut max_track_id) = parse_tracks(data, video_index, keep_audio)?;
     let udta = identifier.map(content_identifier_udta);
     if let Some(cover) = mett_cover_us {
         tracks.push(mett_track_parts(max_track_id + 1, cover)?);
@@ -676,7 +695,7 @@ pub fn remux_to_mp4(data: &[u8]) -> Result<Vec<u8>> {
     if n_video != 1 || n_audio > 1 {
         return fail("实况视频轨道布局不受支持");
     }
-    let (tracks, max_track_id) = parse_tracks(data, 0)?;
+    let (tracks, max_track_id) = parse_tracks(data, 0, true)?;
     let mut ftyp_payload = b"mp42".to_vec();
     ftyp_payload.extend(u32b(0));
     ftyp_payload.extend(b"mp42");
@@ -734,9 +753,9 @@ fn assemble(
 /// Verify a remux like Swift `movie()`: per kept track, sample count, sizes,
 /// concatenated sample hash and presentation times must match exactly.
 pub fn check_remux(source: &[u8], output: &[u8], video_index: usize) -> Result<()> {
-    let (src_tracks, _) = parse_tracks(source, video_index)?;
+    let (src_tracks, _) = parse_tracks(source, video_index, true)?;
     // The output holds only the selected video track, so it is index 0 there.
-    let (out_tracks, _) = parse_tracks(output, 0)?;
+    let (out_tracks, _) = parse_tracks(output, 0, true)?;
     if src_tracks.len() != out_tracks.len() {
         return fail("重封装校验失败：轨道数不同");
     }
@@ -777,7 +796,7 @@ pub fn check_remux(source: &[u8], output: &[u8], video_index: usize) -> Result<(
 
 /// Track kinds kept by remux, for callers that need a summary.
 pub fn kept_handlers(data: &[u8], video_index: usize) -> Result<Vec<String>> {
-    let (tracks, _) = parse_tracks(data, video_index)?;
+    let (tracks, _) = parse_tracks(data, video_index, true)?;
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for t in tracks {
@@ -786,4 +805,179 @@ pub fn kept_handlers(data: &[u8], video_index: usize) -> Result<Vec<String>> {
         }
     }
     Ok(out)
+}
+
+/// Result of [`repair_auxiliary_duration`], mirroring Swift's repair report.
+#[derive(Clone, Debug)]
+pub struct AuxRepair {
+    pub repaired: Vec<u8>,
+    pub method: &'static str,
+    pub original_duration_seconds: f64,
+    pub repaired_duration_seconds: f64,
+    pub sample_pts_unchanged: bool,
+    pub original_sample_sha256: String,
+}
+
+fn aux_child(data: &[u8], parent: &BoxRef, name: &[u8; 4]) -> Result<BoxRef> {
+    let found: Vec<BoxRef> = mp4::boxes(data, parent.payload, parent.end)?
+        .into_iter()
+        .filter(|b| b.is(name))
+        .collect();
+    if found.len() != 1 {
+        return fail(format!(
+            "辅助轨修复缺少唯一的 {}",
+            String::from_utf8_lossy(name)
+        ));
+    }
+    Ok(found[0].clone())
+}
+
+fn aux_word(data: &[u8], b: &BoxRef, at: usize) -> Result<u32> {
+    Ok(crate::binary::be(data, b.payload + at, 4)? as u32)
+}
+
+/// Port of Swift `PhotoFormat.repairAuxiliaryDuration`, byte for byte in
+/// guard order: some GCam files carry one real compressed auxiliary sample
+/// but zero stts, mdhd and tkhd duration. Only those fixed-size fields are
+/// repaired, using the primary track's shortest positive frame duration.
+/// Returns None when the layout is not a two-video-track file (not
+/// applicable); errors when the layout looks repairable but unsafe.
+/// Sample presentation times are never touched.
+pub fn repair_auxiliary_duration(data: &[u8]) -> Result<Option<AuxRepair>> {
+    let top = mp4::boxes(data, 0, data.len())?;
+    let moov = match top.iter().find(|b| b.is(b"moov")) {
+        Some(m) => m.clone(),
+        None => return Ok(None),
+    };
+    let mut videos: Vec<BoxRef> = Vec::new();
+    for trak in mp4::boxes(data, moov.payload, moov.end)?
+        .into_iter()
+        .filter(|b| b.is(b"trak"))
+    {
+        let mdia = aux_child(data, &trak, b"mdia")?;
+        let hdlr = aux_child(data, &mdia, b"hdlr")?;
+        if hdlr.end - hdlr.payload >= 12 && &data[hdlr.payload + 8..hdlr.payload + 12] == b"vide" {
+            videos.push(trak);
+        }
+    }
+    if videos.len() != 2 {
+        return Ok(None);
+    }
+    let main_media = aux_child(data, &videos[0], b"mdia")?;
+    let aux_media = aux_child(data, &videos[1], b"mdia")?;
+    let main_header = aux_child(data, &main_media, b"mdhd")?;
+    let aux_header = aux_child(data, &aux_media, b"mdhd")?;
+    let track_header = aux_child(data, &videos[1], b"tkhd")?;
+    let movie_header = aux_child(data, &moov, b"mvhd")?;
+    for h in [&main_header, &aux_header, &track_header, &movie_header] {
+        if h.payload >= h.end || data[h.payload] != 0 {
+            return Ok(None);
+        }
+    }
+    let main_minf = aux_child(data, &main_media, b"minf")?;
+    let aux_minf = aux_child(data, &aux_media, b"minf")?;
+    let main_table = aux_child(data, &main_minf, b"stbl")?;
+    let aux_table = aux_child(data, &aux_minf, b"stbl")?;
+    let times = aux_child(data, &aux_table, b"stts")?;
+    let sizes = aux_child(data, &aux_table, b"stsz")?;
+    let chunks = aux_child(data, &aux_table, b"stsc")?;
+    if aux_word(data, &times, 4)? != 1
+        || aux_word(data, &times, 8)? != 1
+        || aux_word(data, &times, 12)? != 0
+        || aux_word(data, &sizes, 8)? != 1
+        || aux_word(data, &aux_header, 16)? != 0
+        || aux_word(data, &track_header, 20)? != 0
+    {
+        return Ok(None);
+    }
+    if mp4::boxes(data, videos[1].payload, videos[1].end)?
+        .iter()
+        .any(|b| b.is(b"edts"))
+        || mp4::boxes(data, aux_table.payload, aux_table.end)?
+            .iter()
+            .any(|b| b.is(b"ctts"))
+        || aux_word(data, &chunks, 4)? != 1
+        || aux_word(data, &chunks, 8)? != 1
+        || aux_word(data, &chunks, 12)? != 1
+        || aux_word(data, &chunks, 16)? != 1
+    {
+        return fail("零时长辅助轨的布局不能安全修复");
+    }
+    let offsets: Vec<BoxRef> = mp4::boxes(data, aux_table.payload, aux_table.end)?
+        .into_iter()
+        .filter(|b| b.is(b"stco") || b.is(b"co64"))
+        .collect();
+    if offsets.len() != 1 || aux_word(data, &offsets[0], 4)? != 1 {
+        return fail("零时长辅助轨偏移无效");
+    }
+    let is64 = offsets[0].is(b"co64");
+    let offset = if is64 {
+        crate::binary::be(data, offsets[0].payload + 8, 8)? as usize
+    } else {
+        aux_word(data, &offsets[0], 8)? as usize
+    };
+    let fixed = aux_word(data, &sizes, 4)?;
+    let size = if fixed == 0 {
+        aux_word(data, &sizes, 12)?
+    } else {
+        fixed
+    } as usize;
+    if size == 0
+        || offset > data.len()
+        || size > data.len() - offset
+        || !top.iter().any(|b| {
+            b.is(b"mdat") && offset >= b.payload && offset + size <= b.end
+        })
+    {
+        return fail("零时长辅助轨的压缩样本范围无效");
+    }
+    let main_times = aux_child(data, &main_table, b"stts")?;
+    let count = aux_word(data, &main_times, 4)? as usize;
+    if count == 0 || count > (main_times.end - main_times.payload - 8) / 8 {
+        return fail("主轨帧长表无效");
+    }
+    let mut positive: Vec<u32> = Vec::new();
+    for i in 0..count {
+        let delta = aux_word(data, &main_times, 12 + i * 8)?;
+        if delta > 0 {
+            positive.push(delta);
+        }
+    }
+    let main_scale = aux_word(data, &main_header, 12)?;
+    let aux_scale = aux_word(data, &aux_header, 12)?;
+    let movie_scale = aux_word(data, &movie_header, 12)?;
+    let step = match positive.iter().min() {
+        Some(s) => *s,
+        None => return fail("无法从主轨确定有效帧长"),
+    };
+    if main_scale == 0 || aux_scale == 0 || movie_scale == 0 {
+        return fail("无法从主轨确定有效帧长");
+    }
+    let seconds = step as f64 / main_scale as f64;
+    let aux_value = (seconds * aux_scale as f64).ceil();
+    let movie_value = (seconds * movie_scale as f64).ceil();
+    if !aux_value.is_finite()
+        || !movie_value.is_finite()
+        || aux_value > u32::MAX as f64
+        || movie_value > u32::MAX as f64
+    {
+        return fail("修复辅助轨时长超出容器范围");
+    }
+    let aux_ticks = (aux_value as u32).max(1);
+    let movie_ticks = (movie_value as u32).max(1);
+    let mut repaired = data.to_vec();
+    let put = |buf: &mut Vec<u8>, at: usize, v: u32| {
+        buf[at..at + 4].copy_from_slice(&v.to_be_bytes());
+    };
+    put(&mut repaired, times.payload + 12, aux_ticks);
+    put(&mut repaired, aux_header.payload + 16, aux_ticks);
+    put(&mut repaired, track_header.payload + 20, movie_ticks);
+    Ok(Some(AuxRepair {
+        repaired,
+        method: "primary-shortest-positive-frame-duration",
+        original_duration_seconds: 0.0,
+        repaired_duration_seconds: aux_ticks as f64 / aux_scale as f64,
+        sample_pts_unchanged: true,
+        original_sample_sha256: crate::sha256_hex(&data[offset..offset + size]),
+    }))
 }
