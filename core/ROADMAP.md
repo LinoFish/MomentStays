@@ -306,7 +306,17 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   test is now skipped outright on Windows, the same
   pattern as the ffprobe differential check. The C ABI's
   real consumer is the Swift bridge (macOS), which CI
-  covers. Full Linux suite still 140 pass. The workflow upgrade
+  covers. Full Linux suite still 140 pass. Even after
+  all four Windows fixes the Windows job still fails
+  (run on f071aac8, step time 186s vs ~125s on the green
+  platforms, so it is a runtime failure, not a build
+  failure — the whole suite also cross-checks clean for
+  x86_64-pc-windows-gnu locally). The remaining cause
+  cannot be identified statically: job logs need admin
+  rights and the checks API carries no annotations, so
+  the next step is to read the Windows job log (owner
+  or a browser session) and fix the one failing test
+  it names. The workflow upgrade
   (build + upload `momentstays-convert` on all three OSes)
   is written locally but blocked from pushing by the GitHub
   App's missing workflows permission (403); it awaits the
