@@ -209,6 +209,12 @@ Google-compatible Motion Photo JPEGs, supported Samsung (including SEF and valid
 
 Yes. MomentStays is GPL-3.0-only open source, runs entirely on your Mac, and never uploads your photos.
 
+## Feedback
+
+Feedback is welcome. If a conversion fails, or the result does not look right, please [open an issue](https://github.com/LinoFish/MomentStays/issues) and describe what happened: the source device and format, the conversion direction, the app version, what you expected, and what you got instead.
+
+If you can share a sample that reproduces the failure, please remove sensitive information first: use a photo that contains no personal content, and strip location and other private metadata before uploading. A minimal sample that still reproduces the problem is more useful than a full personal album.
+
 ## Acknowledgements
 
 Thank you to the projects, authors and maintainers whose code, tools, research and design workflows support MomentStays:
