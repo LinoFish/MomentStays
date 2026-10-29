@@ -181,6 +181,22 @@ fn vendor_samsung_heic_to_google_heic() {
 }
 
 #[test]
+fn vendor_google_heic_to_samsung_heic() {
+    let still = build_still(true, true);
+    let input_bytes = assemble_heic(&still, &real_mp4(), Vendor::Google, 1_420_000).unwrap();
+    let input = tmp("in-google.heic");
+    let output = tmp("out-samsung.heic");
+    std::fs::write(&input, &input_bytes).unwrap();
+    let out = run(&["vendor", input.to_str().unwrap(), output.to_str().unwrap(), "--to", "samsung"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let bytes = std::fs::read(&output).unwrap();
+    let parsed = format::parse(&bytes).expect("output parses");
+    assert_eq!(parsed.format, "samsung-heic-sef");
+    assert_eq!(parsed.timestamp, Some(1_420_000));
+    assert_eq!(parsed.video(&bytes), real_mp4().as_slice());
+}
+
+#[test]
 fn bad_usage_exits_2() {
     let out = run(&[]);
     assert_eq!(out.status.code(), Some(2));

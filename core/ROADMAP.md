@@ -80,6 +80,13 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
        assemble + vendor CLI test, parse-back: video bytes, coding hash, cover);
        MOV-remux round-trips (MP4->MOV->MP4, per-track count/sizes/bytes/
        presentation, synthetic video+audio and real H.264 file).
+       Formal HEIC matrix 2026-10-29 (`tests/heic_matrix.rs`, 6 tests):
+       Google↔Samsung both directions, Google→Samsung→Google two-hop,
+       sefd input → Samsung mpvd output, `live_still_heic` clean still →
+       Samsung assemble, motion-XMP still across hops — video bytes,
+       still coding hash and cover time asserted at every hop; plus the
+       Google→Samsung vendor CLI test pairing the existing
+       Samsung→Google one.
 3. [x] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
        iloc v0/v1/v2, idat storage. Done: `tests/heif_fixtures.rs` (9 tests,
        parameterized `build_still_spec` in `tests/common/mod.rs`): iloc v1
@@ -223,6 +230,14 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: Formal HEIC round-trip matrix landed (ROADMAP A5):
+  `tests/heic_matrix.rs` (6 tests: Google↔Samsung, two-hop,
+  sefd→mpvd, `live_still_heic`→assemble, motion-XMP hops; video bytes,
+  still coding hash, cover time at every hop) + Google→Samsung vendor
+  CLI test. Full suite 133 tests pass, `check_rust_core.py` 16 inputs
+  0 mismatches. Real-sample HEIC checks (S22 mpvd, Google largesize,
+  S20 sefd) remain local-only: the samples are registered in
+  `tests/SOURCES.md` but too large to commit.
 - 2026-10-29: HEIC `live_still` landed (`heifwrite::live_still_heic`,
   ROADMAP item 6 HEIC half): same order as the JPEG version — motion
   input truncated to its still part, motion XMP stripped with the
