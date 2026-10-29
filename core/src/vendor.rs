@@ -13,8 +13,7 @@ fn trim(b: &[u8]) -> String { String::from_utf8_lossy(b).trim().to_string() }
 fn overlaps(a: &Range<usize>, b: &Range<usize>) -> bool { a.start < b.end && b.start < a.end }
 
 fn huawei_frame(first: &str) -> Option<i64> {
-    // ^v[1-6]_f[0-9]+(_c)?$ (Huawei v3 samples carry the `_c` suffix.)
-    let first = first.strip_suffix("_c").unwrap_or(first);
+    // ^v[1-6]_f[0-9]+$
     let b = first.as_bytes();
     if b.len() < 5 || b[0] != b'v' || !(b'1'..=b'6').contains(&b[1]) || &b[2..4] != b"_f" { return None; }
     if !b[4..].iter().all(u8::is_ascii_digit) { return None; }
@@ -32,23 +31,9 @@ pub fn locate(d: &[u8], image_end: usize) -> Result<Option<Location>> {
             match (frame, length) {
                 (Some(frame), Some(length)) if length >= 36 && (length as i128) <= d.len() as i128 - 40 => {
                     let length = length as usize;
-                    let mut end = d.len() - 60;
+                    let end = d.len() - 60;
                     let start = end as isize - (length as isize - 20);
                     if start < image_end as isize || start as usize >= end { return fail("华为/荣耀视频范围与静态图片重叠"); }
-                    if first.ends_with("_c") {
-                        let bytes = be(d, end - 4, 4)?;
-                        if bytes < 4 || bytes > end - start as usize { return fail("华为/荣耀私有数据长度无效"); }
-                        let private_start = end - bytes;
-                        let mut at = private_start;
-                        for ty in [5, 1, 0x0306, 2, 3, 4] {
-                            if at > end - 12 { return fail("华为/荣耀私有数据记录无效"); }
-                            let size = be(d, at, 4)?;
-                            if size < 8 || size > end - 4 - at || le(d, at + 4, 4)? != ty { return fail("华为/荣耀私有数据记录无效"); }
-                            at += size;
-                        }
-                        if at != end - 4 { return fail("华为/荣耀私有数据记录无效"); }
-                        end = private_start;
-                    }
                     return Ok(Some(Location { start: start as usize, end, frame: Some(frame), format: "huawei-honor" }));
                 }
                 _ => return fail("华为/荣耀 LIVE_ 尾标无效"),

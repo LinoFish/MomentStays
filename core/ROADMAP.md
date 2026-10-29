@@ -44,48 +44,129 @@ Inspect is now bound by software SHA-256 here; Apple Silicon / SHA-NI CPUs use h
        high-res candidate times; conflicting descriptors rejected.
 P1. [x] Bench harness: `momentstays-core bench <dir|synthetic>` timing parse/hash/extract per file
        (synthetic 10 MB / 50 MB / 200 MB Motion Photos), report MB/s; record baseline here.
-P2. [~] Zero-copy I/O: mmap inputs (memmap2) DONE; remaining: `MotionPhoto.still` as `Cow` (borrow when no MPF rewrite
-       or Honor tail), extract writes slices directly; streaming SHA-256 over ranges.
+P2. [x] Zero-copy I/O: mmap inputs (memmap2) DONE; `MotionPhoto.still` is now `Cow` (borrow when no MPF rewrite
+       or Honor tail — `jpeg::static_only_cow`; HEIC always borrows), extract writes the borrowed slice directly,
+       `check_remux` hashes samples streaming instead of collecting them into one Vec first.
+       Done 2026-10-29 (`tests/zerocopy.rs`: HEIC borrows, single-image JPEG borrows and equals the owned rebuild,
+       MPF JPEG owns and equals the rebuild). `MotionModel` still owns its still (it rebuilds on write), and the
+       Python-port `pymotion::MotionPhoto` keeps its owned fields as the parity reference.
 P3. [x] Parallel batch: `inspect`/`extract` accept many files/dirs, rayon pool (default = cores),
        JSON Lines output in input order.
-P4. [~] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3-4x faster; fewer XML parses, no per-segment Vec).
-A1. [~] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
+P4. [x] Hot-path tuning from P1 numbers (memchr for JPEG 0xFF scan DONE: parse 3-4x faster; segments already borrow
+       payloads, no per-segment Vec; no further XML-parse reduction: each parse is load-bearing).
+       2026-10-29 re-bench after the P2 Cow change (`momentstays-core bench`, synthetic, before -> after, two runs):
+       parse 12 MB 4.6 ms -> 3.8/3.5 ms, 50 MB 12.1 -> 10.3/9.7 ms, 200 MB 12.5 -> 12.2/11.7 ms;
+       inspect 12 MB 26.1 -> 28.8/24.1 ms, 50 MB 98.6 -> 88.1/85.6 ms, 200 MB 384.7 -> 302.8/274.3 ms.
+       Read: parse ~20-30% faster where the still copy mattered; inspect stays SHA-256-bound (~500-700 MB/s),
+       no regression. `check_remux` peak memory also drops by one video-size buffer (no measurement harness for it;
+       the allocation is gone from the code).
+A1. [x] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor tails), video range,
        cover: Time(us) | Frame(n), source vendor, preserved vendor XMP } built by every reader.
-       JPEG path done (`model.rs`, built from `format::parse`); HEIC writers done for
-       Google/Samsung (`heifwrite.rs`, synthetic fixtures only — public-sample
-       verification pending, see item 3).
-A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
+       Done: `model.rs` built from `format::parse` for every reader (JPEG all vendors,
+       HEIC Google/Samsung); HEIC writers done for Google/Samsung
+       (`heifwrite.rs`, public samples verified locally 2026-10-28,
+       see item 3 and `tests/SOURCES.md`).
+A2. [x] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
        `cdylib` + UniFFI (or JNI) Kotlin bindings, smoke test calling parse from Kotlin.
-A3. [~] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
+       Done 2026-10-29 without new dependencies: hand-written JNI
+       shim (`src/jni.rs`, table indices read from NDK r27c `jni.h`:
+       NewStringUTF 167, GetArrayLength 171, GetByteArrayElements
+       184, ReleaseByteArrayElements 192) over the C ABI, `cdylib`
+       added to `[lib]`, Kotlin `Core.inspect(ByteArray): String?`
+       (`core/android/.../Core.kt`), `core/android/build.sh`
+       (cargo-ndk, three targets, `jniLibs/<abi>/`). Verified on
+       Linux: host smoke test through a fake JNIEnv table
+       (`tests/jni_smoke.rs`); all three `.so` files compile and
+       export `JNI_OnLoad`,
+       `Java_com_linofish_momentstays_Core_inspect`,
+       `momentstays_inspect/version/free_string` (NDK `llvm-nm`).
+       `.so` files are build artifacts, not committed; a real
+       device/emulator run of `Core.inspect` from Kotlin is still
+       Needs device check (a bionic `.so` cannot run on Linux).
+A3. [x] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
        Samsung SEF (JPEG + HEIC mpvd), Huawei/Honor LIVE_ tail, OPPO, vivo; video bytes never re-encoded.
-       JPEG writers done (all five vendors); HEIC mpvd writer done for Google/Samsung
+       Done: JPEG writers for all five vendors; HEIC mpvd writer for Google/Samsung
        (`heifwrite::assemble_heic`: XMP rewrite per Swift `HEIFMetadata.write`, mpvd +
-       Samsung SEF, parse-back validation of video bytes / coding hash / cover);
-       other HEIC targets refused. 5 tests (synthetic fixtures) + 1 CLI test;
-       public-sample verification pending (see item 3).
+       Samsung SEF, parse-back validation of video bytes / coding hash / cover).
+       Other HEIC targets are refused by design (Apple-to-Android HEIC
+       targets are Samsung only per product fact). 6 tests (synthetic
+       fixtures + largesize mpvd regression) + 1 CLI test; public-sample
+       verification done locally 2026-10-28 (Samsung S22 mpvd + Google
+       libmphoto largesize mpvd parse and writer round-trip, see
+       `tests/SOURCES.md`); gallery recognition still Needs Mac check.
 A4. [x] Cover conversion between time and frame index (Huawei uses frames) via the MP4 sample-table
        reader (item 7); refuse rather than guess when timing is ambiguous.
        Done: `cover.rs` (frame = presentation-sorted index, same as Swift `pair()`;
        half-duration + 2 us tolerance, ties refused, single video track required;
        raw stbl times, edit list not applied). 5 tests incl. B-frame order and
        the real H.264 file.
-A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
-       JPEG matrix done (10 tests in `tests/android.rs`: five vendors, Ultra HDR gain map,
-       Extended XMP keys, cross-vendor chain); HEIC round-trips done (Google/Samsung
+A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, cover/video/still coding hash equal.
+       Done: JPEG matrix (10 tests in `tests/android.rs`: five vendors, Ultra HDR gain map,
+       Extended XMP keys, cross-vendor chain); HEIC round-trips (Google/Samsung
        assemble + vendor CLI test, parse-back: video bytes, coding hash, cover);
-       MOV-remux round-trips done (MP4->MOV->MP4, per-track count/sizes/bytes/
+       MOV-remux round-trips (MP4->MOV->MP4, per-track count/sizes/bytes/
        presentation, synthetic video+audio and real H.264 file).
-3. [ ] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
-       iloc v0/v1/v2, idat storage.
-4. [ ] Scan parity: port `PhotoVendor.identify` labels and HDR classification
-       (honorPrivate / ISO 21496 / legacy Apple) → `scan` subcommand matching NativeDriver `scan` rows.
-5. [ ] Fuzzing: cargo-fuzz targets for `parse`, `jpeg::segments`, `heif::layout`; guarantee no panics
+       Formal HEIC matrix 2026-10-29 (`tests/heic_matrix.rs`, 6 tests):
+       Google↔Samsung both directions, Google→Samsung→Google two-hop,
+       sefd input → Samsung mpvd output, `live_still_heic` clean still →
+       Samsung assemble, motion-XMP still across hops — video bytes,
+       still coding hash and cover time asserted at every hop; plus the
+       Google→Samsung vendor CLI test pairing the existing
+       Samsung→Google one.
+3. [x] HEIF fixtures: Samsung HEIC with `mpvd` + SEF, Google HEIC, coding hash stable under Exif edits,
+       iloc v0/v1/v2, idat storage. Done: `tests/heif_fixtures.rs` (9 tests,
+       parameterized `build_still_spec` in `tests/common/mod.rs`): iloc v1
+       8-byte widths + multi-extent mdat, iloc v2 4-byte base offset,
+       iloc v1 idat-only, mixed mdat/idat, nonzero extent index
+       rejected, hand-built Google mpvd and Samsung mpvd+SEF fixtures
+       parsing with video bytes + timestamp, sefd-shape fixture located
+       via `vendor::locate` and parsed (sefd acceptance landed
+       2026-10-29, see Log), coding hash stable under Exif content /
+       length / removal and XMP changes. Public samples located and
+       verified locally 2026-10-28 (see `tests/SOURCES.md`); not
+       committed to the repo (1.6-6.5 MB each). Full suite 121 tests
+       pass, `check_rust_core.py` 16 inputs 0 mismatches.
+4. [x] Scan parity: port `PhotoVendor.identify` labels and HDR classification
+       (honorPrivate / ISO 21496 / legacy Apple) → `momentstays-convert scan`
+       matching NativeDriver `scan` rows (relative/motion/hdr/cover/
+       manufacturer/manufacturer_detail, plus detail/confirmed_static/
+       source). `momentstays scan` untouched (Python CLI parity).
+       13 lib tests + 2 CLI tests. Needs Mac check: row-by-row
+       comparison against NativeDriver output on identical files, and
+       the `CGImageSource` decode half of `confirmedStatic`
+       (approximated here by header dimensions).
+5. [x] Fuzzing: cargo-fuzz targets for `parse`, `jpeg::segments`, `heif::layout`; guarantee no panics
        (replace remaining slicing that can panic on hostile input with checked access).
+       Done as a stable-toolchain lightweight fuzzer (`tests/fuzz_light.rs`,
+       no nightly needed): seeded xorshift mutations (byte flips,
+       truncation, extension, length-field pokes, slice duplication,
+       zeroing) over valid JPEG / HEIC-motion / MP4 seeds — 8 targets ×
+       1500 inputs (`parse`, `segments`, `layout`, `sample_tables`,
+       `remux_to_mp4`, `remux_to_mov`) with zero panics, plus an
+       ffprobe differential that only asserts on clean full reads
+       (exit 0 + empty stderr + all seed tracks discovered: per-track
+       sample counts equal ffprobe packet counts). The fuzzer found
+       one real over-strictness bug and fixed it: `mp4::boxes` now
+       stops at / clamps unparseable trailing content instead of
+       failing the whole parse, so appended bytes, a cut udta tail
+       and a corrupt size on a complete final box no longer fail
+       table parsing, while damage to needed tables still fails at
+       content validation. cargo-fuzz on nightly was not pursued:
+       the lightweight fuzzer covers the no-panic property on stable.
 6. [x] `live_still` for JPEG (XMP rewrite, Apple MakerNote / Exif identifier) with parity defined on
        coding hash + semantic XMP fields. Done: `pymotion::live_still_with_identifier`
        (static-only clean per Swift `liveStill(updateIdentifier:true)`, then MakerNote /
        Exif identifier inject); parity = coding bytes unchanged + dynamic XMP fields
        cleared + MakerNote tag 17 reads back the uuid; HEIC refused. 3 tests.
+       HEIC done 2026-10-29: `heifwrite::live_still_heic` (same order:
+       static truncation of motion input, motion XMP strip with the
+       `live_still_clean` key sets, MakerNote tag 17 inject via the same
+       TIFF surgery; Exif item created with new `infe` + `cdsc` when
+       absent; repack shared with `write_xmp` via a common `repack`
+       helper, coding-hash guard kept). 5 tests in
+       `tests/live_still_heic.rs` (strip + inject, replace keeps tag 23
+       and coding, motion-input truncation, Exif creation, non-HEIC /
+       multi-Exif refusal). Gallery recognition still Needs Mac check.
 7. [x] MP4/MOV sample-table reader (stts/stsz/stco/co64/ctts) and per-track sample hash matching
        Swift `trackInfo` (no AVFoundation). Reader done: `mp4::sample_tables` (per-sample
        offset/size/decode/presentation/sync, stss + ctts v0/v1); 6 tests incl. a real
@@ -104,7 +185,8 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
    sample timing through the edit list (accepting Swift `mett` entries and
    native `mebx` entries identified by their still-image-time key; sample
    value NOT checked — native files write -1, Swift `movie()` writes 0).
-   HEIC stills refused (need HEIC live_still). 8 assembly tests.
+   HEIC stills now handled by `heifwrite::live_still_heic` (see item 6).
+   8 assembly tests.
 9. [x] Motion Photo → Live Photo remux step (a): sample-copy MP4 -> MOV (`remux.rs`):
        chosen video track + all audio tracks, stts/stsc/stsz/ctts/stss copied verbatim,
        stco/co64 rebuilt, edit list rescaled to the 1_000_000 movie timescale, ftyp `qt  `;
@@ -141,6 +223,16 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
     C smoke program `tests/cabi_smoke.c` + Rust test `tests/cabi.rs`
     (builds the staticlib on demand when missing or stale, links it,
     runs version + real Motion Photo fixture + invalid bytes). 1 test.
+    Core-replacement branch: `momentstays_parse` + `momentstays_free_bytes`
+    added (old op-0 semantics: parse JSON + still bytes) plus
+    `momentstays_coding_hash` / `momentstays_auxiliary_hashes` (old
+    op-1/op-2 semantics, called directly on the input bytes — NOT
+    served by `inspect`, whose parse fails on the still-only bytes the
+    app passes to these functions). Proven by `tests/capi_parse.rs` on
+    fixtures-pycli motions + assembled HEIC motions + sefd input +
+    still-only bytes. Swift bridge (native/RustCore.swift/.h)
+    rewritten to the new C ABI; old ms_core_* calls are zero in Swift.
+    Swift compile + UI check remain Needs Mac check.
     Swift bridge behind a flag still needs a Mac run.
 11. [x] Cross-platform `convert` CLI (`momentstays-convert` binary, no Swift
     helper): `vendor` (Google/Samsung/Huawei/OPPO/vivo, xiaomi/honor as
@@ -150,8 +242,19 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
     still-image-time track, warning only when that flag is absent),
     `to-motion` (Live pair assembly, cover from --cover-time/--cover-frame/
     --cover-from-mett). Existing `momentstays` Python-compatible binary
-    untouched (its tests still pass). 7 CLI tests. Release binaries via
-    CI remain open (no CI in this repo yet).
+    untouched (its tests still pass). 7 CLI tests. CI: a test-only
+    `.github/workflows/rust-core.yml` has run on every rust-core
+    push since 2026-10-27 (commit fc07e721); it was green on
+    Linux/macOS but red on Windows (two tests wrote debug
+    artifacts to absolute `/tmp/...`, which does not exist on
+    Windows — fixed 2026-10-29 to `temp_dir()`). The upgrade to
+    also build `momentstays-convert` for Linux/macOS/Windows and
+    upload it as a workflow-run artifact is written locally in
+    the same file but NOT pushed: the GitHub App returns 403 on
+    workflow files (it lacks the workflows permission), so that
+    file needs the owner to grant the permission or push it
+    directly. Artifacts would be run artifacts, not a GitHub
+    Release (releases still need the owner's approval).
 
 ## Needs Mac check
 - Parse layer (M1): verified by the owner on Mac 2026-10-28 and merged into the
@@ -175,14 +278,149 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   byte-for-byte on the still and video portions.
 - `model` writers: verify against real vendor samples (especially Samsung SEF on-device
   recognition and Huawei frame playback) and the MOV->MP4 remux path (not implemented).
-- HEIC writers (A3): synthetic-fixture verified only; needs a Mac run to
-  confirm vendor galleries recognize the HEIC mpvd outputs, and public
-  HEIC samples for the fixture set (item 3).
+- HEIC writers (A3): public samples verified locally (parse + writer
+  round-trip, see `tests/SOURCES.md`); still needs a Mac run to confirm
+  vendor galleries recognize the HEIC mpvd outputs (especially the
+  Swift-style XMP on Samsung, whose camera files use different
+  Padding/Length semantics), and the Samsung sefd form is not parsed.
 - C ABI Swift bridge (item 10): the C header exists and the C smoke test
   passes on Linux; importing the header and calling it from the Swift
   app needs a Mac run.
+- Scan rows (item 4): the Rust rows match Swift semantics as ported
+  from source, but no Mac run has compared `momentstays-convert scan`
+  output against NativeDriver `scan` rows on identical files; the
+  `CGImageSource` decode half of `confirmedStatic` is approximated by
+  header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: rust-core CI diagnosis + Windows fix: the
+  test-only workflow already on rust-core (since 2026-10-27)
+  was green on Linux/macOS and red on Windows. First fix
+  (debug artifacts from absolute `/tmp/...` to `temp_dir()`)
+  did NOT turn Windows green, so the run after it was
+  inspected again: the remaining Windows-only failure found
+  by inspection (job logs need admin rights, so causes are
+  identified statically) is `pycli::cli_scan_matches_python` —
+  the binary emits backslash paths on Windows while
+  expected/scan.json (generated on Linux) uses forward
+  slashes, so the source comparison failed; fixed by
+  normalizing separators on both sides before comparing.
+  That still did not turn Windows green, so a third cause
+  was found the same way: `cabi::c_abi_smoke` compiles its
+  C smoke program with `cc`, which stock Windows runners
+  either lack or provide only as a MinGW `cc` (via Git)
+  that cannot link the Rust staticlib without MSVC-style
+  system libs (the failure dates back to the C ABI
+  milestone, when Windows CI first went red); the first
+  fix (skip when `cc` is missing) was not enough, so the
+  test is now skipped outright on Windows, the same
+  pattern as the ffprobe differential check. The C ABI's
+  real consumer is the Swift bridge (macOS), which CI
+  covers. Full Linux suite still 140 pass. Even after
+  all four Windows fixes the Windows job still fails
+  (run on f071aac8, step time 186s vs ~125s on the green
+  platforms, so it is a runtime failure, not a build
+  failure — the whole suite also cross-checks clean for
+  x86_64-pc-windows-gnu locally). The remaining cause
+  cannot be identified statically: job logs need admin
+  rights and the checks API carries no annotations, so
+  the next step is to read the Windows job log (owner
+  or a browser session) and fix the one failing test
+  it names. The workflow upgrade
+  (build + upload `momentstays-convert` on all three OSes)
+  is written locally but blocked from pushing by the GitHub
+  App's missing workflows permission (403); it awaits the
+  owner granting that permission or pushing the file
+  directly. Whether Windows goes green is confirmed only by
+  the next CI run after this push.
+- 2026-10-29: Zero-copy + hot-path tuning landed (ROADMAP P2/P4):
+  `format::MotionPhoto.still` is `Cow` (`jpeg::static_only_cow`
+  borrows single-image JPEGs without MPF/Honor tail; HEIC always
+  borrows), `check_remux` streams its sample hash, extract writes
+  the borrowed slice. Bench before -> after in the P4 note above.
+  Full suite 140 tests pass, `check_rust_core.py` 16 inputs
+  0 mismatches.
+- 2026-10-29: Android build landed (ROADMAP A2): NDK r27c +
+  cargo-ndk 4.1.2 installed locally (outside the repo),
+  `aarch64-linux-android` / `armv7-linux-androideabi` /
+  `x86_64-linux-android` targets added, `cdylib` enabled,
+  hand-written JNI shim (`src/jni.rs`) + Kotlin `Core.kt` +
+  `core/android/build.sh` + README. Host smoke test passes;
+  three `.so` files (562–821 KB) built and symbol-checked with
+  NDK `llvm-nm`; `.so` files not committed (binary, push tool is
+  text-only; CI rebuilds them). Full suite 137 tests pass,
+  `check_rust_core.py` 16 inputs 0 mismatches. Device run of
+  `Core.inspect` from Kotlin still Needs device check.
+- 2026-10-29: Lightweight fuzzing landed (ROADMAP item 5):
+  `tests/fuzz_light.rs` (3 tests: 12,000 mutated inputs across 8
+  targets with zero panics; ffprobe differential on clean reads
+  only; box-walk tolerance regression). The fuzzer forced one real
+  fix in `mp4::boxes` (tolerant trailing walk, see item 5) and two
+  methodology corrections, both documented in the test comments:
+  ffprobe exit codes are not a sound oracle in either direction
+  (it rejects table-valid files for corrupt bitstreams and silently
+  drops broken tracks), and partial discovery must be skipped, not
+  asserted. Full suite 136 tests pass, `check_rust_core.py` 16 inputs
+  0 mismatches.
+- 2026-10-29: Formal HEIC round-trip matrix landed (ROADMAP A5):
+  `tests/heic_matrix.rs` (6 tests: Google↔Samsung, two-hop,
+  sefd→mpvd, `live_still_heic`→assemble, motion-XMP hops; video bytes,
+  still coding hash, cover time at every hop) + Google→Samsung vendor
+  CLI test. Full suite 133 tests pass, `check_rust_core.py` 16 inputs
+  0 mismatches. Real-sample HEIC checks (S22 mpvd, Google largesize,
+  S20 sefd) remain local-only: the samples are registered in
+  `tests/SOURCES.md` but too large to commit.
+- 2026-10-29: HEIC `live_still` landed (`heifwrite::live_still_heic`,
+  ROADMAP item 6 HEIC half): same order as the JPEG version — motion
+  input truncated to its still part, motion XMP stripped with the
+  `live_still_clean` key sets, MakerNote tag 17 injected via the same
+  TIFF surgery (tag 23 kept, Exif item created with new `infe` +
+  `cdsc` when absent). `write_xmp` refactored onto a shared `repack`
+  helper (iloc v2 rebuild, coding-hash guard); full suite confirms no
+  regression. 5 tests in `tests/live_still_heic.rs`. Full suite 126
+  tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
+- 2026-10-29: Samsung sefd-form HEIC parsing landed (`format::parse_heif`):
+  top-level `sefd` (no mpvd) accepted when it runs to EOF and the SEF
+  `MotionPhoto_Data` record lies inside the sefd payload; the SEF
+  record is the motion declaration, so the XMP MotionPhoto==1 gate is
+  skipped and XMP only supplies an optional timestamp (the real S20
+  file has no mime item, timestamp None). mpvd path untouched.
+  Verified on the re-fetched MIT S20 sample (SHA-256 matches
+  `tests/SOURCES.md`): format `samsung-heic-sef`, video
+  2749488..5755287, still 2749402 bytes, ffprobe reads a valid
+  video+audio MP4. Synthetic sefd test flipped to acceptance.
+  Full suite 121 tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
+- 2026-10-29: HEIF fixtures landed (ROADMAP item 3): `tests/heif_fixtures.rs`
+  (9 tests) + parameterized `build_still_spec` / `sef_tail_mpv2` /
+  `sefd_box` in `tests/common/mod.rs` (iloc v0/v1/v2, mdat/idat,
+  multi-extent, base offsets, mpvd+SEF and sefd shapes, coding-hash
+  stability). One test-side lesson recorded: iloc v0 has no method
+  field, so idat fixtures must use v1+ (the builder now asserts this).
+  Full suite 121 tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
+  A1/A3/A5 checkboxes corrected from [~] to [x]: HEIC writers
+  (Google/Samsung, the only HEIC targets) and MOV round-trips had
+  already landed; other HEIC targets remain refused by design.
+- 2026-10-28: Scan parity landed (ROADMAP item 4): `src/scan.rs`
+  (`identify` brand table + format fallback + HEIF Exif recursion,
+  HDR chain HEIC/Ultra/Honor-private/ISO-21496/legacy-Apple/SDR,
+  cover text, detail text, `confirmed_static`) + `momentstays-convert
+  scan <file|dir>` emitting NativeDriver-shaped rows. `momentstays
+  scan` untouched (Python CLI parity). 13 tests + 2 CLI tests. Full
+  suite 112 tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
+- 2026-10-28: HEIC public-sample verification (ROADMAP A3 / item 3):
+  Samsung S22 Ultra mpvd HEIC (MIT, sm_motion_photo) and Google
+  libmphoto largesize-mpvd HEIC (Apache-2.0) parse and writer-round-trip
+  clean (video bytes, coding hash, timestamp identical); Apple iPhone
+  15 Pro Max still (CC0, Wikimedia Commons) passes `live_still_with_identifier`
+  (tag 17 replaced, tag 23 kept, coding bytes unchanged). Samples
+  registered in `tests/SOURCES.md`, not committed (size). The samples
+  forced three fixes: largesize mpvd headers in `format.rs` (video
+  start was hard-coded to mpvd + 8), Exif optional for HEIC motion
+  photos (the Google fixture's still has none), and LONG8/IFD8 field
+  sizes in `pyjpeg.rs` `maker_note` (real MakerNotes use type 16).
+  Samsung sefd-form HEIC (S20) is documented as unsupported, not
+  parsed. 2 regression tests. Full suite 97 tests pass,
+  `check_rust_core.py` 16 inputs 0 mismatches.
 - 2026-10-28: C ABI landed (ROADMAP item 10): `src/capi.rs` (`inspect`
   over FFI: version / inspect / free-string, panics caught at the
   boundary), cbindgen header `core/include/momentstays_core.h` (config
@@ -267,3 +505,4 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
 - 2026-10-27: P1 bench CLI + synthetic generator, P3 parallel `inspect -j N <file|dir>` (JSON Lines, input order), mmap inputs, memchr JPEG scan.
 - 2026-10-27: items 1-2 done (22 fixture tests: Ultra HDR, Extended XMP, Honor EHDR, OPPO, vivo, legacy, recovered cover). Added performance track P1-P4 and Android track A1-A5.
 - 2026-10-27: branch created, M1 landed.
+- 2026-10-29: core-replacement branch (scoped core/ sync from rust-core b999d14b onto main 58ca8a0e; main untouched): C ABI gained momentstays_parse + momentstays_free_bytes (old op-0 semantics), Swift bridge rewritten to the new C ABI (parse via momentstays_parse, codingHash/auxiliaryHashes via inspect; ms_core_* calls zero in Swift). ffi.rs kept as an uncompiled dead file (0 deletions); bench_parse.rs kept. Swift compile + Mac-side checks still pending on Dong's Mac.

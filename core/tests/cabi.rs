@@ -2,9 +2,10 @@
 //! the committed header, link the release staticlib, and run it.
 //!
 //! The staticlib is a declared crate-type (`crate-type = ["rlib",
-//! "staticlib"]`), so a plain `cargo build` / `cargo test` produces it
-//! next to the rlib; this test fails clearly if it is absent instead of
-//! silently skipping, because the C ABI is a shipped surface.
+//! "staticlib", "cdylib"]`), so a plain `cargo build` / `cargo test`
+//! produces it next to the rlib; this test fails clearly if it is
+//! absent instead of silently skipping, because the C ABI is a shipped
+//! surface.
 
 use base64::Engine;
 use std::process::Command;
@@ -132,6 +133,18 @@ fn fixture(name: &str) -> Vec<u8> {
 
 #[test]
 fn c_abi_smoke() {
+    // Windows is skipped outright, not just when `cc` is missing:
+    // stock Windows runners either have no `cc`, or a MinGW `cc`
+    // (via Git) that cannot link the Rust staticlib without
+    // MSVC-style system libs, so probing for `cc` is not enough
+    // to decide. The C ABI's real consumer is the Swift bridge
+    // (macOS), which CI covers; a Windows C toolchain check
+    // would need MSVC flags and is future work. Same skip
+    // pattern as the ffprobe differential check.
+    if cfg!(target_os = "windows") {
+        eprintln!("Windows: skipping C ABI smoke test (needs a macOS/Linux C toolchain)");
+        return;
+    }
     let exe = build_smoke();
     // Version round-trip.
     let v = Command::new(&exe).arg("--version").output().unwrap();
@@ -155,4 +168,61 @@ fn c_abi_smoke() {
     let json: serde_json::Value =
         serde_json::from_slice(&out.stdout).expect("C program prints JSON");
     assert_eq!(json["ok"], false);
+    // Parse round-trip through the C ABI: JSON fields plus still bytes.
+    let still_out = tmp("parse-still.bin");
+    let out = Command::new(&exe)
+        .arg("--parse")
+        .arg(&input)
+        .arg(&still_out)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let json: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("C program prints parse JSON");
+    assert!(json["video_start"].as_u64().is_some());
+    assert!(json["video_end"].as_u64().is_some_and(|e| e
+        > json["video_start"].as_u64().unwrap()));
+    assert!(json["format"].as_str().is_some_and(|f| !f.is_empty()));
+    assert!(!std::fs::read(&still_out).unwrap().is_empty());
+    // Parse of invalid bytes: error JSON, empty still, still exit 0.
+    let bad_still = tmp("parse-bad-still.bin");
+    let out = Command::new(&exe)
+        .arg("--parse")
+        .arg(&bad)
+        .arg(&bad_still)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let json: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("C program prints parse JSON");
+    assert!(json["error"].is_string());
+    assert!(std::fs::read(&bad_still).unwrap().is_empty());
+    // Hash functions through the C ABI (old op-1/op-2 semantics).
+    let out = Command::new(&exe)
+        .arg("--hash")
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let json: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("C program prints hash JSON");
+    assert!(json["hash"].as_str().is_some_and(|h| !h.is_empty()));
+    let out = Command::new(&exe)
+        .arg("--aux")
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let json: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("C program prints aux JSON");
+    assert!(json["hashes"].is_array());
+    let out = Command::new(&exe)
+        .arg("--hash")
+        .arg(&bad)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let json: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("C program prints hash JSON");
+    assert!(json["error"].is_string());
 }

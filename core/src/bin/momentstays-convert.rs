@@ -19,6 +19,10 @@
 //!   Live Photo pair to a vendor Motion Photo JPEG. Cover from
 //!   `--cover-time` / `--cover-frame`, or `--cover-from-mett` (the mett
 //!   track's marker timing; the marker value itself is not checked).
+//! * `scan <文件或目录>` — Swift-aligned scan rows (ROADMAP item 4):
+//!   one row per JPEG/HEIC file with motion flag, HDR class, cover
+//!   text, detail text, vendor label and confirmed-static flag, in the
+//!   `NativeDriver` scan shape.
 //!
 //! Vendor aliases: `xiaomi` and `honor` use the Google-compatible layout
 //! (like Swift `AndroidExport`: Honor's gallery plays the Google path).
@@ -32,9 +36,10 @@ use momentstays_core::model::{Cover, MotionModel, Vendor};
 use momentstays_core::mp4;
 use momentstays_core::remux;
 use momentstays_core::{Error, Result};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::env;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const VERSION: &str = "0.1.0";
@@ -49,6 +54,7 @@ fn usage() -> String {
         "  momentstays-convert vendor <input> <output> --to <vendor> [--cover-time <us> | --cover-frame <n>]",
         "  momentstays-convert to-live <video.mp4> --uuid <uuid> -o <out.mov> [--video-index <n>] [--cover-time-us <us>]",
         "  momentstays-convert to-motion <still.jpg> <movie.mov> --to <vendor> -o <out.jpg> [--cover-time <us> | --cover-frame <n> | --cover-from-mett]",
+        "  momentstays-convert scan <文件或目录> — Swift 对齐的扫描行（NativeDriver scan 行键：relative/motion/hdr/cover/manufacturer/manufacturer_detail，另含 detail/confirmed_static/source）",
         "vendors: google, xiaomi, honor (= google layout), samsung, huawei, oppo, vivo",
     ]
     .join("\n")
@@ -221,6 +227,107 @@ fn cmd_to_motion(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+fn is_media_path(p: &Path) -> bool {
+    p.extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .map_or(false, |e| matches!(e.as_str(), "jpg" | "jpeg" | "heic" | "heif"))
+}
+
+/// Swift-aligned scan rows (ROADMAP item 4): one row per file, in the
+/// `NativeDriver` scan shape plus `detail`, `confirmed_static` and
+/// `source`. Unreadable files become error rows, like Swift's per-file
+/// catch; only directory-walk failures abort the command.
+fn cmd_scan(args: &[String]) -> Result<()> {
+    if args.len() != 1 {
+        return Err(err("scan 需要 <文件或目录>"));
+    }
+    let input = Path::new(&args[0]);
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut root: Option<PathBuf> = None;
+    if input.is_file() {
+        if !is_media_path(input) {
+            return Err(err("scan 输入支持 .jpg/.jpeg/.heic/.heif"));
+        }
+        files.push(input.to_path_buf());
+    } else if input.is_dir() {
+        root = Some(input.to_path_buf());
+        fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+            let entries = fs::read_dir(dir).map_err(|e| err(e.to_string()))?;
+            for entry in entries.flatten() {
+                let p = entry.path();
+                let md = fs::symlink_metadata(&p).map_err(|e| err(e.to_string()))?;
+                if md.file_type().is_symlink() {
+                    continue;
+                }
+                if md.is_dir() {
+                    walk(&p, out)?;
+                } else if md.is_file() && is_media_path(&p) {
+                    out.push(p);
+                }
+            }
+            Ok(())
+        }
+        walk(input, &mut files)?;
+        files.sort_by(|a, b| {
+            let ka: Vec<String> = a
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect();
+            let kb: Vec<String> = b
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect();
+            ka.cmp(&kb)
+        });
+    } else {
+        return Err(err(format!("输入不存在: {}", input.display())));
+    }
+    let mut rows = Vec::new();
+    for file in &files {
+        let relative = match &root {
+            Some(r) => file
+                .strip_prefix(r)
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|_| file.to_string_lossy().into_owned()),
+            None => file
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| file.to_string_lossy().into_owned()),
+        };
+        let row = match fs::read(file) {
+            Ok(bytes) => momentstays_core::scan::scan_row(&bytes),
+            Err(e) => {
+                let maker = momentstays_core::scan::identify(&[], "");
+                momentstays_core::scan::ScanRow {
+                    is_motion: false,
+                    hdr: "—".to_string(),
+                    cover: "—".to_string(),
+                    detail: format!("读取失败：{e}"),
+                    manufacturer: maker.name,
+                    manufacturer_detail: maker.detail,
+                    confirmed_static: false,
+                }
+            }
+        };
+        rows.push(json!({
+            "source": file.to_string_lossy(),
+            "relative": relative,
+            "motion": row.is_motion,
+            "hdr": row.hdr,
+            "cover": row.cover,
+            "detail": row.detail,
+            "manufacturer": row.manufacturer,
+            "manufacturer_detail": row.manufacturer_detail,
+            "confirmed_static": row.confirmed_static,
+        }));
+    }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&Value::Array(rows)).map_err(|e| err(e.to_string()))?
+    );
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
@@ -235,6 +342,7 @@ fn run() -> Result<()> {
         "vendor" => cmd_vendor(&args[1..]),
         "to-live" => cmd_to_live(&args[1..]),
         "to-motion" => cmd_to_motion(&args[1..]),
+        "scan" => cmd_scan(&args[1..]),
         other => Err(err(format!("未知命令: {other}"))),
     }
 }

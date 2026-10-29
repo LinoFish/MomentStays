@@ -15,50 +15,62 @@ enum RustCore {
         var hashes: [String]?
     }
 
-    private static func call<T>(_ operation: UInt32, _ input: [UInt8],
-                                _ consume: (Reply, UnsafeMutableRawPointer) throws -> T) throws -> T {
-        guard let response = input.withUnsafeBufferPointer({ ms_core_call(operation, $0.baseAddress, $0.count) }) else {
-            throw Failure("Rust bridge: missing response")
+    /// One JSON-string C ABI call (coding hash, auxiliary hashes).
+    /// Throws the embedded error string, or a generic failure when the
+    /// call itself fails (NULL pointers, panic).
+    private static func callJSON(
+        _ input: [UInt8],
+        _ fn: (UnsafePointer<UInt8>?, UInt, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?) -> Int32
+    ) throws -> Reply {
+        var jsonPtr: UnsafeMutablePointer<CChar>?
+        let rc = input.withUnsafeBufferPointer { buf in
+            fn(buf.baseAddress, UInt(buf.count), &jsonPtr)
         }
-        defer { ms_core_free(response) }
-        let reply = try JSONDecoder().decode(Reply.self, from: Data(bytes(response, 0)))
+        guard rc == 0, let json = jsonPtr else { throw Failure("Rust bridge: call failed") }
+        defer { momentstays_free_string(json) }
+        let reply = try JSONDecoder().decode(Reply.self, from: Data(String(cString: json).utf8))
         if let error = reply.error { throw Failure(error) }
-        return try consume(reply, response)
-    }
-
-    private static func bytes(_ response: UnsafeMutableRawPointer, _ slot: UInt32) throws -> [UInt8] {
-        var length = 0
-        guard let pointer = ms_core_bytes(response, slot, &length), length >= 0 else {
-            throw Failure("Rust bridge: invalid response buffer")
-        }
-        return Array(UnsafeBufferPointer(start: pointer, count: length))
+        return reply
     }
 
     static func parse(_ input: [UInt8]) throws -> NativeMotionPhoto {
-        try call(0, input) { reply, response in
-            guard let start = reply.video_start, let end = reply.video_end,
-                  start >= 0, end >= start, end <= input.count,
-                  let ultra = reply.ultra, let format = reply.format else {
-                throw Failure("Rust bridge: invalid parse response")
-            }
-            return NativeMotionPhoto(still: try bytes(response, 1), video: Array(input[start..<end]),
-                timestamp: reply.timestamp, timestampTag: reply.timestamp_tag, ultra: ultra,
-                coverFrame: reply.cover_frame, format: format)
+        var jsonPtr: UnsafeMutablePointer<CChar>?
+        var stillPtr: UnsafePointer<UInt8>?
+        var stillLen: UInt = 0
+        let rc = input.withUnsafeBufferPointer { buf in
+            momentstays_parse(buf.baseAddress, UInt(buf.count), &jsonPtr, &stillPtr, &stillLen)
         }
+        guard rc == 0, let json = jsonPtr else { throw Failure("Rust bridge: parse failed") }
+        defer { momentstays_free_string(json) }
+        let reply = try JSONDecoder().decode(Reply.self, from: Data(String(cString: json).utf8))
+        if let error = reply.error { throw Failure(error) }
+        let still: [UInt8] = {
+            if let p = stillPtr, stillLen > 0 {
+                return Array(UnsafeBufferPointer(start: p, count: Int(stillLen)))
+            }
+            return []
+        }()
+        momentstays_free_bytes(stillPtr.map { UnsafeMutablePointer(mutating: $0) }, stillLen)
+        guard let start = reply.video_start, let end = reply.video_end,
+              start >= 0, end >= start, end <= input.count,
+              let ultra = reply.ultra, let format = reply.format else {
+            throw Failure("Rust bridge: invalid parse response")
+        }
+        return NativeMotionPhoto(still: still, video: Array(input[start..<end]),
+            timestamp: reply.timestamp, timestampTag: reply.timestamp_tag, ultra: ultra,
+            coverFrame: reply.cover_frame, format: format)
     }
 
     static func codingHash(_ input: [UInt8]) throws -> String {
-        try call(1, input) { reply, _ in
-            guard let hash = reply.hash else { throw Failure("Rust bridge: missing coding hash") }
-            return hash
-        }
+        let reply = try callJSON(input, momentstays_coding_hash)
+        guard let hash = reply.hash else { throw Failure("Rust bridge: missing coding hash") }
+        return hash
     }
 
     static func auxiliaryHashes(_ input: [UInt8]) throws -> [String] {
-        try call(2, input) { reply, _ in
-            guard let hashes = reply.hashes else { throw Failure("Rust bridge: missing auxiliary hashes") }
-            return hashes
-        }
+        let reply = try callJSON(input, momentstays_auxiliary_hashes)
+        guard let hashes = reply.hashes else { throw Failure("Rust bridge: missing auxiliary hashes") }
+        return hashes
     }
 }
 #endif

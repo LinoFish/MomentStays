@@ -126,7 +126,7 @@ fn cli_scan_matches_python() {
         .unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let mut got: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let want: Value =
+    let mut want: Value =
         serde_json::from_str(&fs::read_to_string(dir().join("expected/scan.json")).unwrap()).unwrap();
     let want_dir = PathBuf::from(want[0]["source"].as_str().unwrap())
         .parent()
@@ -138,5 +138,16 @@ fn cli_scan_matches_python() {
         entry["source"] = Value::String(src.replacen(tmp_s.as_ref(), &want_dir.to_string_lossy(), 1));
     }
     let _ = fs::remove_dir_all(&tmp);
+    // Separator-insensitive comparison: on Windows the binary emits
+    // backslash paths while expected/scan.json (generated on Linux)
+    // uses forward slashes; the prefix swap above does not fix the
+    // separators, so normalize both sides before comparing.
+    for entries in [got.as_array_mut().unwrap(), want.as_array_mut().unwrap()] {
+        for entry in entries {
+            if let Some(src) = entry["source"].as_str() {
+                entry["source"] = Value::String(src.replace('\\', "/"));
+            }
+        }
+    }
     assert_eq!(got, want);
 }

@@ -154,3 +154,26 @@ pub fn static_only(data: &[u8]) -> Result<Vec<u8>> {
     if let Some(tail) = honor { out.extend_from_slice(tail); }
     Ok(out)
 }
+
+/// Borrowed `static_only`: when the input is already one JPEG image
+/// with no MPF segment and no Honor private tail, the rebuild
+/// `static_only` performs is byte-identical to the input, so return
+/// it borrowed instead of copying. Anything else (MPF re-indexing
+/// or an appended tail changes bytes) falls back to the owned
+/// rebuild. This is the P2 zero-copy path for `format::parse`.
+pub fn static_only_cow(data: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>> {
+    let ranges = image_ranges(data)?;
+    let honor = hdr::honor_private(data, ranges.iter().map(|r| r.end).max().unwrap())?;
+    let has_mpf = segments(data)?
+        .iter()
+        .any(|s| s.marker == 226 && s.payload(data).starts_with(MPF));
+    if ranges.len() == 1
+        && ranges[0].start == 0
+        && ranges[0].end == data.len()
+        && honor.is_none()
+        && !has_mpf
+    {
+        return Ok(std::borrow::Cow::Borrowed(data));
+    }
+    Ok(std::borrow::Cow::Owned(static_only(data)?))
+}

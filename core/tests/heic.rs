@@ -66,6 +66,27 @@ fn assemble_google_heic_roundtrip() {
 }
 
 #[test]
+fn parse_largesize_mpvd_google() {
+    // The official Google fixture (libmphoto, Apache-2.0) stores mpvd in
+    // largesize form (size field 1 + 64-bit length); the parser must skip
+    // the 16-byte header, not the 8-byte one, to find the video.
+    let still = build_still(true, true);
+    let video = real_mp4();
+    let out = assemble_heic(&still, &video, Vendor::Google, 1_420_000).expect("assemble");
+    let mpvd_at = out.len() - (video.len() + 8);
+    assert_eq!(&out[mpvd_at + 4..mpvd_at + 8], b"mpvd", "mpvd is last box");
+    let mut wide = out[..mpvd_at].to_vec();
+    wide.extend(1u32.to_be_bytes());
+    wide.extend(b"mpvd");
+    wide.extend((video.len() as u64 + 16).to_be_bytes());
+    wide.extend(&video);
+    let back = format::parse(&wide).expect("parse largesize");
+    assert_eq!(back.format, "google-heic");
+    assert_eq!(back.video(&wide), video.as_slice());
+    assert_eq!(back.timestamp, Some(1_420_000));
+}
+
+#[test]
 fn assemble_samsung_heic_roundtrip() {
     let still = build_still(true, true);
     let video = real_mp4();

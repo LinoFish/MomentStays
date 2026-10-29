@@ -17,8 +17,24 @@
  *   *out_json is left untouched. NULL data/out_json pointers fail
  *   instead of crashing. Invalid file bytes are NOT a failure: they
  *   produce {"ok": false, "error": "..."} JSON, like Rust `inspect`.
- * - A Rust panic inside inspect is caught at the FFI boundary and
- *   reported as failure, never unwound across FFI.
+ * - momentstays_parse() returns 0 with the parse JSON
+ *   (video_start/video_end/timestamp/timestamp_tag/ultra/
+ *   cover_frame/format) plus the still bytes in *out_still/
+ *   *out_still_len, freed by momentstays_free_bytes(). An unsupported
+ *   file still returns 0, but the JSON carries an `error` key and the
+ *   still is NULL/0. NULL out-pointers, or NULL data with nonzero
+ *   length, are a hard failure (nonzero, outputs untouched).
+ * - momentstays_coding_hash() / momentstays_auxiliary_hashes()
+ *   return 0 with {"hash": ...} / {"hashes": [...]} JSON, or an
+ *   {"error": ...} JSON on failure. They work on still-only bytes
+ *   (the app verifies stills with them) and must not be replaced by
+ *   inspect, which requires a successful parse.
+ * - A Rust panic inside inspect/parse is caught at the FFI boundary
+ *   and reported as failure, never unwound across FFI.
+ *
+ * NOTE: the parse/free_bytes declarations below were added by hand in
+ * cbindgen style (cbindgen is not installed on the Linux builder);
+ * regenerate with cbindgen to confirm byte-identical output.
  */
 
 #ifndef momentstays_core_h
@@ -43,8 +59,40 @@ const char *momentstays_version(void);
 int32_t momentstays_inspect(const uint8_t *data, uintptr_t len, char **out_json);
 
 /**
- * Free a string returned by `momentstays_inspect`. NULL is a no-op.
+ * Free a string returned by `momentstays_inspect` or
+ * `momentstays_parse`. NULL is a no-op.
  */
 void momentstays_free_string(char *s);
+
+/**
+ * Parse a motion photo: JSON summary plus the still bytes.
+ * Returns 0 with the parse JSON (video_start/video_end/timestamp/
+ * timestamp_tag/ultra/cover_frame/format) and the still bytes in
+ * *out_still/*out_still_len, freed by momentstays_free_bytes().
+ * An unsupported file still returns 0, but the JSON carries an
+ * `error` key and the still is NULL/0. NULL out-pointers, or NULL
+ * data with nonzero length, return nonzero with outputs untouched.
+ */
+int32_t momentstays_parse(const uint8_t *data, uintptr_t len, char **out_json, const uint8_t **out_still, uintptr_t *out_still_len);
+
+/**
+ * Free still bytes returned by `momentstays_parse`. NULL is a no-op.
+ * `len` must be the length reported alongside the pointer.
+ */
+void momentstays_free_bytes(uint8_t *ptr, uintptr_t len);
+
+/**
+ * Coding hash of the input bytes (old op-1 semantics). Returns 0
+ * with {"hash": ...} JSON, or an {"error": ...} JSON on failure.
+ * Works on still-only bytes as well as full motion files.
+ */
+int32_t momentstays_coding_hash(const uint8_t *data, uintptr_t len, char **out_json);
+
+/**
+ * Auxiliary (gain-map) hashes of the input bytes (old op-2
+ * semantics). Returns 0 with {"hashes": [...]} JSON, or an
+ * {"error": ...} JSON on failure. HEIC input yields an empty list.
+ */
+int32_t momentstays_auxiliary_hashes(const uint8_t *data, uintptr_t len, char **out_json);
 
 #endif  /* momentstays_core_h */

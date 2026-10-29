@@ -50,7 +50,7 @@ impl MotionModel {
             return fail("缺少封面时间或帧号，无法无损转换");
         };
         Ok(MotionModel {
-            still: p.still.clone(),
+            still: p.still.to_vec(),
             video: p.video(source).to_vec(),
             cover,
             source_format: p.format.clone(),
