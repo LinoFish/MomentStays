@@ -55,8 +55,23 @@ A1. [x] Neutral model: `MotionModel` { still parts (primary, gain maps, vendor t
        HEIC Google/Samsung); HEIC writers done for Google/Samsung
        (`heifwrite.rs`, public samples verified locally 2026-10-28,
        see item 3 and `tests/SOURCES.md`).
-A2. [ ] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
+A2. [x] Android build: CI cross-compiles aarch64-linux-android / armv7 / x86_64 with cargo-ndk;
        `cdylib` + UniFFI (or JNI) Kotlin bindings, smoke test calling parse from Kotlin.
+       Done 2026-10-29 without new dependencies: hand-written JNI
+       shim (`src/jni.rs`, table indices read from NDK r27c `jni.h`:
+       NewStringUTF 167, GetArrayLength 171, GetByteArrayElements
+       184, ReleaseByteArrayElements 192) over the C ABI, `cdylib`
+       added to `[lib]`, Kotlin `Core.inspect(ByteArray): String?`
+       (`core/android/.../Core.kt`), `core/android/build.sh`
+       (cargo-ndk, three targets, `jniLibs/<abi>/`). Verified on
+       Linux: host smoke test through a fake JNIEnv table
+       (`tests/jni_smoke.rs`); all three `.so` files compile and
+       export `JNI_OnLoad`,
+       `Java_com_linofish_momentstays_Core_inspect`,
+       `momentstays_inspect/version/free_string` (NDK `llvm-nm`).
+       `.so` files are build artifacts, not committed; a real
+       device/emulator run of `Core.inspect` from Kotlin is still
+       Needs device check (a bionic `.so` cannot run on Linux).
 A3. [x] Writers: Google Motion Photo v2 (Container directory, MotionPhotoPresentationTimestampUs),
        Samsung SEF (JPEG + HEIC mpvd), Huawei/Honor LIVE_ tail, OPPO, vivo; video bytes never re-encoded.
        Done: JPEG writers for all five vendors; HEIC mpvd writer for Google/Samsung
@@ -246,6 +261,17 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: Android build landed (ROADMAP A2): NDK r27c +
+  cargo-ndk 4.1.2 installed locally (outside the repo),
+  `aarch64-linux-android` / `armv7-linux-androideabi` /
+  `x86_64-linux-android` targets added, `cdylib` enabled,
+  hand-written JNI shim (`src/jni.rs`) + Kotlin `Core.kt` +
+  `core/android/build.sh` + README. Host smoke test passes;
+  three `.so` files (562–821 KB) built and symbol-checked with
+  NDK `llvm-nm`; `.so` files not committed (binary, push tool is
+  text-only; CI rebuilds them). Full suite 137 tests pass,
+  `check_rust_core.py` 16 inputs 0 mismatches. Device run of
+  `Core.inspect` from Kotlin still Needs device check.
 - 2026-10-29: Lightweight fuzzing landed (ROADMAP item 5):
   `tests/fuzz_light.rs` (3 tests: 12,000 mutated inputs across 8
   targets with zero panics; ffprobe differential on clean reads
