@@ -109,8 +109,24 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
        comparison against NativeDriver output on identical files, and
        the `CGImageSource` decode half of `confirmedStatic`
        (approximated here by header dimensions).
-5. [ ] Fuzzing: cargo-fuzz targets for `parse`, `jpeg::segments`, `heif::layout`; guarantee no panics
+5. [x] Fuzzing: cargo-fuzz targets for `parse`, `jpeg::segments`, `heif::layout`; guarantee no panics
        (replace remaining slicing that can panic on hostile input with checked access).
+       Done as a stable-toolchain lightweight fuzzer (`tests/fuzz_light.rs`,
+       no nightly needed): seeded xorshift mutations (byte flips,
+       truncation, extension, length-field pokes, slice duplication,
+       zeroing) over valid JPEG / HEIC-motion / MP4 seeds — 8 targets ×
+       1500 inputs (`parse`, `segments`, `layout`, `sample_tables`,
+       `remux_to_mp4`, `remux_to_mov`) with zero panics, plus an
+       ffprobe differential that only asserts on clean full reads
+       (exit 0 + empty stderr + all seed tracks discovered: per-track
+       sample counts equal ffprobe packet counts). The fuzzer found
+       one real over-strictness bug and fixed it: `mp4::boxes` now
+       stops at / clamps unparseable trailing content instead of
+       failing the whole parse, so appended bytes, a cut udta tail
+       and a corrupt size on a complete final box no longer fail
+       table parsing, while damage to needed tables still fails at
+       content validation. cargo-fuzz on nightly was not pursued:
+       the lightweight fuzzer covers the no-panic property on stable.
 6. [x] `live_still` for JPEG (XMP rewrite, Apple MakerNote / Exif identifier) with parity defined on
        coding hash + semantic XMP fields. Done: `pymotion::live_still_with_identifier`
        (static-only clean per Swift `liveStill(updateIdentifier:true)`, then MakerNote /
@@ -230,6 +246,17 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: Lightweight fuzzing landed (ROADMAP item 5):
+  `tests/fuzz_light.rs` (3 tests: 12,000 mutated inputs across 8
+  targets with zero panics; ffprobe differential on clean reads
+  only; box-walk tolerance regression). The fuzzer forced one real
+  fix in `mp4::boxes` (tolerant trailing walk, see item 5) and two
+  methodology corrections, both documented in the test comments:
+  ffprobe exit codes are not a sound oracle in either direction
+  (it rejects table-valid files for corrupt bitstreams and silently
+  drops broken tracks), and partial discovery must be skipped, not
+  asserted. Full suite 136 tests pass, `check_rust_core.py` 16 inputs
+  0 mismatches.
 - 2026-10-29: Formal HEIC round-trip matrix landed (ROADMAP A5):
   `tests/heic_matrix.rs` (6 tests: Google↔Samsung, two-hop,
   sefd→mpvd, `live_still_heic`→assemble, motion-XMP hops; video bytes,
