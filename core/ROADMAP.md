@@ -295,7 +295,15 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   expected/scan.json (generated on Linux) uses forward
   slashes, so the source comparison failed; fixed by
   normalizing separators on both sides before comparing.
-  Full Linux suite still 140 pass. The workflow upgrade
+  That still did not turn Windows green, so a third cause
+  was found the same way: `cabi::c_abi_smoke` compiles its
+  C smoke program with `cc`, which stock Windows runners
+  do not have (the failure dates back to the C ABI
+  milestone, when Windows CI first went red); fixed by
+  skipping the test when `cc` is unavailable, the same
+  pattern as the ffprobe differential check. The C ABI's
+  real consumer is the Swift bridge (macOS), which CI
+  covers. Full Linux suite still 140 pass. The workflow upgrade
   (build + upload `momentstays-convert` on all three OSes)
   is written locally but blocked from pushing by the GitHub
   App's missing workflows permission (403); it awaits the
