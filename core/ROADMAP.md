@@ -298,9 +298,12 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   That still did not turn Windows green, so a third cause
   was found the same way: `cabi::c_abi_smoke` compiles its
   C smoke program with `cc`, which stock Windows runners
-  do not have (the failure dates back to the C ABI
-  milestone, when Windows CI first went red); fixed by
-  skipping the test when `cc` is unavailable, the same
+  either lack or provide only as a MinGW `cc` (via Git)
+  that cannot link the Rust staticlib without MSVC-style
+  system libs (the failure dates back to the C ABI
+  milestone, when Windows CI first went red); the first
+  fix (skip when `cc` is missing) was not enough, so the
+  test is now skipped outright on Windows, the same
   pattern as the ffprobe differential check. The C ABI's
   real consumer is the Swift bridge (macOS), which CI
   covers. Full Linux suite still 140 pass. The workflow upgrade

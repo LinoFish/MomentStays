@@ -132,18 +132,16 @@ fn fixture(name: &str) -> Vec<u8> {
 
 #[test]
 fn c_abi_smoke() {
-    // No C compiler on stock Windows runners: skip, like the
-    // ffprobe differential check. The C ABI's real consumer is
-    // the Swift bridge (macOS), which CI covers; a Windows C
-    // toolchain check would need MSVC flags, not `cc`.
-    if Command::new("cc")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_err()
-    {
-        eprintln!("cc unavailable, skipping C ABI smoke test");
+    // Windows is skipped outright, not just when `cc` is missing:
+    // stock Windows runners either have no `cc`, or a MinGW `cc`
+    // (via Git) that cannot link the Rust staticlib without
+    // MSVC-style system libs, so probing for `cc` is not enough
+    // to decide. The C ABI's real consumer is the Swift bridge
+    // (macOS), which CI covers; a Windows C toolchain check
+    // would need MSVC flags and is future work. Same skip
+    // pattern as the ffprobe differential check.
+    if cfg!(target_os = "windows") {
+        eprintln!("Windows: skipping C ABI smoke test (needs a macOS/Linux C toolchain)");
         return;
     }
     let exe = build_smoke();
