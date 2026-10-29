@@ -285,14 +285,21 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
 ## Log
 - 2026-10-29: rust-core CI diagnosis + Windows fix: the
   test-only workflow already on rust-core (since 2026-10-27)
-  was green on Linux/macOS and red on Windows; the cause found
-  by inspection (job logs need admin rights) is two tests
-  writing debug artifacts to absolute `/tmp/...` — fixed to
-  `temp_dir()`, full Linux suite still 140 pass. The workflow
-  upgrade (build + upload `momentstays-convert` on all three
-  OSes) is written locally but blocked from pushing by the
-  GitHub App's missing workflows permission (403); it awaits
-  the owner granting that permission or pushing the file
+  was green on Linux/macOS and red on Windows. First fix
+  (debug artifacts from absolute `/tmp/...` to `temp_dir()`)
+  did NOT turn Windows green, so the run after it was
+  inspected again: the remaining Windows-only failure found
+  by inspection (job logs need admin rights, so causes are
+  identified statically) is `pycli::cli_scan_matches_python` —
+  the binary emits backslash paths on Windows while
+  expected/scan.json (generated on Linux) uses forward
+  slashes, so the source comparison failed; fixed by
+  normalizing separators on both sides before comparing.
+  Full Linux suite still 140 pass. The workflow upgrade
+  (build + upload `momentstays-convert` on all three OSes)
+  is written locally but blocked from pushing by the GitHub
+  App's missing workflows permission (403); it awaits the
+  owner granting that permission or pushing the file
   directly. Whether Windows goes green is confirmed only by
   the next CI run after this push.
 - 2026-10-29: Zero-copy + hot-path tuning landed (ROADMAP P2/P4):
