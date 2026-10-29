@@ -232,8 +232,19 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
     still-image-time track, warning only when that flag is absent),
     `to-motion` (Live pair assembly, cover from --cover-time/--cover-frame/
     --cover-from-mett). Existing `momentstays` Python-compatible binary
-    untouched (its tests still pass). 7 CLI tests. Release binaries via
-    CI remain open (no CI in this repo yet).
+    untouched (its tests still pass). 7 CLI tests. CI: a test-only
+    `.github/workflows/rust-core.yml` has run on every rust-core
+    push since 2026-10-27 (commit fc07e721); it was green on
+    Linux/macOS but red on Windows (two tests wrote debug
+    artifacts to absolute `/tmp/...`, which does not exist on
+    Windows — fixed 2026-10-29 to `temp_dir()`). The upgrade to
+    also build `momentstays-convert` for Linux/macOS/Windows and
+    upload it as a workflow-run artifact is written locally in
+    the same file but NOT pushed: the GitHub App returns 403 on
+    workflow files (it lacks the workflows permission), so that
+    file needs the owner to grant the permission or push it
+    directly. Artifacts would be run artifacts, not a GitHub
+    Release (releases still need the owner's approval).
 
 ## Needs Mac check
 - Parse layer (M1): verified by the owner on Mac 2026-10-28 and merged into the
@@ -272,6 +283,18 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: rust-core CI diagnosis + Windows fix: the
+  test-only workflow already on rust-core (since 2026-10-27)
+  was green on Linux/macOS and red on Windows; the cause found
+  by inspection (job logs need admin rights) is two tests
+  writing debug artifacts to absolute `/tmp/...` — fixed to
+  `temp_dir()`, full Linux suite still 140 pass. The workflow
+  upgrade (build + upload `momentstays-convert` on all three
+  OSes) is written locally but blocked from pushing by the
+  GitHub App's missing workflows permission (403); it awaits
+  the owner granting that permission or pushing the file
+  directly. Whether Windows goes green is confirmed only by
+  the next CI run after this push.
 - 2026-10-29: Zero-copy + hot-path tuning landed (ROADMAP P2/P4):
   `format::MotionPhoto.still` is `Cow` (`jpeg::static_only_cow`
   borrows single-image JPEGs without MPF/Honor tail; HEIC always

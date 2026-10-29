@@ -25,7 +25,9 @@ fn identifier_roundtrip() {
     let out = remux_to_mov_with_identifier(&src, 0, UUID).expect("remux with identifier");
     assert_eq!(read_content_identifier(&out).expect("read identifier"), Some(UUID.to_string()));
     check_remux(&src, &out, 0).expect("remux still verifies");
-    std::fs::write("/tmp/real-identifier.mov", &out).unwrap();
+    // Debug artifact for local inspection; temp_dir() so this also
+    // passes on Windows, where no /tmp directory exists.
+    std::fs::write(std::env::temp_dir().join("real-identifier.mov"), &out).unwrap();
 }
 
 #[test]

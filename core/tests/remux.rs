@@ -296,5 +296,7 @@ fn real_file_remux() {
         .unwrap();
     let out = remux_to_mov(&src, 0).expect("real remux");
     check_remux(&src, &out, 0).expect("real remux verifies");
-    std::fs::write("/tmp/real-remux.mov", &out).unwrap();
+    // Debug artifact for local inspection; temp_dir() so this also
+    // passes on Windows, where no /tmp directory exists.
+    std::fs::write(std::env::temp_dir().join("real-remux.mov"), &out).unwrap();
 }
