@@ -39,6 +39,58 @@ pub fn exif_item() -> Vec<u8> {
     v
 }
 
+/// Exif item whose TIFF carries an Apple MakerNote with tag 0x11
+/// (ContentIdentifier, ASCII) and tag 0x17 (LivePhotoVideoIndex,
+/// LONG8), mirroring the real iPhone MakerNote layout the JPEG
+/// `maker_note` writer handles: MakerNote-internal offsets are
+/// relative to the MakerNote start; the 4-byte item prefix is the
+/// TIFF offset (0 here).
+pub fn exif_item_with_makernote(old_uuid: &str, video_index: u64) -> Vec<u8> {
+    let mut uuid = old_uuid.as_bytes().to_vec();
+    uuid.push(0);
+    // MakerNote: header (14) + count (2) + 2 entries (24) + next (4) =
+    // 44 bytes before external values.
+    let mut note = b"Apple iOS\0\x00\x01MM".to_vec();
+    note.extend(2u16.to_be_bytes());
+    // tag 0x11, ASCII, external value at 44.
+    note.extend(0x11u16.to_be_bytes());
+    note.extend(2u16.to_be_bytes());
+    note.extend((uuid.len() as u32).to_be_bytes());
+    note.extend(44u32.to_be_bytes());
+    // tag 0x17, LONG8 (type 16), external value right after the uuid.
+    let index_at = 44 + uuid.len();
+    note.extend(0x17u16.to_be_bytes());
+    note.extend(16u16.to_be_bytes());
+    note.extend(1u32.to_be_bytes());
+    note.extend((index_at as u32).to_be_bytes());
+    note.extend([0u8; 4]);
+    note.extend(&uuid);
+    note.extend(video_index.to_be_bytes());
+    // TIFF: MM, 42, IFD0 at 8; IFD0 has the Exif pointer (0x8769);
+    // Exif IFD has the MakerNote (0x927C, undefined).
+    let exif_ifd_at = 8 + 2 + 12 + 4;
+    let note_at = exif_ifd_at + 2 + 12 + 4;
+    let mut tiff = b"MM".to_vec();
+    tiff.extend([0u8, 42]);
+    tiff.extend(8u32.to_be_bytes());
+    tiff.extend(1u16.to_be_bytes());
+    tiff.extend(0x8769u16.to_be_bytes());
+    tiff.extend(4u16.to_be_bytes());
+    tiff.extend(1u32.to_be_bytes());
+    tiff.extend((exif_ifd_at as u32).to_be_bytes());
+    tiff.extend([0u8; 4]);
+    tiff.extend(1u16.to_be_bytes());
+    tiff.extend(0x927Cu16.to_be_bytes());
+    tiff.extend(7u16.to_be_bytes());
+    tiff.extend((note.len() as u32).to_be_bytes());
+    tiff.extend((note_at as u32).to_be_bytes());
+    tiff.extend([0u8; 4]);
+    tiff.extend(&note);
+    let mut item = vec![0u8, 0, 0, 0];
+    item.extend(tiff);
+    item
+}
+
 pub fn plain_xmp() -> Vec<u8> {
     b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\"/></rdf:RDF></x:xmpmeta>".to_vec()
 }

@@ -109,6 +109,15 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
        (static-only clean per Swift `liveStill(updateIdentifier:true)`, then MakerNote /
        Exif identifier inject); parity = coding bytes unchanged + dynamic XMP fields
        cleared + MakerNote tag 17 reads back the uuid; HEIC refused. 3 tests.
+       HEIC done 2026-10-29: `heifwrite::live_still_heic` (same order:
+       static truncation of motion input, motion XMP strip with the
+       `live_still_clean` key sets, MakerNote tag 17 inject via the same
+       TIFF surgery; Exif item created with new `infe` + `cdsc` when
+       absent; repack shared with `write_xmp` via a common `repack`
+       helper, coding-hash guard kept). 5 tests in
+       `tests/live_still_heic.rs` (strip + inject, replace keeps tag 23
+       and coding, motion-input truncation, Exif creation, non-HEIC /
+       multi-Exif refusal). Gallery recognition still Needs Mac check.
 7. [x] MP4/MOV sample-table reader (stts/stsz/stco/co64/ctts) and per-track sample hash matching
        Swift `trackInfo` (no AVFoundation). Reader done: `mp4::sample_tables` (per-sample
        offset/size/decode/presentation/sync, stss + ctts v0/v1); 6 tests incl. a real
@@ -127,7 +136,8 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
    sample timing through the edit list (accepting Swift `mett` entries and
    native `mebx` entries identified by their still-image-time key; sample
    value NOT checked — native files write -1, Swift `movie()` writes 0).
-   HEIC stills refused (need HEIC live_still). 8 assembly tests.
+   HEIC stills now handled by `heifwrite::live_still_heic` (see item 6).
+   8 assembly tests.
 9. [x] Motion Photo → Live Photo remux step (a): sample-copy MP4 -> MOV (`remux.rs`):
        chosen video track + all audio tracks, stts/stsc/stsz/ctts/stss copied verbatim,
        stco/co64 rebuilt, edit list rescaled to the 1_000_000 movie timescale, ftyp `qt  `;
@@ -213,6 +223,15 @@ A5. [x] Round-trip matrix tests: every vendor → every vendor → parse back, c
   header dimensions (see `scan.rs` docs).
 
 ## Log
+- 2026-10-29: HEIC `live_still` landed (`heifwrite::live_still_heic`,
+  ROADMAP item 6 HEIC half): same order as the JPEG version — motion
+  input truncated to its still part, motion XMP stripped with the
+  `live_still_clean` key sets, MakerNote tag 17 injected via the same
+  TIFF surgery (tag 23 kept, Exif item created with new `infe` +
+  `cdsc` when absent). `write_xmp` refactored onto a shared `repack`
+  helper (iloc v2 rebuild, coding-hash guard); full suite confirms no
+  regression. 5 tests in `tests/live_still_heic.rs`. Full suite 126
+  tests pass, `check_rust_core.py` 16 inputs 0 mismatches.
 - 2026-10-29: Samsung sefd-form HEIC parsing landed (`format::parse_heif`):
   top-level `sefd` (no mpvd) accepted when it runs to EOF and the SEF
   `MotionPhoto_Data` record lies inside the sefd payload; the SEF
