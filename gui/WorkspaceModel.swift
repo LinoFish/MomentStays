@@ -132,8 +132,10 @@ final class WorkspaceModel: ObservableObject {
     private var token = StopToken()
     private var operation = UUID()
     private var scanComplete = false
+    private var inspectionActive = false
     private var rowIndices: [String: Int] = [:]
     private var sourceOrigins: [String: LibraryOrigin] = [:]
+    private var coverVersions: [String:SourceVersion] = [:]
     private struct OutputChoice {
         let destination: OutputDestination; let confirmed: Bool?; let folder: URL?
         let albumID: String?; let albumTitle: String
@@ -145,6 +147,7 @@ final class WorkspaceModel: ObservableObject {
     var outputIsChosen: Bool { settings.destination != .ask && (settings.direction != .toApple || settings.outputConfirmed == true) && (settings.destination.usesCache || output != nil) }
     var canStart: Bool { !isBusy && !sharing && scanComplete && outputIsChosen && items.contains { $0.isMotion } }
     var canSwitchDirection: Bool { !sharing && (!isBusy || phase == .scanning || phase == .projecting) }
+    var canAppendSources: Bool { !sharing && !isPreview && (!isBusy || inspectionActive && [.scanning,.projecting,.stopping].contains(phase)) }
     var canRescan: Bool { !isBusy && !sharing && !sources.isEmpty && !isPreview }
     var outputToOpen: URL? { settings.destination.usesCache ? recentOutput : output }
     var canOpenOutput: Bool {
@@ -160,9 +163,11 @@ final class WorkspaceModel: ObservableObject {
 
     func selectCover(_ index: Int?, for source: URL) {
         guard !isBusy, !sharing, settings.direction == .toApple, index == nil || index! >= 0 else { return }
+        let key = NativeBatch.normalized(source).path
+        coverVersions[key] = index == nil ? nil : SourceVersion.read(source)
         updateSettings {
             var choices = $0.coverSelections ?? [:]
-            choices[NativeBatch.normalized(source).path] = index
+            choices[key] = index
             $0.coverSelections = choices.isEmpty ? nil : choices
             if index != nil { $0.track = .primary }
         }
@@ -205,13 +210,14 @@ final class WorkspaceModel: ObservableObject {
         output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction.exportsAndroid ? " Motion Photos" : " Live Photos"))
         items = []; selection = nil; report = nil; sourceOrigins = [:]
         settings.coverSelections = nil
+        coverVersions = [:]
         rescan()
     }
 
     // Manual additions extend the current batch. Automatic monitoring keeps its
     // existing replacement semantics through chooseSources(_:).
     func appendSources(_ urls: [URL], label: String? = nil, defaultOutput: URL? = nil, origins: [String: LibraryOrigin] = [:]) {
-        guard !isBusy, !sharing, !isPreview else { return }
+        guard canAppendSources else { return }
         func identity(_ origin: LibraryOrigin) -> String { "\(origin.assetID)|\(origin.version)|\(origin.edited)" }
         var known = Set(sourceOrigins.values.map(identity))
         let incoming = Set(urls.filter { $0.isFileURL }.map { NativeBatch.normalized($0) }.filter { url in
@@ -234,7 +240,8 @@ final class WorkspaceModel: ObservableObject {
             output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction.exportsAndroid ? " Motion Photos" : " Live Photos"))
         }
         shareReady = false; deliverySummary = ""
-        rescan(preservingResults:true)
+        token.cancel()
+        refresh(projection:false,preservingResults:true)
     }
 
     func clearSources() {
@@ -242,6 +249,7 @@ final class WorkspaceModel: ObservableObject {
         operation = UUID(); token.cancel(); service.clearInspections()
         sources = []; items = []; selection = nil; rowIndices = [:]; sourceOrigins = [:]; scanComplete = false
         sourceLabel = "尚未选择原片"; settings.coverSelections = nil
+        coverVersions = [:]
         phase = .idle; status = "选择照片或文件夹，开始转换"
         report = nil; errorMessage = nil; notice = nil; currentFile = ""; progress = nil
         deliverySummary = ""; librarySummary = ""; shareReady = false; detailExpanded = false
@@ -296,31 +304,57 @@ final class WorkspaceModel: ObservableObject {
         guard canRescan else { return }
         refresh(projection:false,preservingResults:preservingResults)
     }
+    private func invalidateCoverSelections(_ sources:Set<String>) {
+        for source in sources { coverVersions.removeValue(forKey:source) }
+        guard var choices = settings.coverSelections else { return }
+        let count = choices.count
+        for source in sources { choices.removeValue(forKey:source) }
+        if choices.count != count { settings.coverSelections = choices.isEmpty ? nil : choices }
+    }
     private func refresh(projection:Bool, preservingResults:Bool) {
+        let versions = Dictionary(items.compactMap { item in item.row.version.map { (item.id,$0) } },uniquingKeysWith:{ first,_ in first }).merging(coverVersions,uniquingKeysWith:{ _,cover in cover })
+        let changed = Set(versions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) != $0.value ? $0.key : nil })
+        invalidateCoverSelections(changed)
+        func changedSources(_ rows:[ScanRow]) -> Set<String> {
+            Set(rows.compactMap { row in
+                guard let previous = versions[row.source.path], previous != row.version else { return nil }
+                return row.source.path
+            })
+        }
         let retained = preservingResults ? Dictionary(items.map { ($0.id,$0) },uniquingKeysWith:{ first,_ in first }) : [:]
         func queueItem(_ row: ScanRow) -> PhotoQueueItem {
             var item = PhotoQueueItem(row)
-            if let old = retained[item.id], old.relative == item.relative, old.row.version != nil, old.row.version == row.version { item.resultState = old.resultState; item.resultDetail = old.resultDetail }
+            if let old = retained[item.id], old.row.version != nil, old.row.version == row.version { item.resultState = old.resultState; item.resultDetail = old.resultDetail }
             return item
         }
         let phase: TaskPhase = projection ? .projecting : .scanning
         let id = begin(phase, message: projection ? "正在切换转换方向…" : "正在检查照片…"), currentToken = token
-        report = nil; scanComplete = false; items = []; rowIndices = [:]
+        report = nil; scanComplete = false; inspectionActive = true; rowIndices = [:]
+        if !preservingResults { items = [] }
+        else { items.removeAll { changed.contains($0.id) } }
+        var streamed = Dictionary(items.map { ($0.id,$0) },uniquingKeysWith:{ first,_ in first })
+        func merge(_ rows:[ScanRow]) -> [PhotoQueueItem] {
+            for row in rows { streamed[row.source.path] = queueItem(row) }
+            return streamed.values.sorted { $0.relative.localizedStandardCompare($1.relative) == .orderedAscending }
+        }
         let inspect = projection ? service.project : service.scan
         inspect(sources,settings.direction,currentToken, { [weak self] rows in
             guard let self = self, self.operation == id, self.phase == phase else { return }
-            self.items.append(contentsOf:rows.map(queueItem))
-            self.items.sort { $0.relative.localizedStandardCompare($1.relative) == .orderedAscending }
+            self.invalidateCoverSelections(changedSources(rows))
+            self.items = merge(rows)
         }, { [weak self] index, total in
             guard let self = self, self.operation == id, self.phase == phase else { return }
             self.status = projection ? "正在检查来源变化 \(index) / \(total)" : "正在检查 \(index) / \(total)"
             self.progress = total > 0 ? Double(index) / Double(total) : nil
         }, { [weak self] result in
             guard let self = self, self.operation == id else { return }
+            self.inspectionActive = false
             switch result {
             case .success(let rows):
+                self.invalidateCoverSelections(changedSources(rows))
+                if !currentToken.isCancelled { self.invalidateCoverSelections(Set(versions.keys).subtracting(rows.map { $0.source.path })) }
                 self.scanComplete = !currentToken.isCancelled
-                self.items = rows.map(queueItem)
+                self.items = currentToken.isCancelled ? merge(rows).filter { $0.row.version == nil || SourceVersion.read($0.source) == $0.row.version } : rows.map(queueItem)
                 self.rowIndices = Dictionary(self.items.enumerated().map { ($0.element.relative, $0.offset) }, uniquingKeysWith: { first, _ in first })
                 if !self.items.contains(where: { $0.id == self.selection }) { self.selection = nil }
                 self.phase = currentToken.isCancelled ? .stopped : .ready
@@ -333,6 +367,7 @@ final class WorkspaceModel: ObservableObject {
 
     func start(outputOverride: URL? = nil) {
         guard canStart, !isPreview, let output = outputOverride ?? output else { return }
+        invalidateCoverSelections(Set(coverVersions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) != $0.value ? $0.key : nil }))
         do { try NativeBatch.validateOutput(sources: sources, output: output) }
         catch { errorMessage = error.localizedDescription; return }
         let capturedSettings = settings

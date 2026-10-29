@@ -130,7 +130,12 @@ fn fixture(name: &str) -> Vec<u8> {
     base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
 }
 
+// Keep missing Windows coverage visible as ignored, not as a passing test.
+// This harness expects a Unix C compiler and .a archive; an MSVC/MinGW
+// linker harness still needs separate verification. The production Swift
+// ms_core_* ABI has its own ownership tests and is distinct from this C API.
 #[test]
+#[cfg_attr(target_os = "windows", ignore = "Windows C linker harness not yet verified")]
 fn c_abi_smoke() {
     let exe = build_smoke();
     // Version round-trip.

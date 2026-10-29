@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.5.0</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.5.1</strong>
 </p>
 
 # 留刻— Android Motion Photo ↔ Apple Live Photo Converter for macOS

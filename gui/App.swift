@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         case #selector(stop): return model.canStop
         case #selector(rescan): return model.canRescan
         case #selector(importPhotos): return model.settings.direction != .androidToAndroid && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
-        case #selector(chooseSources): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
+        case #selector(chooseSources): return model.canAppendSources && window?.attachedSheet == nil
         case #selector(chooseOutput): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
         case #selector(shareResults): return model.shareReady && !model.isBusy && !model.sharing
         case #selector(recentResults): return !model.isBusy && !model.sharing
@@ -154,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func application(_ sender: NSApplication, openFiles filenames: [String]) {
-        guard !filenames.isEmpty, !model.isBusy, !model.sharing, window?.attachedSheet == nil else { sender.reply(toOpenOrPrint: .failure); return }
+        guard !filenames.isEmpty, model.canAppendSources, window?.attachedSheet == nil else { sender.reply(toOpenOrPrint: .failure); return }
         let urls = filenames.map { URL(fileURLWithPath: $0) }
         if window == nil { pendingOpen.append(contentsOf: urls) } else { platform.openSources(urls) }
         sender.reply(toOpenOrPrint: .success)

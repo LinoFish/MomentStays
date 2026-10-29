@@ -75,7 +75,7 @@ final class MacPlatformServices: NSObject {
     }
 
     func openSources(_ urls: [URL]) {
-        guard !model.isBusy, !model.sharing else { return }
+        guard model.canAppendSources else { return }
         stopMonitoring(); model.librarySummary = ""
         model.appendSources(urls)
     }
@@ -88,8 +88,7 @@ final class MacPlatformServices: NSObject {
     }
 
     func chooseSources() {
-        guard !model.isBusy, !model.sharing, !model.isPreview, let window = window, window.attachedSheet == nil else { return }
-        dropRequest = UUID()
+        guard model.canAppendSources, let window = window, window.attachedSheet == nil else { return }
         let panel = NSOpenPanel()
         panel.title = model.settings.direction == .toAndroid ? "选择完整实况配对（图片与 MOV）或文件夹" : "选择 Android 原始动态照片"
         panel.canChooseDirectories = true; panel.canChooseFiles = true; panel.allowsMultipleSelection = true
@@ -440,10 +439,12 @@ final class MacPlatformServices: NSObject {
     }
 
     private func acceptDrop(_ providers: [NSItemProvider], output: Bool) -> Bool {
-        guard !model.isBusy, !model.sharing, !model.isPreview else { return false }
+        guard output ? (!model.isBusy && !model.sharing && !model.isPreview) : model.canAppendSources else { return false }
         let providers = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
         guard !providers.isEmpty else { return false }
-        let request = UUID(); dropRequest = request
+        // Independent additions share the current clear/import generation; a
+        // second drop must not discard the first drop's asynchronous URL load.
+        let request = dropRequest
         let group = DispatchGroup(), lock = NSLock()
         var urls: [(Int, URL)] = []
         for (index, provider) in providers.enumerated() {
@@ -459,7 +460,8 @@ final class MacPlatformServices: NSObject {
             }
         }
         group.notify(queue: .main) { [weak self] in
-            guard let self = self, self.dropRequest == request, !self.model.isBusy else { return }
+            guard let self = self, self.dropRequest == request,
+                  output ? !self.model.isBusy : self.model.canAppendSources else { return }
             let ordered = urls.sorted { $0.0 < $1.0 }.map { $0.1 }
             if output {
                 if ordered.count == 1, let url = ordered.first { self.model.setOutput(url) }

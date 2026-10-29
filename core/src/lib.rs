@@ -23,6 +23,8 @@ pub mod live2motion;
 pub mod model;
 pub mod mp4;
 pub mod remux;
+pub mod recovery;
+pub mod scan;
 pub mod pyjpeg;
 pub mod pymotion;
 pub mod pyxml;

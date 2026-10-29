@@ -17,7 +17,7 @@
 //! like Swift's "no explicit edit-list handling" rule.
 
 use crate::mp4::{self, BoxRef};
-use crate::{fail, sha256_hex, Result};
+use crate::{fail, Result};
 use std::collections::HashSet;
 
 /// Output movie timescale. Internal: part of the file format, not API.
@@ -747,14 +747,16 @@ pub fn check_remux(source: &[u8], output: &[u8], video_index: usize) -> Result<(
         if s.samples.len() != o.samples.len() {
             return fail("重封装校验失败：样本数不同");
         }
+        // Stream the hash over the samples: the old code collected
+        // every sample byte into one Vec first, doubling peak memory
+        // on large videos for no benefit (P2 zero-copy).
         let hash = |samples: &[mp4::Sample], d: &[u8]| {
-            let mut h = String::new();
-            let mut all = Vec::new();
+            use sha2::Digest as _;
+            let mut h = sha2::Sha256::new();
             for x in samples {
-                all.extend_from_slice(&d[x.offset..x.offset + x.size]);
+                h.update(&d[x.offset..x.offset + x.size]);
             }
-            h.push_str(&sha256_hex(&all));
-            h
+            crate::hex(&h.finalize())
         };
         if hash(&s.samples, source) != hash(&o.samples, output) {
             return fail("重封装校验失败：样本数据不同");

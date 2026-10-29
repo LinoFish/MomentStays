@@ -86,5 +86,78 @@ check for the remaining Mac hex-dump step).
 
 ## HEIC samples
 
-Pending: registered with the HEIC writer milestone (ROADMAP A3),
-not yet added.
+Verified locally 2026-10-28 (parse + writer round-trip + `live_still`,
+harness in /tmp, not committed): the files are 1.6-6.5 MB each, so they
+are registered here but NOT committed to the repo (a .b64 copy would be
+~2-9 MB each). The code paths they exercise are covered in-repo by
+synthetic fixtures plus two regression tests derived from them
+(`parse_largesize_mpvd_google` in `tests/heic.rs`,
+`still_with_identifier_keeps_long8_makernote_fields` in
+`tests/live2motion.rs`).
+
+- Samsung HEIC, mpvd form (Galaxy S22 Ultra photo, MIT): source repo
+  https://github.com/g0ddest/sm_motion_photo (LICENSE MIT, Copyright
+  (c) 2020 Vitalii Velicodnii), file
+  https://raw.githubusercontent.com/g0ddest/sm_motion_photo/master/tests/data/photo-sg22-ultra.heic
+  (2,849,914 bytes, SHA-256
+  3dfb0d488cd885652cf49abe846655bf50be27da6eec342d58d90d738e378752).
+  Top-level ftyp/mdat/meta/mpvd (32-bit size, to EOF); XMP
+  MotionPhoto=1, timestamp 2,990,844 us; EXIF samsung / SM-S9080.
+  Parses as `samsung-heic-sef` (video 507,827..2,849,429, 2,341,602
+  bytes, ftyp-led; the trailing 485-byte `sefd` box inside the mpvd
+  payload is excluded by the SEF range); the Samsung writer round-trip
+  re-parses with identical video bytes, coding hash and timestamp.
+  Caveat: Samsung camera XMP does NOT follow Google semantics -
+  Primary Padding=67 (not the 8-byte mpvd header) and video
+  Length=104 (not the real video length). The parser locates video via
+  SEF, not XMP Length, so it is unaffected; the writer follows Swift
+  `xmp(heic:true)` (Padding 8, Length = video length), which re-parses
+  cleanly. Whether Samsung Gallery accepts the Swift-style XMP is a
+  Needs Mac check (device check, really).
+- Samsung HEIC, sefd form (Galaxy S20 photo, same MIT repo):
+  https://raw.githubusercontent.com/g0ddest/sm_motion_photo/master/tests/data/photo.heic
+  (5,755,343 bytes, SHA-256
+  f2dbe60e0402479f3c0d4246f30756fc73a416cdd9c64509c9767b070e22660e).
+  Top-level ftyp/mdat/meta/sefd, NO mpvd; the SEFT trailer's
+  MotionPhoto_Data holds the MP4; EXIF samsung / SM-G981U1. NOT parsed
+  (no mpvd) - this documents that Samsung HEIC has two encapsulations
+  and the core currently supports only the mpvd form. Out of scope for
+  A3 (mpvd only); sefd support is future work.
+- Google HEIC (libmphoto official fixture, Apache-2.0): source repo
+  https://github.com/googleinterns/libmphoto (LICENSE Apache-2.0),
+  motion file
+  https://raw.githubusercontent.com/googleinterns/libmphoto/master/sample_data/heic_motion_photo/motion_photo.heic
+  (3,127,074 bytes, SHA-256
+  807defcdc85ca2b4e8ee4f1bcffbbce80809db836eed6c59eddb8c39f6323cee)
+  and paired still
+  https://raw.githubusercontent.com/googleinterns/libmphoto/master/sample_data/heic_motion_photo/still.heic
+  (1,582,857 bytes, SHA-256
+  0abff0df3b7a3d23863b35eecdd16a8d6ede65e0038c5682732d450c732cdf8b).
+  Motion = still + mpvd; the mpvd uses largesize form (size field 1 +
+  64-bit length 1,544,217), XMP Primary image/heic Length=0 Padding=16
+  (= largesize header), video Length=1,544,201 (= total - 16),
+  timestamp 0. Parses as `google-heic` (video 1,582,873..3,127,074 =
+  mpvd + 16); the Google writer round-trip re-parses with identical
+  video bytes, coding hash and timestamp. This file forced two parser
+  fixes: largesize mpvd headers (the video start was hard-coded to
+  mpvd + 8) and the Exif gate (the fixture's still has NO Exif item;
+  Exif is now optional for HEIC motion photos - layout + XMP + video
+  checks suffice).
+- Apple Live Photo JPEG still (iPhone 15 Pro Max photo, CC0): Wikimedia
+  Commons, File:Sturgeon's Mill - August 2025 - Sarah Stierch 31.jpg,
+  author Missvain, LicenseShortName CC0,
+  https://upload.wikimedia.org/wikipedia/commons/3/3f/Sturgeon%27s_Mill_-_August_2025_-_Sarah_Stierch_31.jpg
+  (6,521,985 bytes, SHA-256
+  a5e142b2d750992e3d691be07b061e509382fc37a6af4bbdf05e8c41f1e9a168).
+  EXIF Make Apple, Model iPhone 15 Pro Max; MakerNote (1,745 bytes, 53
+  entries) tag 0x0011 (decimal 17, ContentIdentifier) =
+  9C72AB1C-2837-4690-AFF8-AF11AF9F5A36, tag 0x0017 (decimal 23,
+  LivePhotoVideoIndex) present; no XMP segment.
+  `live_still_with_identifier` replaces tag 17 with the new uuid, keeps
+  tag 23, keeps Make/Model, keeps coding bytes, keeps SOI/EOI; the
+  EXIF segment grows (new MakerNote + rebuilt IFDs appended, the
+  Swift-parity strategy). The MakerNote uses LONG8 (type 16) for tags
+  0x0017 and 0x0025 - this forced the `maker_note` type-table fix
+  (LONG8/IFD8 sizes added). Limitation: Commons has the still only,
+  no paired MOV, so the ContentIdentifier cannot be cross-checked
+  against video-side content.identifier.

@@ -135,10 +135,16 @@ pub fn image_end(data: &[u8]) -> Result<usize> { Ok(image_ranges(data)?.iter().m
 pub fn static_only(data: &[u8]) -> Result<Vec<u8>> {
     let ranges = image_ranges(data)?;
     let honor = hdr::honor_private(data, ranges.iter().map(|r| r.end).max().unwrap())?;
+    let mpf_seg = segments(data)?.into_iter().find(|s| s.marker == 226 && s.payload(data).starts_with(MPF));
+    rebuild_static(data, &ranges, honor, mpf_seg)
+}
+
+// Reuse validated ranges and the primary MPF descriptor on both Cow paths.
+// In particular, Honor/MPF inputs must not pay for a second full JPEG walk.
+fn rebuild_static(data: &[u8], ranges: &[Range<usize>], honor: Option<&[u8]>, mpf_seg: Option<Segment>) -> Result<Vec<u8>> {
     let mut out = Vec::with_capacity(data.len());
     let mut starts = Vec::new();
-    for r in &ranges { starts.push(out.len()); out.extend_from_slice(&data[r.clone()]); }
-    let mpf_seg = segments(&out)?.into_iter().find(|s| s.marker == 226 && s.payload(&out).starts_with(MPF));
+    for r in ranges { starts.push(out.len()); out.extend_from_slice(&data[r.clone()]); }
     if let Some(s) = mpf_seg {
         let (at, little) = {
             let t = Tiff::new(&out[s.payload.start + 4..s.payload.end])?;
@@ -153,4 +159,25 @@ pub fn static_only(data: &[u8]) -> Result<Vec<u8>> {
     }
     if let Some(tail) = honor { out.extend_from_slice(tail); }
     Ok(out)
+}
+
+/// Borrowed `static_only`: when the input is already one JPEG image
+/// with no MPF segment and no Honor private tail, the rebuild
+/// `static_only` performs is byte-identical to the input, so return
+/// it borrowed instead of copying. Anything else (MPF re-indexing
+/// or an appended tail changes bytes) falls back to the owned
+/// rebuild. This is the P2 zero-copy path for `format::parse`.
+pub fn static_only_cow(data: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>> {
+    let ranges = image_ranges(data)?;
+    let honor = hdr::honor_private(data, ranges.iter().map(|r| r.end).max().unwrap())?;
+    let mpf_seg = segments(data)?.into_iter().find(|s| s.marker == 226 && s.payload(data).starts_with(MPF));
+    if ranges.len() == 1
+        && ranges[0].start == 0
+        && ranges[0].end == data.len()
+        && honor.is_none()
+        && mpf_seg.is_none()
+    {
+        return Ok(std::borrow::Cow::Borrowed(data));
+    }
+    Ok(std::borrow::Cow::Owned(rebuild_static(data, &ranges, honor, mpf_seg)?))
 }

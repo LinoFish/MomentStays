@@ -137,6 +137,8 @@ final class SourceInspectionCache {
     private(set) var parseCount = 0
     private(set) var pairValidationCount = 0
     private(set) var transferValidationCount = 0
+    private(set) var sourceReadCount = 0
+    private(set) var projectionHitCount = 0
     deinit { try? FileManager.default.removeItem(at:folder) }
     func clear() {
         entries.removeAll(); movieSelections.removeAll(); inventories.removeAll(); directoryListings.removeAll()
@@ -218,10 +220,15 @@ final class SourceInspectionCache {
     func rows(sources:[URL], direction:ConversionDirection, token:StopToken, rowsReady:([ScanRow])->Void,
               progress:(Int,Int)->Void) throws -> [ScanRow] {
         let selected = try selection(sources,token:token), active = Set(selected.entries)
+        // A cancelled inventory is incomplete and must never evict valid entries.
+        if token.isCancelled { return [] }
         for file in Array(entries.keys) where !active.contains(file) {
             if let payload = entries.removeValue(forKey:file)?.payload { try? FileManager.default.removeItem(at:payload) }
         }
         var result: [ScanRow] = []
+        var pending: [ScanRow] = []
+        var lastFlush = ProcessInfo.processInfo.systemUptime
+        defer { if !pending.isEmpty { rowsReady(pending) } }
         for (index,file) in selected.entries.enumerated() {
             if token.isCancelled { break }
             let relative = try NativeBatch.relative(file,root:selected.base)
@@ -240,11 +247,12 @@ final class SourceInspectionCache {
                 if entry.pairVersions != versions { entry.projections[.toAndroid] = nil; entry.pairVersions = versions }
             }
             let row: ScanRow
-            if let cached = entry.projections[direction] { row = rebase(cached,relative:relative,version:version) }
+            if let cached = entry.projections[direction] { projectionHitCount += 1; row = rebase(cached,relative:relative,version:version) }
             else if direction == .toAndroid {
                 pairValidationCount += 1
                 row = rebase(AndroidExport.scanFile(file,relative:relative),relative:relative,version:version)
             } else {
+                sourceReadCount += 1
                 let bytes = Array(try Data(contentsOf:file))
                 let parsed = try neutral(file,relative:relative,entry:entry,bytes:bytes)
                 if direction == .toApple { row = rebase(entry.projections[.toApple]!,relative:relative,version:version) }
@@ -259,7 +267,12 @@ final class SourceInspectionCache {
             }
             if token.isCancelled { break }
             entry.projections[direction] = row
-            result.append(row); rowsReady([row]); progress(index + 1,selected.entries.count)
+            result.append(row); pending.append(row)
+            let now = ProcessInfo.processInfo.systemUptime
+            if pending.count >= 64 || now - lastFlush >= 0.05 {
+                rowsReady(pending); pending.removeAll(keepingCapacity:true); lastFlush = now
+            }
+            progress(index + 1,selected.entries.count)
         }
         return result
     }

@@ -13,11 +13,11 @@ fn respond(operation: u32, data: &[u8]) -> Response {
         let mut still = vec![];
         let value = match operation {
             0 => {
-                let p = crate::parse(data)?;
+                let p = crate::format::parse_owned(data)?;
                 let value = json!({"video_start":p.video.start,"video_end":p.video.end,
                     "timestamp":p.timestamp,"timestamp_tag":p.timestamp_tag,"ultra":p.ultra,
                     "cover_frame":p.cover_frame,"format":p.format});
-                still = p.still;
+                still = p.still.into_owned();
                 value
             }
             1 => json!({"hash":crate::format::coding_hash(data)?}),
@@ -72,5 +72,25 @@ mod tests {
             assert!(v["error"].is_string());
             ms_core_free(r);
         }
+    }}
+}
+
+#[cfg(test)]
+mod lifetime_tests {
+    use super::*;
+
+    #[test]
+    fn response_owns_still_after_input_is_released() { unsafe {
+        let input = crate::bench::google_motion_photo(0, 0);
+        let expected = crate::parse(&input).unwrap().still.to_vec();
+        let response = ms_core_call(0, input.as_ptr(), input.len());
+        drop(input);
+        let mut len = 0;
+        let pointer = ms_core_bytes(response, 1, &mut len);
+        assert_eq!(std::slice::from_raw_parts(pointer, len), expected);
+        let pointer = ms_core_bytes(response, 0, &mut len);
+        let json: serde_json::Value = serde_json::from_slice(std::slice::from_raw_parts(pointer, len)).unwrap();
+        assert!(json.get("error").is_none());
+        ms_core_free(response);
     }}
 }

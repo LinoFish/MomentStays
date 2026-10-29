@@ -70,8 +70,9 @@ fn vendor_google_to_samsung() {
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let bytes = std::fs::read(&output).unwrap();
     let parsed = format::parse(&bytes).expect("output parses");
-    let src = format::parse(&fixture("motion.jpg.b64")).expect("input parses");
-    assert_eq!(parsed.video(&bytes), src.video(&fixture("motion.jpg.b64")));
+    let input_bytes = fixture("motion.jpg.b64");
+    let src = format::parse(&input_bytes).expect("input parses");
+    assert_eq!(parsed.video(&bytes), src.video(&input_bytes));
 }
 
 #[test]
@@ -83,7 +84,8 @@ fn vendor_google_to_vivo_keeps_time() {
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let bytes = std::fs::read(&output).unwrap();
     let parsed = format::parse(&bytes).expect("output parses");
-    let src = format::parse(&fixture("motion.jpg.b64")).expect("input parses");
+    let input_bytes = fixture("motion.jpg.b64");
+    let src = format::parse(&input_bytes).expect("input parses");
     assert_eq!(parsed.timestamp, src.timestamp);
 }
 
@@ -181,9 +183,78 @@ fn vendor_samsung_heic_to_google_heic() {
 }
 
 #[test]
+fn vendor_google_heic_to_samsung_heic() {
+    let still = build_still(true, true);
+    let input_bytes = assemble_heic(&still, &real_mp4(), Vendor::Google, 1_420_000).unwrap();
+    let input = tmp("in-google.heic");
+    let output = tmp("out-samsung.heic");
+    std::fs::write(&input, &input_bytes).unwrap();
+    let out = run(&["vendor", input.to_str().unwrap(), output.to_str().unwrap(), "--to", "samsung"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let bytes = std::fs::read(&output).unwrap();
+    let parsed = format::parse(&bytes).expect("output parses");
+    assert_eq!(parsed.format, "samsung-heic-sef");
+    assert_eq!(parsed.timestamp, Some(1_420_000));
+    assert_eq!(parsed.video(&bytes), real_mp4().as_slice());
+}
+
+#[test]
 fn bad_usage_exits_2() {
     let out = run(&[]);
     assert_eq!(out.status.code(), Some(2));
     let out = run(&["vendor", "only-one-arg"]);
+    assert_eq!(out.status.code(), Some(2));
+}
+
+fn scan_skeleton() -> Vec<u8> {
+    let mut out = vec![0xFF, 0xD8];
+    let seg = |marker: u8, payload: &[u8]| {
+        let mut v = vec![0xFF, marker];
+        v.extend(((payload.len() + 2) as u16).to_be_bytes());
+        v.extend(payload);
+        v
+    };
+    out.extend(seg(0xDB, &[0x00, 0x11]));
+    out.extend(seg(0xC0, &[0x08, 0x00, 0x10, 0x00, 0x10, 0x01]));
+    out.extend(seg(0xC4, &[0x00, 0x11]));
+    out.extend(seg(0xDA, &[0x00, 0x11]));
+    out.push(0x42);
+    out.extend([0xFF, 0xD9]);
+    out
+}
+
+#[test]
+fn scan_dir_rows_match_swift_shape() {
+    let dir = tmp("scan-dir");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a-motion.jpg"), fixture("motion.jpg.b64")).unwrap();
+    std::fs::write(dir.join("b-static.jpg"), scan_skeleton()).unwrap();
+    let out = run(&["scan", dir.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let rows: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["relative"], "a-motion.jpg");
+    assert_eq!(rows[0]["motion"], true);
+    assert_eq!(rows[0]["hdr"], "SDR / 其他");
+    assert_eq!(rows[0]["cover"], "0.400000 秒");
+    assert_eq!(rows[0]["manufacturer"], "未知");
+    assert_eq!(rows[1]["relative"], "b-static.jpg");
+    assert_eq!(rows[1]["motion"], false);
+    assert_eq!(rows[1]["confirmed_static"], true);
+    assert_eq!(rows[1]["detail"], "静态照片，不含动态内容，不参与转换");
+}
+
+#[test]
+fn scan_single_file_and_usage_error() {
+    let input = tmp("in-scan.jpg");
+    std::fs::write(&input, fixture("motion.jpg.b64")).unwrap();
+    let out = run(&["scan", input.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let rows: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["relative"], "in-scan.jpg");
+    assert_eq!(rows[0]["motion"], true);
+    let out = run(&["scan"]);
     assert_eq!(out.status.code(), Some(2));
 }

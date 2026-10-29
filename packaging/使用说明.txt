@@ -1,4 +1,4 @@
-留刻1.5.0 — Android 动态照片 ↔ Apple Live Photo
+留刻1.5.1 — Android 动态照片 ↔ Apple Live Photo
 
 系统要求
 macOS 12 Monterey 或更新系统。GitHub 发布的通用版同时支持 Intel 与 Apple Silicon。

@@ -1,6 +1,6 @@
 # MomentStays User Guide
 
-> Applies to 留刻 1.5.0 (macOS 12 or later).
+> Applies to 留刻 1.5.1 (macOS 12 or later).
 > 中文版见 [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md).
 
 > High-resolution cover selection and candidate-photo export are included from version 1.2.0. Earlier installers do not include these options.
@@ -50,7 +50,7 @@ Each photo produces one result folder (see §9 for naming), not loose files.
 
 ## 2. Interface and importing
 
-For Android → Apple, **Ask for location** opens a choice of Photos album, folder, or both. Confirm the complete selection before starting; cancelling leaves the prior choice unchanged. Direction changes reuse valid source inspections and check only new or changed files and missing information.
+For Android → Apple, **Ask for location** opens a choice of Photos album, folder, or both. Confirm the complete selection before starting; cancelling leaves the prior choice unchanged. Direction changes reuse valid source inspections and check only new or changed files and missing information. Adding files or folders preserves existing inspections and selection, including additions during inspection. New and changed sources are checked; cancelled or stale callbacks cannot replace the current batch.
 
 ### 2.1 The queue
 

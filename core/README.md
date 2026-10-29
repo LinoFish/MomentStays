@@ -263,3 +263,12 @@ On macOS the script also compares `timestamp_us`, `ultra`, `coding_hash` and err
 text with the Swift engine. Run it with real samples before relying on any module.
 
 See [ROADMAP.md](ROADMAP.md) for what is ported and what is next.
+
+
+### 容错盒子检查与确认后恢复（Rust CLI）
+
+`momentstays-convert boxes video.mp4` 容错列出顶层盒子并输出 `warnings`；加 `--strict` 可要求完整结构。库入口为 `mp4::boxes_with_mode`，不完整结果的 `complete` 为 false。
+
+`momentstays-convert to-live video.mp4 --uuid UUID -o new.mov --recover-boxes` 仅尝试修正末尾盒子声明长度；先验证样本范围，再显示警告并要求输入 `yes`。取消或 EOF 不写文件。未知尾部、缺失样本、重叠样本、损坏嵌套表不猜测修复，已有输出不覆盖。该操作不验证编码像素是否能解码；重封装仍须通过原有样本字节和时间校验。
+
+这些是 Rust 库/CLI 入口；App 尚未接入容错确认流程或新增 Rust 转换路径。App 接入前需补充 Swift 警告/确认传递，并执行一次正式 Universal 应用验证。

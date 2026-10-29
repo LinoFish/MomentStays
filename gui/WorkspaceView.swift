@@ -34,7 +34,6 @@ struct WorkspaceView: View {
         .ignoresSafeArea(.container,edges:.top)
         .font(.body)
         .tint(InterfaceStyle.accent).accentColor(InterfaceStyle.accent)
-        .onChange(of:model.sources) { _ in queueScope = .ready }
         .onAppear {
             #if UI_DIAGNOSTICS
             if let index = CommandLine.arguments.firstIndex(of:"--ui-scope"), index + 1 < CommandLine.arguments.count,
@@ -51,7 +50,7 @@ struct WorkspaceView: View {
     }
 
     private var addButton: some View {
-        SourceMenuButton(requested:$model.sourceMenuRequested,disabled:model.isBusy || model.sharing,
+        SourceMenuButton(requested:$model.sourceMenuRequested,disabled:!model.canAppendSources,
             title:model.sources.isEmpty ? "添加照片" : model.sourceLabel,
             details:model.sources.isEmpty ? "" : "来源：" + model.sourceLabel + "\n" + model.sources.map(\.path).joined(separator:"\n"),
             hasSources:!model.sources.isEmpty,allowsLibrary:model.settings.direction != .androidToAndroid,addFiles:actions.chooseSources,addLibrary:actions.importPhotos)

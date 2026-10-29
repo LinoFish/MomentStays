@@ -31,6 +31,46 @@ pub fn boxes(d: &[u8], start: usize, end: usize) -> Result<Vec<BoxRef>> {
     Ok(out)
 }
 
+/// Strict validation is the default for production reads and every rewrite.
+/// Tolerant walks are explicit diagnostics only; they do not validate media.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoxParseMode { Strict, Tolerant }
+
+#[derive(Clone, Debug)]
+pub struct BoxWalk {
+    pub boxes: Vec<BoxRef>,
+    /// False when damaged bytes were skipped or a declared box was clipped.
+    /// Even true only describes box framing, not sample or payload validity.
+    pub complete: bool,
+}
+
+/// Walk with an explicit recovery policy. A partial walk must never be used
+/// as evidence that a source is safe to rewrite or losslessly convert.
+pub fn boxes_with_mode(d: &[u8], start: usize, end: usize, mode: BoxParseMode) -> Result<BoxWalk> {
+    if mode == BoxParseMode::Strict {
+        return boxes(d, start, end).map(|boxes| BoxWalk { boxes, complete: true });
+    }
+    if end > d.len() || start > end { return fail("MP4 元数据范围无效"); }
+    let mut out = Vec::new();
+    let mut p = start;
+    let mut complete = true;
+    while p < end {
+        if end - p < 8 { complete = false; break; }
+        let mut size = be(d, p, 4)?;
+        let mut header = 8;
+        if size == 1 {
+            if end - p < 16 { complete = false; break; }
+            size = be(d, p + 8, 8)?;
+            header = 16;
+        } else if size == 0 { size = end - p; }
+        if size < header { complete = false; break; }
+        let box_end = if size > end - p { complete = false; end } else { p + size };
+        out.push(BoxRef { ty: [d[p + 4], d[p + 5], d[p + 6], d[p + 7]], start: p, payload: p + header, end: box_end });
+        p = box_end;
+    }
+    Ok(BoxWalk { boxes: out, complete })
+}
+
 fn child(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<BoxRef> {
     let found: Vec<BoxRef> = boxes(d, parent.payload, parent.end)?.into_iter().filter(|b| b.is(t)).collect();
     if found.len() != 1 { return fail(format!("Google 视频元数据缺少唯一的 {}", String::from_utf8_lossy(t))); }
@@ -233,6 +273,8 @@ pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
         None => return fail("MP4 缺少 moov"),
     };
     let mut tracks = Vec::new();
+    // Bound expansion of run-length encoded timing tables across all tracks.
+    let mut sample_budget = 1_000_000usize;
     for trak in boxes(d, moov.payload, moov.end)?.into_iter().filter(|b| b.is(b"trak")) {
         let mdia = find_box(d, &trak, b"mdia")?;
         let mdhd = find_box(d, &mdia, b"mdhd")?;
@@ -277,27 +319,17 @@ pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
                 (out, true)
             }
         };
-        // stts: (sample_count, sample_delta) pairs.
-        let stts_rows = full_entries(d, &stts, 8)?;
-        let mut decode_times: Vec<u64> = Vec::new();
-        let mut durations: Vec<u64> = Vec::new();
-        {
-            let mut t: u64 = 0;
-            for pair in stts_rows.chunks_exact(2) {
-                let (count, delta) = (pair[0], pair[1] as u64);
-                for _ in 0..count {
-                    decode_times.push(t);
-                    durations.push(delta);
-                    t += delta;
-                }
-            }
-        }
         // stsz: fixed size or per-sample sizes.
         if stsz.end - stsz.payload < 12 {
             return fail("MP4 采样表被截断");
         }
         let fixed = be(d, stsz.payload + 4, 4)?;
         let sample_count = be(d, stsz.payload + 8, 4)?;
+        if sample_count > sample_budget || sample_count > d.len()
+            || (fixed != 0 && sample_count > d.len() / fixed) {
+            return fail("MP4 样本数量超出安全资源限制");
+        }
+        sample_budget -= sample_count;
         // stsz entries start at payload+12, unlike the other tables.
         let sizes: Vec<usize> = if fixed != 0 {
             vec![fixed; sample_count]
@@ -312,6 +344,25 @@ pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
             }
             out
         };
+        // stts: (sample_count, sample_delta) pairs.
+        let stts_rows = full_entries(d, &stts, 8)?;
+        let mut decode_times: Vec<u64> = Vec::new();
+        let mut durations: Vec<u64> = Vec::new();
+        {
+            let mut t: u64 = 0;
+            for pair in stts_rows.chunks_exact(2) {
+                let (count, delta) = (pair[0], pair[1] as u64);
+                if count > sample_count - decode_times.len() {
+                    return fail("MP4 采样表样本数不一致");
+                }
+                for _ in 0..count {
+                    decode_times.push(t);
+                    durations.push(delta);
+                    t = t.checked_add(delta).filter(|v| *v <= i64::MAX as u64)
+                        .ok_or_else(|| crate::Error::new("MP4 解码时间溢出"))?;
+                }
+            }
+        }
         if sizes.len() != sample_count || decode_times.len() != sample_count {
             return fail("MP4 采样表样本数不一致");
         }
@@ -400,7 +451,8 @@ pub fn sample_tables(d: &[u8]) -> Result<Vec<TrackSamples>> {
                     size,
                     decode_time: decode_times[next],
                     duration: durations[next],
-                    presentation_time: decode_times[next] as i64 + offsets[next],
+                    presentation_time: (decode_times[next] as i64).checked_add(offsets[next])
+                        .ok_or_else(|| crate::Error::new("MP4 呈现时间溢出"))?,
                     sync: sync[next],
                 });
                 at += size;
