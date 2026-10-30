@@ -24,6 +24,8 @@
   <img src="https://img.shields.io/badge/开源协议-GPL--3.0--only-blue" alt="开源协议 GPL-3.0-only">
 </p>
 
+> **欢迎反馈：** 试过之后发现失败或结果不对？请[提交 issue](https://github.com/LinoFish/MomentStays/issues)，说明来源设备与格式、转换方向和 App 版本，样片请先抹除敏感信息。详见下文[反馈](#反馈)。
+
 **下载：** 在 [Releases](https://github.com/LinoFish/MomentStays/releases) 获取最新 DMG/ZIP，也可以按下方说明从源码构建。
 
 在 Android 动态照片与 Apple Live Photo 之间转换，留住你选定的封面瞬间。复用原始音视频，保留支持的图像与 HDR 数据，并将转换后的实况照片直接送回系统图库。
@@ -31,6 +33,12 @@
 [构建与运行](#构建与运行) · [与系统图库互通](#与系统图库互通) · [保留哪些信息](#保留哪些信息) · [使用手册](docs/USER_GUIDE.zh-CN.md) · [项目文档](docs/README.md)
 
 **开源协议：[GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino
+
+## 反馈
+
+欢迎提交反馈。如果转换失败、或者结果不对，请[提交 issue](https://github.com/LinoFish/MomentStays/issues)，并说明：来源设备与格式、转换方向、App 版本、你期望的结果、实际得到的结果。
+
+如果能提供可复现失败的样片，请先抹除敏感信息：用不含个人内容的照片，并去掉位置等私人元数据再上传。能复现问题的最小样片，比一整套个人相册更有用。
 
 ## 留住原来的瞬间
 
@@ -212,12 +220,6 @@ Google 兼容的动态照片 JPEG、三星（包括 SEF 和已验证的 HEIC 布
 ### 这个工具收费吗？照片会上传吗？
 
 免费开源（GPL-3.0-only），所有转换都在你的 Mac 本地完成，不上传照片。
-
-## 反馈
-
-欢迎提交反馈。如果转换失败、或者结果不对，请[提交 issue](https://github.com/LinoFish/MomentStays/issues)，并说明：来源设备与格式、转换方向、App 版本、你期望的结果、实际得到的结果。
-
-如果能提供可复现失败的样片，请先抹除敏感信息：用不含个人内容的照片，并去掉位置等私人元数据再上传。能复现问题的最小样片，比一整套个人相册更有用。
 
 ## 致谢
 

@@ -22,6 +22,8 @@ Convert Android Motion Photos to Apple Live Photos — and convert Live Photos b
   <img src="https://img.shields.io/badge/License-GPL--3.0--only-blue" alt="License GPL-3.0-only">
 </p>
 
+> **Feedback welcome:** Tried it and something failed or looks wrong? [Open an issue](https://github.com/LinoFish/MomentStays/issues) — tell us the source device and format, the conversion direction and the app version, and strip sensitive information from any sample first. See [Feedback](#feedback) below.
+
 **Download:** get the latest DMG/ZIP from [Releases](https://github.com/LinoFish/MomentStays/releases), or build from source below.
 
 Move Motion Photos between Android and Apple Live Photos while keeping the moment you chose as the cover. Remux the original video and audio, preserve supported image and HDR data, and bring converted Live Photos into your Photos library.
@@ -29,6 +31,12 @@ Move Motion Photos between Android and Apple Live Photos while keeping the momen
 [Build & run](#build--run) · [Photos integration](#works-with-your-photos-library) · [Preservation details](#what-stays-with-your-photo) · [Documentation](docs/README.md)
 
 **License: [GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino
+
+## Feedback
+
+Feedback is welcome. If a conversion fails, or the result does not look right, please [open an issue](https://github.com/LinoFish/MomentStays/issues) and describe what happened: the source device and format, the conversion direction, the app version, what you expected, and what you got instead.
+
+If you can share a sample that reproduces the failure, please remove sensitive information first: use a photo that contains no personal content, and strip location and other private metadata before uploading. A minimal sample that still reproduces the problem is more useful than a full personal album.
 
 ## The moment stays
 
@@ -208,12 +216,6 @@ Google-compatible Motion Photo JPEGs, supported Samsung (including SEF and valid
 ### Is MomentStays free and private?
 
 Yes. MomentStays is GPL-3.0-only open source, runs entirely on your Mac, and never uploads your photos.
-
-## Feedback
-
-Feedback is welcome. If a conversion fails, or the result does not look right, please [open an issue](https://github.com/LinoFish/MomentStays/issues) and describe what happened: the source device and format, the conversion direction, the app version, what you expected, and what you got instead.
-
-If you can share a sample that reproduces the failure, please remove sensitive information first: use a photo that contains no personal content, and strip location and other private metadata before uploading. A minimal sample that still reproduces the problem is more useful than a full personal album.
 
 ## Acknowledgements
 
