@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "留刻";
+"NSPhotoLibraryUsageDescription" = "留刻需要访问照片，以查找安卓动态照片并读取你选择的照片。照片只在本机处理，不会上传。";
+"NSPhotoLibraryAddUsageDescription" = "留刻需要把转换好的实况照片存入你的照片。照片只在本机处理，不会上传。";

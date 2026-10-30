@@ -1,0 +1,106 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Cancel": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        }
+      }
+    },
+    "Convert with MomentStays": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用留刻转换"
+          }
+        }
+      }
+    },
+    "Reading…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在读取…"
+          }
+        }
+      }
+    },
+    "Sent to MomentStays. Open MomentStays to continue.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已交给留刻，打开留刻继续。"
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
+    "MomentStays can't convert this. Share a Live Photo or an Android Motion Photo.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留刻无法转换这项内容。请分享实况照片或安卓动态照片。"
+          }
+        }
+      }
+    },
+    "Processed on this iPhone": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅在本机处理"
+          }
+        }
+      }
+    },
+    "A photo is already waiting in MomentStays. Open the app to continue.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留刻中已有一张待处理照片。请打开留刻继续。"
+          }
+        }
+      }
+    },
+    "Couldn't prepare this item. Try again in MomentStays.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法准备此项目。请在留刻中重试。"
+          }
+        }
+      }
+    },
+    "Couldn't read this item. Try selecting the original photo in MomentStays.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取此项目。请在留刻中尝试选择照片原件。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

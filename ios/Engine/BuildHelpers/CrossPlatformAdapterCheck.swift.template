@@ -1,0 +1,30 @@
+// Template copied into the app test target by run-cross-platform-check.sh.
+import Foundation
+import Testing
+@testable import MomentStays
+
+struct CrossPlatformAdapterCheck {
+    private func convert(_ engine: NativeConversionAdapter, _ sources: [URL], _ dest: URL, _ vendor: ConversionVendor) async throws -> ConversionItem {
+        let result: ConversionResult = try await withCheckedThrowingContinuation { c in
+            engine.convert(request: ConversionRequest(inputs: sources, outputDirectory: dest, targetVendor: vendor), progress: { _ in }, completion: { c.resume(with: $0) })
+        }
+        let item = try #require(result.items.first)
+        #expect(item.status == .converted)
+        return item
+    }
+    @Test func compareInputs() async throws {
+        let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("CrossPlatformAdapterCheck")
+        try? FileManager.default.removeItem(at: root)
+        let input = root.appendingPathComponent("input"), pair = root.appendingPathComponent("pair")
+        try FileManager.default.createDirectory(at: input, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: pair, withIntermediateDirectories: true)
+        try #require(Data(base64Encoded: "__MOTION__")).write(to: input.appendingPathComponent("motion.jpg"))
+        try #require(Data(base64Encoded: "__STILL__")).write(to: pair.appendingPathComponent("motion.jpg"))
+        try #require(Data(base64Encoded: "__MOVIE__")).write(to: pair.appendingPathComponent("motion.mov"))
+        let engine = NativeConversionAdapter()
+        let apple = try await convert(engine, [input.appendingPathComponent("motion.jpg")], root.appendingPathComponent("apple"), .apple)
+        try checkAppleOutput(original: input.appendingPathComponent("motion.jpg"), output: #require(apple.output), work: root)
+        let android = try await convert(engine, [pair], root.appendingPathComponent("android"), .google)
+        try checkAndroidOutput(pairDirectory: pair, output: #require(android.output), work: root)
+    }
+}

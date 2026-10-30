@@ -1,0 +1,507 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+        F20000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Engine/NativeConversionAdapter.swift"; sourceTree = "<group>"; };
+        F30000000000000000000001 = {isa = PBXBuildFile; fileRef = F20000000000000000000001; };
+        F20000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "XMLCompat/XMLCompat.swift"; sourceTree = "<group>"; };
+        F30000000000000000000002 = {isa = PBXBuildFile; fileRef = F20000000000000000000002; };
+        F20000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/AndroidExport.swift"; sourceTree = "<group>"; };
+        F30000000000000000000003 = {isa = PBXBuildFile; fileRef = F20000000000000000000003; };
+        F20000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/AndroidHDR.swift"; sourceTree = "<group>"; };
+        F30000000000000000000004 = {isa = PBXBuildFile; fileRef = F20000000000000000000004; };
+        F20000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/AndroidTransfer.swift"; sourceTree = "<group>"; };
+        F30000000000000000000005 = {isa = PBXBuildFile; fileRef = F20000000000000000000005; };
+        F20000000000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/BatchEngine.swift"; sourceTree = "<group>"; };
+        F30000000000000000000006 = {isa = PBXBuildFile; fileRef = F20000000000000000000006; };
+        F20000000000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/CoverCandidates.swift"; sourceTree = "<group>"; };
+        F30000000000000000000007 = {isa = PBXBuildFile; fileRef = F20000000000000000000007; };
+        F20000000000000000000008 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/HEIFMetadata.swift"; sourceTree = "<group>"; };
+        F30000000000000000000008 = {isa = PBXBuildFile; fileRef = F20000000000000000000008; };
+        F20000000000000000000009 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/MotionLive.swift"; sourceTree = "<group>"; };
+        F30000000000000000000009 = {isa = PBXBuildFile; fileRef = F20000000000000000000009; };
+        F2000000000000000000000A = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/PhotoFormat.swift"; sourceTree = "<group>"; };
+        F3000000000000000000000A = {isa = PBXBuildFile; fileRef = F2000000000000000000000A; };
+        F2000000000000000000000B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/PhotoHDR.swift"; sourceTree = "<group>"; };
+        F3000000000000000000000B = {isa = PBXBuildFile; fileRef = F2000000000000000000000B; };
+        F2000000000000000000000C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/PhotoHEIF.swift"; sourceTree = "<group>"; };
+        F3000000000000000000000C = {isa = PBXBuildFile; fileRef = F2000000000000000000000C; };
+        F2000000000000000000000D = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../native/RustCore.swift"; sourceTree = "<group>"; };
+        F3000000000000000000000D = {isa = PBXBuildFile; fileRef = F2000000000000000000000D; };
+        F20000000000000000000000 = {isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647; files = (); inputPaths = (); outputPaths = ("$(DERIVED_FILE_DIR)/libmomentstays_core.a", ); name = "Build Rust core"; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/bash; shellScript = "\"${SRCROOT}/../scripts/build-ios-rust.sh\""; };
+
+        F00000000000000000000003 = {isa = PBXBuildFile; fileRef = F00000000000000000000004; };
+        F00000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoScan/PhotoScanner.swift; sourceTree = "<group>"; };
+        F00000000000000000000005 = {isa = PBXBuildFile; fileRef = F00000000000000000000006; };
+        F00000000000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoScan/PhotosLibrarySource.swift; sourceTree = "<group>"; };
+        F40000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Engine/BatchConversionCoordinator.swift; sourceTree = "<group>"; };
+        F40000000000000000000002 = {isa = PBXBuildFile; fileRef = F40000000000000000000001; };
+        F00000000000000000000001 = {isa = PBXBuildFile; fileRef = F00000000000000000000002; };
+        F00000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Engine/ConversionEngine.swift; sourceTree = "<group>"; };
+
+        F10000000000000000000001 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MomentStaysShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+        F10000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtension/ShareViewController.swift; sourceTree = "<group>"; };
+        F10000000000000000000003 = {isa = PBXBuildFile; fileRef = F10000000000000000000002; };
+        F10000000000000000000004 = {isa = PBXBuildFile; fileRef = F10000000000000000000001; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+        F10000000000000000000005 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (F10000000000000000000003, ); runOnlyForDeploymentPostprocessing = 0; };
+        F10000000000000000000006 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (F1000000000000000000000F, F10000000000000000000013, ); runOnlyForDeploymentPostprocessing = 0; };
+        F10000000000000000000007 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (F10000000000000000000004, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+        F10000000000000000000008 = {isa = PBXContainerItemProxy; containerPortal = 8238217991C4C82D1BCE751B; proxyType = 1; remoteGlobalIDString = F1000000000000000000000A; remoteInfo = MomentStaysShare; };
+        F10000000000000000000009 = {isa = PBXTargetDependency; target = F1000000000000000000000A; targetProxy = F10000000000000000000008; };
+        F1000000000000000000000A = {isa = PBXNativeTarget; buildConfigurationList = F1000000000000000000000B; buildPhases = (F10000000000000000000005, F10000000000000000000006, ); buildRules = (); dependencies = (); name = MomentStaysShare; productName = MomentStaysShare; productReference = F10000000000000000000001; productType = "com.apple.product-type.app-extension"; };
+        F1000000000000000000000B = {isa = XCConfigurationList; buildConfigurations = (F1000000000000000000000C, F1000000000000000000000D, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        F1000000000000000000000C = {isa = XCBuildConfiguration; buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = ShareExtension/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 26.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.app9x3k2q.momentstays.share; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+        F1000000000000000000000D = {isa = XCBuildConfiguration; buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = ShareExtension/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 26.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.app9x3k2q.momentstays.share; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+
+        F1000000000000000000000E = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = ShareExtension/Localizable.xcstrings; sourceTree = "<group>"; };
+        F1000000000000000000000F = {isa = PBXBuildFile; fileRef = F1000000000000000000000E; };
+        F10000000000000000000010 = {isa = PBXVariantGroup; children = (F10000000000000000000011, F10000000000000000000012, ); name = InfoPlist.strings; sourceTree = "<group>"; };
+        F10000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = ShareExtension/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+        F10000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "ShareExtension/zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+        F10000000000000000000013 = {isa = PBXBuildFile; fileRef = F10000000000000000000010; };
+
+/* Begin PBXContainerItemProxy section */
+		A1B2C3D40000000000000001 /* App proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8238217991C4C82D1BCE751B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2E69B1330A3161295C9DCB01;
+			remoteInfo = MomentStays;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A1B2C3D40000000000000002 /* MomentStaysTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MomentStaysTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1D1C645818EB0816572F68E /* MomentStays.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MomentStays.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A1B2C3D40000000000000003 /* MomentStaysTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MomentStaysTests;
+			sourceTree = "<group>";
+		};
+		32FA6C0B59B4A7B42DDCEA33 /* MomentStays */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = MomentStays;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXGroup section */
+		4B2A5E79F7D5BFD1F7DCE292 = {
+			isa = PBXGroup;
+			children = (
+				32FA6C0B59B4A7B42DDCEA33 /* MomentStays */,
+                F20000000000000000000001,
+                F20000000000000000000002,
+                F20000000000000000000003,
+                F20000000000000000000004,
+                F20000000000000000000005,
+                F20000000000000000000006,
+                F20000000000000000000007,
+                F20000000000000000000008,
+                F20000000000000000000009,
+                F2000000000000000000000A,
+                F2000000000000000000000B,
+                F2000000000000000000000C,
+                F2000000000000000000000D,
+                F40000000000000000000001,
+                F00000000000000000000002,
+                F00000000000000000000004,
+                F00000000000000000000006,
+                F10000000000000000000002,
+                F1000000000000000000000E,
+                F10000000000000000000010,
+				A1B2C3D40000000000000003 /* MomentStaysTests */,
+				A0906AD77C76E090572F0E63 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A0906AD77C76E090572F0E63 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E1D1C645818EB0816572F68E /* MomentStays.app */,
+                F10000000000000000000001,
+				A1B2C3D40000000000000002 /* MomentStaysTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1B2C3D40000000000000004 /* MomentStaysTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D40000000000000005;
+			buildPhases = (A1B2C3D40000000000000006 /* Sources */,);
+			buildRules = ();
+			dependencies = (A1B2C3D40000000000000007 /* App dependency */,);
+			fileSystemSynchronizedGroups = (A1B2C3D40000000000000003 /* MomentStaysTests */,);
+			name = MomentStaysTests;
+			productName = MomentStaysTests;
+			productReference = A1B2C3D40000000000000002 /* MomentStaysTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		2E69B1330A3161295C9DCB01 /* MomentStays */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8C42E519CFA30563C7D495EB /* Build configuration list for PBXNativeTarget "MomentStays" */;
+			buildPhases = (
+                F20000000000000000000000,
+				485B7BB5562F3ABD154D4B35 /* Sources */,
+				64723A455F920BBCE48BF909 /* Resources */,
+                F10000000000000000000007,
+			);
+			buildRules = (
+			);
+			dependencies = (
+                F10000000000000000000009,
+			);
+			fileSystemSynchronizedGroups = (
+				32FA6C0B59B4A7B42DDCEA33 /* MomentStays */,
+			);
+			name = MomentStays;
+			packageProductDependencies = (
+			);
+			productName = MomentStays;
+			productReference = E1D1C645818EB0816572F68E /* MomentStays.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8238217991C4C82D1BCE751B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A1B2C3D40000000000000004 = {
+						TestTargetID = 2E69B1330A3161295C9DCB01;
+					};
+					2E69B1330A3161295C9DCB01 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 5075F2191BCB6FFD9AB675B1 /* Build configuration list for PBXProject "MomentStays" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+                "zh-Hans",
+			);
+			mainGroup = 4B2A5E79F7D5BFD1F7DCE292;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A0906AD77C76E090572F0E63 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2E69B1330A3161295C9DCB01 /* MomentStays */,
+                F1000000000000000000000A,
+				A1B2C3D40000000000000004 /* MomentStaysTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		64723A455F920BBCE48BF909 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1B2C3D40000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		485B7BB5562F3ABD154D4B35 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+                F30000000000000000000001,
+                F30000000000000000000002,
+                F30000000000000000000003,
+                F30000000000000000000004,
+                F30000000000000000000005,
+                F30000000000000000000006,
+                F30000000000000000000007,
+                F30000000000000000000008,
+                F30000000000000000000009,
+                F3000000000000000000000A,
+                F3000000000000000000000B,
+                F3000000000000000000000C,
+                F3000000000000000000000D,
+                F40000000000000000000002, F00000000000000000000001,
+                F00000000000000000000003,
+                F00000000000000000000005,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1B2C3D40000000000000007 /* App dependency */ = {
+			isa = PBXTargetDependency;
+			target = 2E69B1330A3161295C9DCB01 /* MomentStays */;
+			targetProxy = A1B2C3D40000000000000001 /* App proxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A1B2C3D40000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.app9x3k2q.momentstays.tests;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MomentStays.app/MomentStays";
+			};
+			name = Debug;
+		};
+		A1B2C3D40000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.app9x3k2q.momentstays.tests;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MomentStays.app/MomentStays";
+			};
+			name = Release;
+		};
+		19E964B74B00A4CB2EF3C8A9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2E90AD925E4ACFB91CB0744B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+                ENABLE_USER_SCRIPT_SANDBOXING = NO;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) MOTIONLIVE_NATIVE_ENGINE MOTIONLIVE_LIBRARY";
+                SWIFT_OBJC_BRIDGING_HEADER = "../native/RustCore.h";
+                OTHER_LDFLAGS = ("$(inherited)", "$(DERIVED_FILE_DIR)/libmomentstays_core.a", );
+				CODE_SIGN_ENTITLEMENTS = MomentStays/MomentStays.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_KEY_CFBundleDisplayName = MomentStays;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MomentStays accesses your photos to find Android Motion Photos and read the photos you select. Photos are processed on this iPhone and never uploaded.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "MomentStays saves converted Live Photos. Photos stay on this iPhone.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app9x3k2q.momentstays;
+				PRODUCT_NAME = MomentStays;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		3823C0C4BF76A14A240F8C05 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E4D305C9168016FE6F18420B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+                ENABLE_USER_SCRIPT_SANDBOXING = NO;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) MOTIONLIVE_NATIVE_ENGINE MOTIONLIVE_LIBRARY";
+                SWIFT_OBJC_BRIDGING_HEADER = "../native/RustCore.h";
+                OTHER_LDFLAGS = ("$(inherited)", "$(DERIVED_FILE_DIR)/libmomentstays_core.a", );
+				CODE_SIGN_ENTITLEMENTS = MomentStays/MomentStays.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_KEY_CFBundleDisplayName = MomentStays;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MomentStays accesses your photos to find Android Motion Photos and read the photos you select. Photos are processed on this iPhone and never uploaded.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "MomentStays saves converted Live Photos. Photos stay on this iPhone.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app9x3k2q.momentstays;
+				PRODUCT_NAME = MomentStays;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1B2C3D40000000000000005 /* Build configuration list for PBXNativeTarget "MomentStaysTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D40000000000000008 /* Debug */,
+				A1B2C3D40000000000000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5075F2191BCB6FFD9AB675B1 /* Build configuration list for PBXProject "MomentStays" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				19E964B74B00A4CB2EF3C8A9 /* Debug */,
+				3823C0C4BF76A14A240F8C05 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8C42E519CFA30563C7D495EB /* Build configuration list for PBXNativeTarget "MomentStays" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2E90AD925E4ACFB91CB0744B /* Debug */,
+				E4D305C9168016FE6F18420B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8238217991C4C82D1BCE751B /* Project object */;
+}

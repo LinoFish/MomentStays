@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "MomentStays";
+"NSPhotoLibraryUsageDescription" = "MomentStays accesses your photos to find Android Motion Photos and read the photos you select. Photos are processed on this iPhone and never uploaded.";
+"NSPhotoLibraryAddUsageDescription" = "MomentStays saves converted Live Photos to your library. Photos are processed on this iPhone and never uploaded.";
