@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:momentstays_mobile/native_service.dart';
@@ -65,6 +66,49 @@ void main() {
     expect(updates.single.items.single.outputId, 'out');
   });
 
+  test('event failure waits for authoritative native completion and recovers outputs', () async {
+    final recovery = Completer<Object?>();
+    final calls = <String>[];
+    messenger.setMockMethodCallHandler(methods, (call) async {
+      calls.add(call.method);
+      if (call.method == 'convert') Future<void>.delayed(Duration.zero, () => messenger.handlePlatformMessage('momentstays/batch', codec.encodeErrorEnvelope(code: 'stream_error'), (_) {}));
+      if (call.method == 'recoverBatch') return recovery.future;
+      return null;
+    });
+    final photo = PhotoItem(id: 'a', name: 'a.jpg');
+    final future = NativeService().convert(Direction.motionToLive, [photo], 'Google').toList();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(calls, containsAllInOrder(['convert', 'stop', 'recoverBatch']));
+    recovery.complete({'finished': true, 'items': [{'id': 'a', 'name': 'a.jpg', 'status': 'success', 'outputId': 'a'}]});
+    final result = await future;
+    expect(result.single.items.single.outputId, 'a');
+  });
+  test('late native events after stream failure are ignored while recovering', () async {
+    final startedRecovery = Completer<void>();
+    final recovery = Completer<Object?>();
+    messenger.setMockMethodCallHandler(methods, (call) async {
+      if (call.method == 'convert') Future<void>.delayed(Duration.zero, () => messenger.handlePlatformMessage('momentstays/batch', codec.encodeErrorEnvelope(code: 'stream_error'), (_) {}));
+      if (call.method == 'recoverBatch') { startedRecovery.complete(); return recovery.future; }
+      return null;
+    });
+    final photo = PhotoItem(id: 'a', name: 'a.jpg');
+    final future = NativeService().convert(Direction.motionToLive, [photo], 'Google').toList();
+    await startedRecovery.future;
+    await sendEvent('momentstays/batch', {'finished': false, 'items': [{'id': 'a', 'name': 'a.jpg', 'status': 'converting'}]});
+    recovery.complete({'finished': true, 'items': [{'id': 'a', 'name': 'a.jpg', 'status': 'success', 'outputId': 'a'}]});
+    expect((await future).single.items.single.outputId, 'a');
+  });
+  test('failed cleanup stop cannot mask recovery-unconfirmed exception', () async {
+    var stops = 0;
+    messenger.setMockMethodCallHandler(methods, (call) async {
+      if (call.method == 'convert') Future<void>.delayed(Duration.zero, () => messenger.handlePlatformMessage('momentstays/batch', codec.encodeErrorEnvelope(code: 'stream_error'), (_) {}));
+      if (call.method == 'stop') { stops++; throw PlatformException(code: 'stop_failed'); }
+      return null;
+    });
+    final photo = PhotoItem(id: 'a', name: 'a.jpg');
+    await expectLater(NativeService().convert(Direction.motionToLive, [photo], 'Google').toList(), throwsA(isA<RecoveryUnconfirmed>()));
+    expect(stops, 2);
+  });
   test('unsupported share error is not reported as success', () async {
     messenger.setMockMethodCallHandler(methods, (call) async {
       throw PlatformException(code: 'unsupported', message: 'Live Photo sharing unavailable');

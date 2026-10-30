@@ -40,6 +40,8 @@ abstract class MobileService {
   Stream<ScanProgress> get scanProgress;
   Future<List<PhotoItem>> pick(Direction direction, Source source);
   Stream<BatchUpdate> convert(Direction direction, List<PhotoItem> items, String brand);
+  /// Wait for native completion and recover the authoritative batch after a stream failure.
+  Future<BatchUpdate> recoverConversion(List<PhotoItem> items);
   /// Requests cancellation of a scan or stops conversion after its current item.
   Future<void> stop();
   Future<void> share(List<BatchItem> items);
@@ -50,6 +52,7 @@ abstract class MobileService {
   Future<void> discard(List<BatchItem> items);
 }
 class ServiceUnavailable implements Exception {}
+class RecoveryUnconfirmed implements Exception {}
 class UnavailableService implements MobileService {
   const UnavailableService();
   @override Future<SharedSelection?> takePendingShare() async => null;
@@ -57,6 +60,7 @@ class UnavailableService implements MobileService {
   Never unavailable() => throw ServiceUnavailable();
   @override Future<List<PhotoItem>> pick(Direction direction, Source source) async => unavailable();
   @override Stream<BatchUpdate> convert(Direction direction, List<PhotoItem> items, String brand) => Stream.error(ServiceUnavailable());
+  @override Future<BatchUpdate> recoverConversion(List<PhotoItem> items) async => unavailable();
   @override Future<void> stop() async => unavailable();
   @override Future<void> share(List<BatchItem> items) async => unavailable();
   @override Future<void> saveToPhotos(List<BatchItem> items) async => unavailable();

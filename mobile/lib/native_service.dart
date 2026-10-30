@@ -50,32 +50,52 @@ class NativeService implements MobileService {
     var started = false;
     var finished = false;
     subscription = _events.receiveBroadcastStream().listen((event) {
+      if (controller.isClosed) return;
       try {
         final map = Map<dynamic, dynamic>.from(event as Map);
-        final rows = (map['items'] as List).map((row) {
-          final m = Map<dynamic, dynamic>.from(row as Map);
-          final photo = originals[m['id']] ?? PhotoItem(id: m['id'] as String, name: m['name'] as String);
-          return BatchItem(photo, ItemStatus.values.byName(m['status'] as String), reason: m['reason'] as String?, outputId: m['outputId'] as String?);
-        }).toList();
+        final rows = _decodeRows(map, originals);
         finished = map['finished'] == true;
         controller.add(BatchUpdate(rows, finished: finished));
         if (finished) controller.close();
-      } catch (e, stack) { controller.addError(e, stack); controller.close(); }
-    }, onError: (Object e, StackTrace stack) { controller.addError(e, stack); controller.close(); });
+      } catch (e, stack) { if (!controller.isClosed) { controller.addError(e, stack); unawaited(controller.close()); } }
+    }, onError: (Object e, StackTrace stack) { if (!controller.isClosed) { controller.addError(e, stack); unawaited(controller.close()); } });
     try {
       await _methods.invokeMethod<void>('convert', {'direction': direction.name, 'ids': items.map((e) => e.id).toList(), 'brand': brand});
       started = true;
-      yield* controller.stream;
+      try {
+        await for (final update in controller.stream) { yield update; }
+      } catch (_) {
+        try {
+          await _methods.invokeMethod<void>('stop');
+          final recovered = await recoverConversion(items);
+          finished = true;
+          yield recovered;
+        } catch (_) { throw RecoveryUnconfirmed(); }
+      }
     } finally {
       // Abandoning a stream requests stop; the native current item may still finish.
       try {
-        if (started && !finished) await _methods.invokeMethod<void>('stop');
+        if (started && !finished) {
+          // A second stop is best effort and must not mask an unconfirmed
+          // recovery (or the original stream error).
+          try { await _methods.invokeMethod<void>('stop'); } catch (_) {}
+        }
       } finally {
         await subscription.cancel();
         if (!controller.isClosed) unawaited(controller.close());
         _running = false;
       }
     }
+  }
+  List<BatchItem> _decodeRows(Map<dynamic, dynamic> map, Map<String, PhotoItem> originals) => (map['items'] as List).map((row) {
+    final m = Map<dynamic, dynamic>.from(row as Map);
+    final photo = originals[m['id']] ?? PhotoItem(id: m['id'] as String, name: m['name'] as String);
+    return BatchItem(photo, ItemStatus.values.byName(m['status'] as String), reason: m['reason'] as String?, outputId: m['outputId'] as String?);
+  }).toList();
+  @override Future<BatchUpdate> recoverConversion(List<PhotoItem> items) async {
+    final result = await _methods.invokeMapMethod<String, dynamic>('recoverBatch', {'ids': items.map((e) => e.id).toList()});
+    if (result == null || result['finished'] != true) throw RecoveryUnconfirmed();
+    return BatchUpdate(_decodeRows(result, {for (final item in items) item.id: item}), finished: true);
   }
   List<String> _outputs(List<BatchItem> items) {
     if (items.isEmpty || items.any((item) => item.status != ItemStatus.success || item.outputId == null)) {

@@ -23,7 +23,9 @@ import UniformTypeIdentifiers
     private var inputs: [String: BatchInput] = [:]
     private var works: [UUID: BatchWork] = [:]
     private var outputOwners: [String: UUID] = [:]
+    private var recoveryOwners: [String: UUID] = [:]
     private var active: UUID?
+    private var recoveryWaiters: [([String], FlutterResult)] = []
     private var saving = false
     private var observation: AnyCancellable?
     private let engine: any ConversionEngine
@@ -107,21 +109,28 @@ import UniformTypeIdentifiers
             guard selected.count == ids.count, selected.allSatisfy({ input in
                 switch input.source { case .livePhoto, .livePair: return direction == "liveToMotion"; case .originalPhoto, .scannedPhoto, .folderFile: return direction == "motionToLive" }
             }) else { result(error("invalid", "Inputs are missing or have the wrong direction.")); return }
-            let id = UUID(); let work = BatchWork(inputs: selected, engine: engine); works[id] = work; active = id
+            let id = UUID(); let work = BatchWork(inputs: selected, engine: engine); works[id] = work; recoveryOwners[ids.sorted().joined(separator: ",")] = id; active = id
             observation = work.$rows.sink { [weak self, weak work] rows in
                 guard let self, let work else { return }; self.emit(work, rows: rows, finished: false)
             }
             result(nil)
-            Task { await work.start(brand: brand); self.emit(work, finished: true); self.observation = nil; self.active = nil }
+            Task { await work.start(brand: brand); self.emit(work, finished: true); self.observation = nil; self.active = nil; self.finishRecoveryWaiters() }
             #endif
         case "stop":
             if let id = active { works[id]?.stopAfterCurrent() }; scanTask?.cancel(); result(nil)
+        case "recoverBatch":
+            guard let ids = args["ids"] as? [String], !ids.isEmpty, Set(ids).count == ids.count else { result(error("invalid", "Invalid batch recovery request.")); return }
+            if active != nil { recoveryWaiters.append((ids, result)) }
+            else { recoverBatch(ids, result: result) }
         case "discard":
             guard active == nil, pickerResult == nil, !saving else { result(error("busy", "Wait for the current operation to finish first.")); return }
             let ids = args["ids"] as? [String] ?? []
             for id in ids { inputs.removeValue(forKey: id); outputOwners.removeValue(forKey: id); if let url = stagedInputs.removeValue(forKey: id) { PhotoSession.remove(containing: url) } }
             // A BatchWork owns the entire batch; retain it while any result is still referenced.
-            for id in Array(works.keys) where !outputOwners.values.contains(id) { works.removeValue(forKey: id)?.discard() }
+            for id in Array(works.keys) where !outputOwners.values.contains(id) {
+                works.removeValue(forKey: id)?.discard()
+                recoveryOwners = recoveryOwners.filter { $0.value != id }
+            }
             result(nil)
         case "saveToPhotos":
             guard active == nil, pickerResult == nil, !saving else { result(error("busy", "Wait for the current operation to finish.")); return }
@@ -341,8 +350,22 @@ import UniformTypeIdentifiers
         guard let owner = outputOwners[id], let work = works[owner], let uuid = UUID(uuidString: id), let row = work.rows.first(where: { $0.id == uuid }), case .converted(let output) = row.state else { return nil }
         return output
     }
+    private func finishRecoveryWaiters() {
+        let waiters = recoveryWaiters; recoveryWaiters.removeAll()
+        for (ids, result) in waiters { recoverBatch(ids, result: result) }
+    }
+    private func recoverBatch(_ ids: [String], result: @escaping FlutterResult) {
+        guard let owner = recoveryOwners[ids.sorted().joined(separator: ",")], let work = works[owner] else {
+            result(error("recovery_unavailable", "The conversion result could not be confirmed.")); return
+        }
+        result(["items": encodeRows(work.rows), "finished": true])
+    }
     private func emit(_ work: BatchWork, rows snapshot: [BatchRowResult]? = nil, finished: Bool) {
-        let rows: [[String: Any]] = (snapshot ?? work.rows).map { row in
+        let rows = encodeRows(snapshot ?? work.rows)
+        sink?(["items": rows, "finished": finished])
+    }
+    private func encodeRows(_ snapshot: [BatchRowResult]) -> [[String: Any]] {
+        let rows: [[String: Any]] = snapshot.map { row in
             var value: [String: Any] = ["id": row.id.uuidString, "name": row.name]
             switch row.state {
             case .pending: value["status"] = "waiting"
@@ -353,7 +376,7 @@ import UniformTypeIdentifiers
             }
             return value
         }
-        sink?(["items": rows, "finished": finished])
+        return rows
     }
     private func presenter() -> UIViewController? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.filter { $0.activationState == .foregroundActive }
