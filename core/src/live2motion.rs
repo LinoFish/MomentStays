@@ -2,7 +2,7 @@
 //!
 //! Mirrors Swift `AndroidExport.convert` minus HDR preparation (the caller
 //! passes the prepared still): remux the MOV to MP4 (`remux_to_mp4`),
-//! clean the still (`pymotion::live_still_clean`), then `model::write`
+//! clean the still (`compat::motion::live_still_clean`), then `model::write`
 //! for the vendor JPEG. `model::write` already validates parse-back
 //! (video bytes, still coding hash, cover), which is Swift's
 //! `decoded.video == video` guard and cover check combined.
@@ -13,7 +13,7 @@
 
 use crate::model::{self, Cover, MotionModel, Vendor};
 use crate::mp4::{self, BoxRef};
-use crate::pymotion;
+use crate::compat;
 use crate::remux;
 use crate::{fail, Result};
 
@@ -24,7 +24,7 @@ pub struct LivePhotoInput {
 
 pub fn assemble(input: &LivePhotoInput, vendor: Vendor, cover: Cover) -> Result<Vec<u8>> {
     let video = remux::remux_to_mp4(&input.movie_mov)?;
-    let still = pymotion::live_still_clean(&input.still_jpeg)?;
+    let still = compat::motion::live_still_clean(&input.still_jpeg)?;
     let model = MotionModel { still, video, cover, source_format: "apple-live".to_string() };
     model::write(&model, vendor)
 }

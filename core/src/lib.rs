@@ -1,5 +1,5 @@
 //! momentstays-core: a cross-platform, byte-level port of the MomentStays
-//! Motion Photo container parser (native/PhotoFormat.swift, PhotoHEIF.swift).
+//! Motion Photo container parser (apple/shared/PhotoFormat.swift, PhotoHEIF.swift).
 //!
 //! Scope: parse and validate Android Motion Photos (Google/Ultra HDR JPEG,
 //! Huawei/Honor LIVE_, Samsung SEF JPEG/HEIC, OPPO, vivo), split the still and
@@ -12,6 +12,7 @@
 
 pub mod binary;
 pub mod capi;
+pub mod compat;
 pub mod cover;
 pub mod ffi;
 pub mod format;
@@ -25,9 +26,6 @@ pub mod mp4;
 pub mod remux;
 pub mod recovery;
 pub mod scan;
-pub mod pyjpeg;
-pub mod pymotion;
-pub mod pyxml;
 pub mod tiff;
 pub mod vendor;
 pub mod xmp;
@@ -54,7 +52,7 @@ pub mod bench;
 pub use format::{parse, MotionPhoto};
 
 /// JSON summary used by the CLI and the parity checks. Keys shared with
-/// tests/NativeDriver.swift `format` (timestamp_us, ultra, coding_hash) keep
+/// apple/shared/tests/NativeDriver.swift `format` (timestamp_us, ultra, coding_hash) keep
 /// their names so outputs can be diffed directly.
 pub fn inspect(data: &[u8]) -> serde_json::Value {
     use serde_json::json;

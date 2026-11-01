@@ -66,11 +66,4 @@ coverage.xml
 !/docs/branding/social-preview.png
 
 # App icon fallback is required in builds.
-!/ios/MomentStays/Assets.xcassets/AppIcon.appiconset/AppIcon.png
-
-# Generated Flutter and CocoaPods integration.
-/mobile/.ios/
-/mobile/.dart_tool/
-/mobile/build/
-/ios/Pods/
-/ios/MomentStays.xcworkspace/
+!/apple/ios/MomentStays/Assets.xcassets/AppIcon.appiconset/AppIcon.png

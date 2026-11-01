@@ -3,12 +3,11 @@
 //!
 //! Behaviour, output shapes and error strings follow the Python CLI. The
 //! video work (MOV remux, legacy gain-map conversion) still runs through the
-//! Swift helper `native/MotionLive.swift`, compiled on first use exactly like
+//! Swift helper `apple/shared/MotionLive.swift`, compiled on first use exactly like
 //! the Python CLI does, so `convert` needs macOS 12+ and Xcode Command Line
 //! Tools; `scan` and `verify` run anywhere.
 
-use momentstays_core::pyjpeg;
-use momentstays_core::pymotion;
+use momentstays_core::compat;
 use momentstays_core::{Error, Result};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -202,13 +201,13 @@ fn find_repo_root() -> Result<PathBuf> {
     for start in starts {
         let mut cur: Option<PathBuf> = Some(start);
         while let Some(dir) = cur {
-            if dir.join("native/MotionLive.swift").is_file() {
+            if dir.join("apple/shared/MotionLive.swift").is_file() {
                 return Ok(dir);
             }
             cur = dir.parent().map(|p| p.to_path_buf());
         }
     }
-    Err(err("找不到仓库根目录（native/MotionLive.swift）"))
+    Err(err("找不到仓库根目录（apple/shared/MotionLive.swift）"))
 }
 
 fn implementation_id(root: &Path) -> Result<String> {
@@ -227,7 +226,7 @@ fn implementation_id(root: &Path) -> Result<String> {
     }
     walk(&root.join("core/src"), &mut files);
     files.sort();
-    files.push(root.join("native/MotionLive.swift"));
+    files.push(root.join("apple/shared/MotionLive.swift"));
     let mut h = Sha256::new();
     for f in &files {
         let bytes = fs::read(f).map_err(|e| err(e.to_string()))?;
@@ -310,7 +309,7 @@ fn native_binary(root: &Path) -> Result<PathBuf> {
     if !cfg!(target_os = "macos") {
         return Err(err("Conversion requires macOS 12 or later"));
     }
-    let source = root.join("native/MotionLive.swift");
+    let source = root.join("apple/shared/MotionLive.swift");
     let build = root.join(".build");
     fs::create_dir_all(&build).map_err(|e| err(e.to_string()))?;
     let arch = match env::consts::ARCH {
@@ -444,7 +443,7 @@ fn legacy_convert(
     binary: &Path,
     work: &Path,
 ) -> Result<()> {
-    let (legacy, reason) = pymotion::legacy_apple(image)?;
+    let (legacy, reason) = compat::motion::legacy_apple(image)?;
     if let Some(lg) = legacy {
         let old_gain = work.join("old-gain.jpg");
         fs::write(&old_gain, &lg.gain).map_err(|e| err(e.to_string()))?;
@@ -470,11 +469,11 @@ fn legacy_convert(
                 icc_b64.as_bytes(),
             )
             .map_err(|e| err(format!("Legacy HDR conversion: {e}")))?;
-            let tagged = pymotion::legacy_color_profile(image, &icc_bytes)?;
+            let tagged = compat::motion::legacy_color_profile(image, &icc_bytes)?;
             let gain_bytes = fs::read(&gain_out).map_err(|e| err(e.to_string()))?;
             let stops = result.get("stops").and_then(|v| v.as_f64())
                 .ok_or_else(|| err("Legacy HDR conversion: missing stops"))?;
-            *image = pymotion::ultra_from_apple(&tagged, &gain_bytes, stops)?;
+            *image = compat::motion::ultra_from_apple(&tagged, &gain_bytes, stops)?;
             hdr["output"] = json!("ultra-hdr");
         }
     } else {
@@ -505,7 +504,7 @@ fn convert_one(source: &Path, target: &Path, binary: &Path, args: &ConvertArgs, 
         )));
     }
     let source_bytes = fs::read(source).map_err(|e| err(e.to_string()))?;
-    let photo = pymotion::parse(&source_bytes)?;
+    let photo = compat::motion::parse(&source_bytes)?;
     if photo.timestamp_us.is_none() && args.missing_time == "error" {
         return Err(err("原片没有有效封面时间戳；不自动使用视频中点"));
     }
@@ -537,8 +536,8 @@ fn convert_one(source: &Path, target: &Path, binary: &Path, args: &ConvertArgs, 
         }
     }
     let identifier = uuid_v4().to_uppercase();
-    let still = pymotion::live_still(&image, &identifier)?;
-    if pyjpeg::image_hash(&photo.still)? != pyjpeg::image_hash(&still)? {
+    let still = compat::motion::live_still(&image, &identifier)?;
+    if compat::jpeg::image_hash(&photo.still)? != compat::jpeg::image_hash(&still)? {
         return Err(err("Static JPEG compressed coding data changed"));
     }
     fs::write(stage.join("photo.jpg"), &still).map_err(|e| err(e.to_string()))?;
@@ -563,7 +562,7 @@ fn convert_one(source: &Path, target: &Path, binary: &Path, args: &ConvertArgs, 
         let f = fs::File::options().write(true).open(stage.join(name)).map_err(|e| err(e.to_string()))?;
         f.set_times(times).map_err(|e| err(e.to_string()))?;
     }
-    let aux = pyjpeg::mpf_images(&still)?;
+    let aux = compat::jpeg::mpf_images(&still)?;
     let mut manifest = Map::new();
     manifest.insert("version".to_string(), json!(VERSION));
     manifest.insert("implementation".to_string(), json!(impl_id));
@@ -576,7 +575,7 @@ fn convert_one(source: &Path, target: &Path, binary: &Path, args: &ConvertArgs, 
     manifest.insert("timing".to_string(), timing.clone());
     manifest.insert("hdr".to_string(), hdr.clone());
     manifest.insert("warnings".to_string(), json!(warnings));
-    manifest.insert("primary_coding_sha256".to_string(), json!(pyjpeg::image_hash(&still)?));
+    manifest.insert("primary_coding_sha256".to_string(), json!(compat::jpeg::image_hash(&still)?));
     manifest.insert(
         "auxiliary_sha256".to_string(),
         json!(aux.get(1..).unwrap_or(&[]).iter().map(|r| sha256_bytes(&still[r.clone()])).collect::<Vec<_>>()),
@@ -658,7 +657,7 @@ fn cmd_scan(input: &Path) -> Result<()> {
     let mut results = Vec::new();
     for file in &files {
         let row = match fs::read(file) {
-            Ok(bytes) => match pymotion::parse(&bytes) {
+            Ok(bytes) => match compat::motion::parse(&bytes) {
                 Ok(photo) => json!({
                     "source": file.to_string_lossy(),
                     "status": "motion-photo",
