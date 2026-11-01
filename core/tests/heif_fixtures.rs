@@ -421,3 +421,43 @@ fn coding_hash_stable_under_exif_edits() {
     assert_eq!(heif::coding_hash(&c).unwrap(), ha);
     assert_eq!(heif::coding_hash(&d).unwrap(), ha);
 }
+
+#[test]
+fn sefd_rejects_conflicting_cover_timestamps() {
+    let items = vec![
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: motion_xmp(123),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 4,
+            ty: "mime",
+            data: motion_xmp(456),
+            method: 0,
+            extents: 1,
+        },
+    ];
+    let mut motion = build_still_spec(&spec_v0(), &items);
+    motion.extend(sefd_box(&real_mp4()));
+    assert!(
+        format::parse(&motion).is_err(),
+        "ambiguous cover time must be rejected"
+    );
+}

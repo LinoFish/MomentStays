@@ -335,24 +335,22 @@ fn parse_heif(d: &[u8]) -> Result<MotionPhoto<'_>> {
         }
         let still = &d[..b];
         let l = heif::layout(still)?;
+        // Every mime item must be readable XMP, and a cover time given
+        // twice must agree: a malformed item or two different times are
+        // refused, never skipped or resolved by picking one.
         let mut time = None;
         for item in l.items.iter().filter(|i| i.ty == "mime") {
-            let t = (|| -> Option<i64> {
-                let w = wrap_xmp(&heif::item_bytes(still, item)).ok()?;
-                let pk = packets(&w).ok()?;
-                let mut t = integer(&pk, "MotionPhotoPresentationTimestampUs")
-                    .ok()
-                    .flatten();
-                if t.is_none_or(|x| x < 0) {
-                    t = integer(&pk, "MicroVideoPresentationTimestampUs")
-                        .ok()
-                        .flatten();
+            let w = wrap_xmp(&heif::item_bytes(still, item))?;
+            let pk = packets(&w)?;
+            let mut t = integer(&pk, "MotionPhotoPresentationTimestampUs")?;
+            if t.is_none_or(|x| x < 0) {
+                t = integer(&pk, "MicroVideoPresentationTimestampUs")?;
+            }
+            if let Some(t) = t.filter(|x| *x >= 0) {
+                if time.is_some_and(|previous| previous != t) {
+                    return fail_as(ErrorKind::Cover, "HEIC 封面时间冲突");
                 }
-                t.filter(|x| *x >= 0)
-            })();
-            if t.is_some() {
-                time = t;
-                break;
+                time = Some(t);
             }
         }
         (b, v.start..v.end, time)

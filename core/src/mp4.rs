@@ -482,8 +482,12 @@ impl Movie {
     }
 }
 
+/// Most samples accepted across all tracks of one file.
+const MAX_SAMPLES: usize = 1_000_000;
+
 fn tracks_in(d: &[u8], moov: &BoxRef) -> Result<Vec<Track>> {
     let mut tracks = Vec::new();
+    let mut sample_budget = MAX_SAMPLES;
     for trak in boxes(d, moov.payload, moov.end)?
         .into_iter()
         .filter(|b| b.is(b"trak"))
@@ -543,13 +547,18 @@ fn tracks_in(d: &[u8], moov: &BoxRef) -> Result<Vec<Track>> {
         }
         let fixed = be(d, stsz.payload + 4, 4)?;
         let sample_count = be(d, stsz.payload + 8, 4)?;
-        // Every sample is at least one byte inside the file, so a larger
-        // count cannot be valid. Checked before any count-sized allocation
-        // (a 12-byte stsz with a huge fixed-size count would otherwise ask
-        // for tens of GB).
-        if sample_count > d.len() {
-            return fail("MP4 样本超出文件范围");
+        // Resource limit, checked before anything is sized by the count. A
+        // few header bytes can claim billions of samples (or, with a fixed
+        // sample size, tens of millions inside a modest file); every sample
+        // costs ~100 bytes across the tables. Motion Photo clips have a few
+        // hundred samples per track; the budget is shared by all tracks.
+        if sample_count > sample_budget
+            || sample_count > d.len()
+            || (fixed != 0 && sample_count > d.len() / fixed)
+        {
+            return fail_as(ErrorKind::Unsupported, "MP4 样本数量超出安全资源限制");
         }
+        sample_budget -= sample_count;
         // stsz entries start at payload+12, unlike the other tables.
         let sizes: Vec<usize> = if fixed != 0 {
             vec![fixed; sample_count]
