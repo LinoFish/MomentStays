@@ -119,22 +119,22 @@ Building requires Xcode Command Line Tools. The default build produces a Univers
 ```bash
 git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
-bash scripts/build_app.sh
+bash apple/macos/scripts/build_app.sh
 open dist/留刻.app
 ```
 
 A built app requires no Python, FFmpeg, ExifTool, Homebrew, or additional runtime. To build only for Apple Silicon:
 
 ```bash
-bash scripts/build_app.sh --arm64
-bash scripts/build_app.sh --universal
+bash apple/macos/scripts/build_app.sh --arm64
+bash apple/macos/scripts/build_app.sh --universal
 ```
 
 To produce a DMG, ZIP, and checksum list from the built app:
 
 ```bash
-python3 -m pip install --target .build/dmg-tools -r packaging/dmg-requirements.txt
-bash scripts/make_dmg.sh
+python3 -m pip install --target .build/dmg-tools -r apple/macos/packaging/dmg-requirements.txt
+bash apple/macos/scripts/make_dmg.sh
 ```
 
 The DMG uses only the app icon, Applications link and a drag arrow. The user guide is available from the app; licenses are inside the app bundle. These Python tools are needed only for packaging; app users do not need them.
@@ -161,30 +161,35 @@ python3 scripts/check_publish.py
 
 ## Development
 
-The legacy Python CLI has been removed. Python is retained only for format references, regression tests, packaging and documentation tooling; the app runs independently of it.
+The Python converter is no longer maintained. The Rust core (`core/`) and the Swift engine (`apple/shared/`) are the implementations; Python remains only for the macOS check scripts, packaging and documentation tooling. The app runs independently of it.
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
-bash scripts/build_gui_tests.sh
-python3 scripts/check_gui_engine.py
-python3 scripts/check_reverse.py
-python3 scripts/check_workspace.py
+cd core && cargo test --release && cd ..
+bash apple/macos/scripts/build_gui_tests.sh
+python3 apple/macos/scripts/check_gui_engine.py
+python3 apple/macos/scripts/check_reverse.py
+python3 apple/macos/scripts/check_workspace.py
 ```
 
 Native layout checks use fictional data and require an available macOS desktop:
 
 ```bash
-bash scripts/build_app.sh --diagnostics
-python3 scripts/check_swiftui_ui.py
+bash apple/macos/scripts/build_app.sh --diagnostics
+python3 apple/macos/scripts/check_swiftui_ui.py
 ```
+
+The repository is split by platform. Each platform directory owns its UI, build scripts and tests; shared behavior lives in `core/`.
 
 | Area | Location |
 | --- | --- |
-| SwiftUI, task state, Photos and sharing | `gui/` |
-| Parsing, HDR, timing, conversion, verification | `native/` |
-| Python format reference for regression and Rust parity | `motionlive/` |
-| Build scripts and regression drivers | `scripts/`, `tests/` |
-| App metadata and reproducible icon drawing | `packaging/` |
+| Cross-platform Rust core (parsing, remux, vendor writers, C ABI) | `core/` |
+| Swift conversion engine shared by macOS and iOS | `apple/shared/` |
+| macOS app: SwiftUI, task state, Photos and sharing | `apple/macos/Sources/` |
+| macOS build scripts, regression checks and test fixtures | `apple/macos/scripts/`, `apple/macos/tests/`, `apple/shared/tests/` |
+| macOS app metadata, DMG layout and icon drawing | `apple/macos/packaging/` |
+| iOS app, share extension and Swift packages (work in progress) | `apple/ios/` |
+| Windows and Android apps (planned) | `windows/`, `android/` |
+| Repository-wide tools (publication audit, website sync) | `scripts/` |
 | Project icon and README artwork | [Brand assets](docs/branding/README.md) |
 
 New to MomentStays? Start with the **[User Guide](docs/USER_GUIDE.md)** ([简体中文版](docs/USER_GUIDE.zh-CN.md)) — every feature explained, including auxiliary tracks and Photos library import.

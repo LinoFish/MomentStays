@@ -10,8 +10,9 @@
 
 ## 构建与实现
 
+- [仓库结构](development/仓库结构.md)
 - [SwiftUI 实现说明](development/SwiftUI实现说明.md)
 - [图库识别与自动入册](design/图库识别与自动入册规范.md)
 - [输出位置与系统共享](design/输出位置与系统共享规范.md)
 - [本地样片与隐私](development/本地样片与隐私.md)
-- [DMG 构建](../packaging/README.md)
+- [DMG 构建](../apple/macos/packaging/README.md)

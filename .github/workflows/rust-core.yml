@@ -1,10 +1,10 @@
 name: rust-core
 on:
   push:
-    branches: [rust-core]
-    paths: ["core/**", "scripts/check_rust_core.py", ".github/workflows/rust-core.yml"]
+    branches: [main]
+    paths: ["core/**", ".github/workflows/rust-core.yml"]
   pull_request:
-    paths: ["core/**"]
+    paths: ["core/**", ".github/workflows/rust-core.yml"]
 jobs:
   test:
     strategy:
@@ -16,5 +16,3 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --release
         working-directory: core
-      - if: matrix.os != 'windows-latest'
-        run: python3 scripts/check_rust_core.py

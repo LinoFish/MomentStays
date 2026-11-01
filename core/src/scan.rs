@@ -31,8 +31,8 @@ use crate::heif;
 use crate::hdr;
 use crate::jpeg;
 use crate::mp4;
-use crate::pyjpeg;
-use crate::pymotion::{self, XMP_HDR};
+use crate::compat;
+use crate::compat::motion::XMP_HDR;
 use crate::vendor;
 use crate::xmp;
 use crate::Result;
@@ -133,11 +133,11 @@ pub fn identify(data: &[u8], format: &str) -> Identity {
 fn has_iso(still: &[u8]) -> Result<bool> {
     const ISO_URN: &[u8] = b"urn:iso:std:iso:ts:21496:-1\0";
     let mut images: Vec<&[u8]> = vec![still];
-    for r in pyjpeg::mpf_images(still)?.iter().skip(1) {
+    for r in compat::jpeg::mpf_images(still)?.iter().skip(1) {
         images.push(&still[r.clone()]);
     }
     for image in images {
-        for s in pyjpeg::segments(image)? {
+        for s in compat::jpeg::segments(image)? {
             if s.marker == 0xE2 && s.payload(image).starts_with(ISO_URN) {
                 return Ok(true);
             }
@@ -165,7 +165,7 @@ pub fn classify_hdr(still: &[u8], ultra: bool) -> Result<&'static str> {
     if has_iso(still)? {
         return Ok("ISO HDR");
     }
-    if pymotion::legacy_apple(still)?.0.is_some() {
+    if compat::motion::legacy_apple(still)?.0.is_some() {
         return Ok("旧 Apple HDR");
     }
     Ok("SDR / 其他")
@@ -210,7 +210,7 @@ fn has_motion_claim(packets: &[xmp::Packet]) -> bool {
 /// JPEG dimensions from the first SOF marker (the `CGImageSource`
 /// dimension half of Swift's check; see the module docs).
 fn jpeg_dimensions(data: &[u8]) -> Option<(u32, u32)> {
-    let segs = pyjpeg::segments(data).ok()?;
+    let segs = compat::jpeg::segments(data).ok()?;
     for s in &segs {
         let m = s.marker;
         let is_sof = (0xC0..=0xCF).contains(&m) && m != 0xC4 && m != 0xC8 && m != 0xCC;

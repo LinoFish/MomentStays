@@ -4,7 +4,7 @@
 //! understands (Google / Samsung SEF / Huawei-Honor LIVE_ / OPPO / vivo) and
 //! can be written back out for any of those vendors. Video bytes are copied,
 //! never re-encoded; the still keeps its coding data (only XMP segments are
-//! rewritten, with MPF offsets repaired by [`crate::pyjpeg::edit_header`]).
+//! rewritten, with MPF offsets repaired by [`crate::compat::jpeg::edit_header`]).
 //!
 //! Deliberate refusals, matching the product rule of never guessing cover:
 //! a target that needs a cover time cannot be built from a frame-only model
@@ -15,9 +15,9 @@
 
 use crate::format::{self, MotionPhoto};
 use crate::jpeg;
-use crate::pyjpeg;
-use crate::pymotion::{self, CAMERA, CONTAINER, HDR, ITEM, NOTE, RDF, XMPMETA};
-use crate::pyxml::{self, Element};
+use crate::compat;
+use crate::compat::motion::{CAMERA, CONTAINER, HDR, ITEM, NOTE, RDF, XMPMETA};
+use crate::compat::xml::Element;
 use crate::{fail, Result};
 use std::collections::{HashMap, HashSet};
 
@@ -111,20 +111,20 @@ fn is_motion_attr(ns: &str, local: &str) -> bool {
 /// MotionPhoto directory items and whole Container directories.
 fn clean_packet(root: &mut Element) -> bool {
     let mut touched = false;
-    pymotion::visit_mut(root, &mut |el| {
+    compat::motion::visit_mut(root, &mut |el| {
         let before = el.attrib.len();
         el.attrib.retain(|(n, l, _)| !is_motion_attr(n, l));
         if el.attrib.len() != before {
             touched = true;
         }
     });
-    if pyxml::remove_children_where(root, &|child| {
+    if compat::xml::remove_children_where(root, &|child| {
         child.ns == CAMERA && MOTION_KEYS.contains(&child.local.as_str())
     }) > 0
     {
         touched = true;
     }
-    if pyxml::remove_children_where(root, &|child| {
+    if compat::xml::remove_children_where(root, &|child| {
         if !(child.ns == RDF && child.local == "li") {
             return false;
         }
@@ -138,7 +138,7 @@ fn clean_packet(root: &mut Element) -> bool {
     {
         touched = true;
     }
-    if pyxml::remove_children_where(root, &|child| {
+    if compat::xml::remove_children_where(root, &|child| {
         child.ns == CONTAINER && child.local == "Directory"
     }) > 0
     {
@@ -149,11 +149,11 @@ fn clean_packet(root: &mut Element) -> bool {
 
 /// Collect Extended XMP references (old GUIDs) from standard packets so the
 /// rewritten document keeps linking its extended packets.
-fn extended_refs(packets: &[pymotion::Packet]) -> Vec<String> {
+fn extended_refs(packets: &[compat::motion::Packet]) -> Vec<String> {
     let mut refs: Vec<String> = Vec::new();
     for p in packets.iter().filter(|p| p.guid.is_none()) {
         let mut found = Vec::new();
-        pymotion::visit_mut(&mut p.root.clone(), &mut |el| {
+        compat::motion::visit_mut(&mut p.root.clone(), &mut |el| {
             if let Some(v) = el.get_attr(NOTE, "HasExtendedXMP") {
                 found.push(v.to_string());
             }
@@ -238,7 +238,7 @@ fn build_still(
     video_len: usize,
     gain_len: usize,
 ) -> Result<Vec<u8>> {
-    let mut packets = pymotion::xmp_packets(still)?;
+    let mut packets = compat::motion::xmp_packets(still)?;
     let standard: Vec<usize> = packets
         .iter()
         .enumerate()
@@ -281,17 +281,17 @@ fn build_still(
             replacements.insert(packets[*i].seg_start, Vec::new());
         }
     } else {
-        let mut payload = pymotion::XMP_HDR.to_vec();
-        payload.extend_from_slice(&pyxml::tostring(&doc));
-        insert = pyjpeg::app(0xE1, &payload)?;
+        let mut payload = compat::motion::XMP_HDR.to_vec();
+        payload.extend_from_slice(&compat::xml::tostring(&doc));
+        insert = compat::jpeg::app(0xE1, &payload)?;
     }
-    let mut rewrites = pymotion::xmp_rewrites(&mut packets, &mut changed)?;
+    let mut rewrites = compat::motion::xmp_rewrites(&mut packets, &mut changed)?;
     for (k, v) in replacements {
         rewrites.insert(k, v);
     }
-    let out = pyjpeg::edit_header(still, &rewrites, &insert)?;
-    let before = pyjpeg::mpf_images(still)?;
-    let after = pyjpeg::mpf_images(&out)?;
+    let out = compat::jpeg::edit_header(still, &rewrites, &insert)?;
+    let before = compat::jpeg::mpf_images(still)?;
+    let after = compat::jpeg::mpf_images(&out)?;
     let hash = |d: &[u8], rs: &[std::ops::Range<usize>]| {
         rs.iter().map(|r| crate::sha256_hex(&d[r.clone()])).collect::<Vec<_>>()
     };

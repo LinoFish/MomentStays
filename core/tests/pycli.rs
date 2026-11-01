@@ -6,7 +6,7 @@
 //! need no Python at run time.
 
 use base64::Engine;
-use momentstays_core::{pyjpeg, pymotion};
+use momentstays_core::compat;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
@@ -36,12 +36,12 @@ fn parse_values_match_python() {
         ("ultra.jpg", Some(400000), Some("MotionPhotoPresentationTimestampUs"), "ultra-hdr"),
     ];
     for (name, ts, tag, hdr) in cases {
-        let p = pymotion::parse(&read(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let p = compat::motion::parse(&read(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(p.timestamp_us, *ts, "{name} timestamp");
         assert_eq!(p.timestamp_tag.as_deref(), *tag, "{name} tag");
         assert_eq!(p.hdr, *hdr, "{name} hdr");
     }
-    let err = pymotion::parse(&read("static.jpg")).unwrap_err();
+    let err = compat::motion::parse(&read("static.jpg")).unwrap_err();
     assert_eq!(err.to_string(), "Not a marked Google Motion Photo");
 }
 
@@ -56,13 +56,13 @@ fn live_still_bytes_match_python() {
         ("extended-motion.jpg", "expected/live-still-extended-motion.bin", "TEST"),
     ];
     for (fixture, expected, id) in cases {
-        let photo = pymotion::parse(&read(fixture)).unwrap_or_else(|e| panic!("{fixture}: {e}"));
-        let out = pymotion::live_still(&photo.still, id).unwrap_or_else(|e| panic!("{fixture}: {e}"));
+        let photo = compat::motion::parse(&read(fixture)).unwrap_or_else(|e| panic!("{fixture}: {e}"));
+        let out = compat::motion::live_still(&photo.still, id).unwrap_or_else(|e| panic!("{fixture}: {e}"));
         assert_eq!(out, read(expected), "{fixture} live_still bytes");
         // Coding data must survive the rewrite.
         assert_eq!(
-            pyjpeg::image_hash(&photo.still).unwrap(),
-            pyjpeg::image_hash(&out).unwrap(),
+            compat::jpeg::image_hash(&photo.still).unwrap(),
+            compat::jpeg::image_hash(&out).unwrap(),
             "{fixture} coding hash"
         );
     }
@@ -72,18 +72,18 @@ fn live_still_bytes_match_python() {
 fn ultra_from_apple_bytes_match_python() {
     let base = read("base.jpg");
     assert_eq!(
-        pymotion::ultra_from_apple(&base, &base, 2.0).unwrap(),
+        compat::motion::ultra_from_apple(&base, &base, 2.0).unwrap(),
         read("expected/ultra-2.0.bin")
     );
     assert_eq!(
-        pymotion::ultra_from_apple(&base, &base, 1.8).unwrap(),
+        compat::motion::ultra_from_apple(&base, &base, 1.8).unwrap(),
         read("expected/ultra-1.8.bin")
     );
 }
 
 #[test]
 fn legacy_apple_matches_python() {
-    let (info, _reason) = pymotion::legacy_apple(&read("legacy-mpf.jpg")).unwrap();
+    let (info, _reason) = compat::motion::legacy_apple(&read("legacy-mpf.jpg")).unwrap();
     let info = info.expect("legacy gain map expected");
     assert!((info.stops - 1.5909).abs() < 1e-9, "stops {}", info.stops);
     assert_eq!(info.gain, read("expected/legacy-gain.bin"));
@@ -92,7 +92,7 @@ fn legacy_apple_matches_python() {
 #[test]
 fn legacy_color_profile_bytes_match_python() {
     assert_eq!(
-        pymotion::legacy_color_profile(&read("srgb.jpg"), b"FAKEICC").unwrap(),
+        compat::motion::legacy_color_profile(&read("srgb.jpg"), b"FAKEICC").unwrap(),
         read("expected/srgb-icc.bin")
     );
 }

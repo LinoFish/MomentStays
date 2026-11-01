@@ -1,7 +1,0 @@
-.dart_tool/
-.flutter-plugins*
-.packages
-.pub/
-build/
-.ios/
-.android/

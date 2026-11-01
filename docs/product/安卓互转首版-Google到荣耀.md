@@ -24,7 +24,7 @@
 
 ## 转换与数据安全契约
 
-使用现有 [PhotoFormat](../../native/PhotoFormat.swift) 稳定接口解析（生产已由并行任务接入现有 Rust 实现）及 [AndroidExport.assemble](../../native/AndroidExport.swift) 组装，建立独立安卓输入入口。不得误用需要 Apple ContentIdentifier 配对的 `AndroidExport.convert`，不引入 Rust 重写依赖。
+使用现有 [PhotoFormat](../../apple/shared/PhotoFormat.swift) 稳定接口解析（生产已由并行任务接入现有 Rust 实现）及 [AndroidExport.assemble](../../apple/shared/AndroidExport.swift) 组装，建立独立安卓输入入口。不得误用需要 Apple ContentIdentifier 配对的 `AndroidExport.convert`，不引入 Rust 重写依赖。
 
 流程为：识别来源结构 → 验证静态图、视频范围及唯一封面时间 → 提取原始载荷 → 按 A 路径组装临时副本 → 读回校验 → 原子发布。
 
@@ -43,15 +43,15 @@
 
 ### 2. 第三方向与批处理接入
 
-- [ConversionSettings.swift](../../gui/ConversionSettings.swift)：在仅有 `toApple`/`toAndroid` 的 `ConversionDirection` 中增加明确的安卓互转值；参数快照、持久设置及旧配置恢复保持兼容。
-- [BatchEngine.swift](../../native/BatchEngine.swift)：为扫描、候选选择、转换路由和输出后缀增加明确分支；新方向只接收通过门槛的 Google JPEG，复用现有取消、覆盖、去重、续转、报告和共享契约。
-- [WorkspaceModel.swift](../../gui/WorkspaceModel.swift)：定向检查所有方向二选一逻辑，覆盖导入/扫描、任务快照、队列分类、有效结果、输出目的地、进度/停止、恢复与最近结果共享，避免新值落入 Apple 分支。切换方向后重判可转换项和续转有效性。
+- [ConversionSettings.swift](../../apple/macos/Sources/ConversionSettings.swift)：在仅有 `toApple`/`toAndroid` 的 `ConversionDirection` 中增加明确的安卓互转值；参数快照、持久设置及旧配置恢复保持兼容。
+- [BatchEngine.swift](../../apple/shared/BatchEngine.swift)：为扫描、候选选择、转换路由和输出后缀增加明确分支；新方向只接收通过门槛的 Google JPEG，复用现有取消、覆盖、去重、续转、报告和共享契约。
+- [WorkspaceModel.swift](../../apple/macos/Sources/WorkspaceModel.swift)：定向检查所有方向二选一逻辑，覆盖导入/扫描、任务快照、队列分类、有效结果、输出目的地、进度/停止、恢复与最近结果共享，避免新值落入 Apple 分支。切换方向后重判可转换项和续转有效性。
 
 拒绝项在队列中说明「来源不支持」「文件损坏」「封面时间不明确」或「结构无法无损保留」；可确认的静态照片仍按现有分类处理，不能误报转换成功。
 
 ### 3. 设置展示与交付
 
-[ExportSettingsView.swift](../../gui/ExportSettingsView.swift) 展示固定「Google → 荣耀」与「暂仅支持 Google → 荣耀」。此方向不显示 Apple 配对/入库选项、HDR 转码选项或厂商全列表，也不以隐藏设置改变媒体。沿用关联文档的工作台及窄窗布局，检查第三方向可选、文案可读、主操作不被挤出；忙碌期间设置仍锁定。
+[ExportSettingsView.swift](../../apple/macos/Sources/ExportSettingsView.swift) 展示固定「Google → 荣耀」与「暂仅支持 Google → 荣耀」。此方向不显示 Apple 配对/入库选项、HDR 转码选项或厂商全列表，也不以隐藏设置改变媒体。沿用关联文档的工作台及窄窗布局，检查第三方向可选、文案可读、主操作不被挤出；忙碌期间设置仍锁定。
 
 ## 针对性验收
 
@@ -65,8 +65,8 @@
 
 - 新增独立 `AndroidTransfer` 入口，连接现有解析接口及 `AndroidExport.assemble(vendor:google)`；不使用 Apple 配对入口、转码或 B-legacy 字段。
 - 新方向接入扫描、批次、设置恢复、续转签名、原子发布、文件夹及共享交付；不适用的图库输入、Apple、厂商列表、转码与封面调整选项隐藏，旧配置中的隐藏参数不影响本方向。
-- `scripts/check_android_transfer.py`：旧/新/双声明及元素式 XMP，JPEG/EXIF/完整视频/封面/增益图和嵌套 XMP 保留，未知版本与目录字段、时间缺失/冲突/越界、截断/间隙/尾标/其他来源/HEIC 拒绝，覆盖、取消、去重、续转、静态分类、报告及两张本地真实 Google 样本通过。
-- `scripts/check_workspace.py`：151 项状态与集成检查通过，包括第三方向、旧设置恢复、方向切换解析复用与变更失效、隐藏参数隔离、完整文件共享及原片不变。
-- `scripts/check_android_transfer_ui.py`：7 项第三方向宽/窄窗、设置、来源/交付与文件菜单、旧方向关键布局检查通过；正式及诊断 Intel x86_64/macOS 12 App 构建、Rust 静态链接与签名校验通过。整模块优化所需的静态库参数已明确传给链接器。并行 Rust 接入任务提供已有方向 32 项原生回归及 40 输入精确解析对照的通过结果，本次不重复运行。
+- `apple/macos/scripts/check_android_transfer.py`：旧/新/双声明及元素式 XMP，JPEG/EXIF/完整视频/封面/增益图和嵌套 XMP 保留，未知版本与目录字段、时间缺失/冲突/越界、截断/间隙/尾标/其他来源/HEIC 拒绝，覆盖、取消、去重、续转、静态分类、报告及两张本地真实 Google 样本通过。
+- `apple/macos/scripts/check_workspace.py`：151 项状态与集成检查通过，包括第三方向、旧设置恢复、方向切换解析复用与变更失效、隐藏参数隔离、完整文件共享及原片不变。
+- `apple/macos/scripts/check_android_transfer_ui.py`：7 项第三方向宽/窄窗、设置、来源/交付与文件菜单、旧方向关键布局检查通过；正式及诊断 Intel x86_64/macOS 12 App 构建、Rust 静态链接与签名校验通过。整模块优化所需的静态库参数已明确传给链接器。并行 Rust 接入任务提供已有方向 32 项原生回归及 40 输入精确解析对照的通过结果，本次不重复运行。
 
 样片、完整报告和截图只留本地忽略目录；不提交、上传或发布。本次接受的复杂结构限于可证明无损保留者；其他机型和系统版本仍属于扩展验证。既有 A 在荣耀相册及 Google 相册的正常播放是已确认事实，不要求用户重复验证。

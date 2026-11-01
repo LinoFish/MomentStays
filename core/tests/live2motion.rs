@@ -5,9 +5,9 @@ use momentstays_core::format;
 use momentstays_core::live2motion::{assemble, mett_cover_time, LivePhotoInput};
 use momentstays_core::model::{Cover, Vendor};
 use momentstays_core::mp4::sample_tables;
-use momentstays_core::pymotion::{live_still_clean, live_still_with_identifier, XMP_HDR};
+use momentstays_core::compat::motion::{live_still_clean, live_still_with_identifier, XMP_HDR};
 use momentstays_core::tiff::Tiff;
-use momentstays_core::pyjpeg;
+use momentstays_core::compat;
 use momentstays_core::remux::{check_remux, remux_to_mp4};
 
 fn bx(t: &str, payload: &[u8]) -> Vec<u8> {
@@ -260,7 +260,7 @@ fn minimal_jpeg_with_motion_xmp() -> Vec<u8> {
 }
 
 fn exif_payload(jpeg: &[u8]) -> Vec<u8> {
-    pyjpeg::segments(jpeg)
+    compat::jpeg::segments(jpeg)
         .unwrap()
         .into_iter()
         .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(b"Exif\0\0"))
@@ -281,7 +281,7 @@ fn clean_strips_motion_xmp_keeps_exif_and_gainmap_li() {
     assert!(!text.contains("MotionPhoto\" Item:Mime=\"video/mp4\""));
     assert!(text.contains("GainMap"));
     assert_eq!(exif_payload(&cleaned), exif_payload(&src));
-    pyjpeg::segments(&cleaned).expect("cleaned still parses");
+    compat::jpeg::segments(&cleaned).expect("cleaned still parses");
 }
 
 #[test]
@@ -369,11 +369,11 @@ fn jpeg_with_motion_xmp(with_exif: bool) -> Vec<u8> {
 /// Coded image bytes: every segment except EXIF/XMP header segments,
 /// plus trailing scan data. Header-only edits must not move these.
 fn coding_bytes(jpeg: &[u8]) -> Vec<u8> {
-    let segs = pyjpeg::segments(jpeg).expect("segments");
+    let segs = compat::jpeg::segments(jpeg).expect("segments");
     let mut out = Vec::new();
     for s in &segs {
         let pl = s.payload(jpeg);
-        if s.marker == 0xE1 && (pl.starts_with(pyjpeg::EXIF_HDR) || pl.starts_with(XMP_HDR)) {
+        if s.marker == 0xE1 && (pl.starts_with(compat::jpeg::EXIF_HDR) || pl.starts_with(XMP_HDR)) {
             continue;
         }
         out.extend_from_slice(&jpeg[s.start..s.end]);
@@ -387,10 +387,10 @@ fn coding_bytes(jpeg: &[u8]) -> Vec<u8> {
 /// MakerNote tag 17 (ContentIdentifier) read back from a JPEG's EXIF,
 /// mirroring Swift `movie()`'s still check (`maker["17"] == uuid`).
 fn makernote_uuid(jpeg: &[u8]) -> Option<String> {
-    let segs = pyjpeg::segments(jpeg).ok()?;
+    let segs = compat::jpeg::segments(jpeg).ok()?;
     let exif = segs
         .iter()
-        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(pyjpeg::EXIF_HDR))?;
+        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(compat::jpeg::EXIF_HDR))?;
     let tiff_bytes = &exif.payload(jpeg)[6..];
     let t = Tiff::new(tiff_bytes).ok()?;
     let (root, _) = t.root().ok()?;
@@ -466,10 +466,10 @@ fn still_with_identifier_replaces_and_keeps_coding() {
 /// Real iPhone MakerNotes use LONG8 for LivePhotoVideoIndex (tag 0x17);
 /// the writer used to reject it as an unknown field type.
 fn makernote_long8(jpeg: &[u8], want: u16) -> Option<u64> {
-    let segs = pyjpeg::segments(jpeg).ok()?;
+    let segs = compat::jpeg::segments(jpeg).ok()?;
     let exif = segs
         .iter()
-        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(pyjpeg::EXIF_HDR))?;
+        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(compat::jpeg::EXIF_HDR))?;
     let tiff_bytes = &exif.payload(jpeg)[6..];
     let t = Tiff::new(tiff_bytes).ok()?;
     let (root, _) = t.root().ok()?;

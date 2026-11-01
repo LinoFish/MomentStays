@@ -1,4 +1,4 @@
-//! Big/little-endian helpers mirroring `Binary` in native/PhotoFormat.swift.
+//! Big/little-endian helpers mirroring `Binary` in apple/shared/PhotoFormat.swift.
 use crate::{fail, Result};
 
 pub fn read(d: &[u8], p: usize, count: usize, little: bool) -> Result<u64> {

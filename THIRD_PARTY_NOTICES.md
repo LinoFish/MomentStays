@@ -6,7 +6,7 @@ MomentStays's original source, documentation and artwork are **GPL-3.0-only**, c
 
 ## 1. Application code, system dependencies and shipped assets
 
-The native build compiles the project's `native/` and `gui/` Swift files. The converter projects in section 4 are credited for their recorded research/reference roles; the current build does not link or vendor their converter libraries. The Rust core is statically linked into the macOS app for container parsing and verification; its dependencies are listed in section 2.
+The native build compiles the project's `apple/shared/` and `apple/macos/Sources/` Swift files. The converter projects in section 4 are credited for their recorded research/reference roles; the current build does not link or vendor their converter libraries. The Rust core is statically linked into the macOS app for container parsing and verification; its dependencies are listed in section 2.
 
 | Component / project | Actual use | Distribution and terms |
 | --- | --- | --- |
@@ -65,11 +65,11 @@ The `MIT/Apache-2.0` spelling is reproduced from the relevant package metadata. 
 
 | Project | Version / license | Actual use and distribution |
 | --- | --- | --- |
-| [ds_store](https://github.com/dmgbuild/ds_store) | 1.3.1; MIT | Writes Finder `.DS_Store` layout through `packaging/dmg_layout.py`; local DMG build dependency. |
+| [ds_store](https://github.com/dmgbuild/ds_store) | 1.3.1; MIT | Writes Finder `.DS_Store` layout through `apple/macos/packaging/dmg_layout.py`; local DMG build dependency. |
 | [mac_alias](https://github.com/dmgbuild/mac_alias) | 2.2.2; MIT | Creates the installer background's volume-relative alias; local DMG build dependency. |
 | [Python-Markdown](https://github.com/Python-Markdown/markdown) | 3.9; BSD-3-Clause | Converts the project's manuals for GitHub Pages in `scripts/sync_website_guides.py`. |
 | [importlib_metadata](https://github.com/python/importlib_metadata), [zipp](https://github.com/jaraco/zipp) | 8.7.1, Apache-2.0; 3.23.1, MIT | Transitive documentation-tool dependencies in the local Python 3.9 environment. |
-| [Google libultrahdr](https://github.com/google/libultrahdr) | Upstream [LICENSE](https://github.com/google/libultrahdr/blob/main/LICENSE) includes MIT and Apache-2.0 notices. | External optional prerequisite for `tests/ProbeUltraHDR.cpp`; also an HDR metadata reference. The app does not compile or bundle the library. |
+| [Google libultrahdr](https://github.com/google/libultrahdr) | Upstream [LICENSE](https://github.com/google/libultrahdr/blob/main/LICENSE) includes MIT and Apache-2.0 notices. | External optional prerequisite for `apple/shared/tests/ProbeUltraHDR.cpp`; also an HDR metadata reference. The app does not compile or bundle the library. |
 | [fontTools](https://github.com/fonttools/fonttools), [Brotli](https://github.com/google/brotli) | 4.60.1, MIT; 1.1.0, MIT | Local WOFF2 metadata inspection for this attribution inventory; their Python code is not included in the app or site. |
 | [Swift](https://github.com/swiftlang/swift) | Upstream Apache-2.0 / runtime-exception terms; Apple SDK terms separately apply. | Native compilation; SDK command-line tools also provide signing, icon and disk-image utilities. |
 | [Python](https://www.python.org/), [pip](https://github.com/pypa/pip) | PSF terms; pip MIT | Test-only format references, generated-fixture checks and local build/documentation tooling. |

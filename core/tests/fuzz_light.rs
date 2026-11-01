@@ -1,6 +1,6 @@
 //! Lightweight deterministic fuzzer (ROADMAP item 5, stable-toolchain
 //! edition): seeded mutations over small valid seeds, run against
-//! `format::parse`, `pyjpeg::segments` and `heif::layout`. The only
+//! `format::parse`, `compat::jpeg::segments` and `heif::layout`. The only
 //! property asserted here is no-panic: every input must return `Ok`
 //! or `Err`, never unwind. A failure prints target + seed + iteration
 //! so the input regenerates deterministically from the fixed seed.
@@ -26,8 +26,8 @@ use common::{build_still_spec, bx, exif_item, motion_xmp, HeicItem, HeicStillSpe
 use momentstays_core::format;
 use momentstays_core::heif;
 use momentstays_core::mp4;
-use momentstays_core::pyjpeg;
-use momentstays_core::pymotion::XMP_HDR;
+use momentstays_core::compat;
+use momentstays_core::compat::motion::XMP_HDR;
 use momentstays_core::remux::{remux_to_mov, remux_to_mp4};
 use std::fs;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -92,7 +92,7 @@ fn jpeg_seed() -> Vec<u8> {
     tiff.extend(8u32.to_be_bytes());
     tiff.extend(0u16.to_be_bytes());
     tiff.extend(0u32.to_be_bytes());
-    let mut exif = pyjpeg::EXIF_HDR.to_vec();
+    let mut exif = compat::jpeg::EXIF_HDR.to_vec();
     exif.extend(tiff);
     let mut v = vec![0xFF, 0xD8];
     v.extend(seg(0xE1, &exif));
@@ -199,7 +199,7 @@ fn run_no_panic(target: &str, seed_name: &str, seed: &[u8], iters: usize) {
                 let _ = format::parse(&input);
             }
             "segments" => {
-                let _ = pyjpeg::segments(&input);
+                let _ = compat::jpeg::segments(&input);
             }
             "layout" => {
                 let _ = heif::layout(&input);
@@ -231,7 +231,7 @@ fn no_panic_on_mutations() {
     assert!(format::parse(&jpeg).is_ok(), "jpeg seed parses");
     assert!(format::parse(&heic_motion).is_ok(), "heic motion seed parses");
     assert!(heif::layout(&heic_still).is_ok(), "heic still seed layouts");
-    assert!(pyjpeg::segments(&jpeg).is_ok(), "jpeg seed segments");
+    assert!(compat::jpeg::segments(&jpeg).is_ok(), "jpeg seed segments");
     assert!(mp4::sample_tables(&mp4).is_ok(), "mp4 seed sample tables");
     run_no_panic("parse", "jpeg", &jpeg, 1500);
     run_no_panic("parse", "heic-motion", &heic_motion, 1500);

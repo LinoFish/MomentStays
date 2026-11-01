@@ -26,10 +26,10 @@ Performance rules (user requirement, 2026-10-27)
 - Every perf change lands with a number from `cargo bench`/the bench CLI, before and after.
 
 Rules for every step
-- Work only on branch `rust-core`; never change `main` or the Swift app.
+- Core changes land through a pull request into `main`; keep Swift app changes in separate commits.
 - One item (or one coherent slice) per step. Keep Swift error texts verbatim.
-- `cargo test --release` and `python3 scripts/check_rust_core.py` must pass before pushing.
-- Swift parity can only run on macOS: list anything that needs it under "Needs Mac check".
+- `cargo test --release` must pass before pushing (CI runs it on Linux, macOS and Windows).
+- Swift parity can only run on macOS (`apple/macos/scripts/check_rust_core.py --swift ...`): list anything that needs it under "Needs Mac check".
 
 ## Done
 - [x] M1 Parser port: binary/TIFF, JPEG segments + coding hash, MPF ranges + static-only
@@ -98,7 +98,7 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
 5. [ ] Fuzzing: cargo-fuzz targets for `parse`, `jpeg::segments`, `heif::layout`; guarantee no panics
        (replace remaining slicing that can panic on hostile input with checked access).
 6. [x] `live_still` for JPEG (XMP rewrite, Apple MakerNote / Exif identifier) with parity defined on
-       coding hash + semantic XMP fields. Done: `pymotion::live_still_with_identifier`
+       coding hash + semantic XMP fields. Done: `compat::motion::live_still_with_identifier`
        (static-only clean per Swift `liveStill(updateIdentifier:true)`, then MakerNote /
        Exif identifier inject); parity = coding bytes unchanged + dynamic XMP fields
        cleared + MakerNote tag 17 reads back the uuid; HEIC refused. 3 tests.
@@ -112,7 +112,7 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
    (`live2motion.rs`): MOV->MP4 sample-copy remux (`remux_to_mp4`, exactly
    one video + at most one audio track like Swift, mett dropped, ftyp
    `mp42`, edit list copied), JPEG still cleaning
-   (`pymotion::live_still_clean`: Swift `liveStill(uuid:"", updateIdentifier:
+   (`compat::motion::live_still_clean`: Swift `liveStill(uuid:"", updateIdentifier:
    false)` — static-only truncation, motion XMP strip for GCamera + OPPO/
    vivo keys and MotionPhoto directory items, EXIF untouched, gain-map
    bytes verified), then existing `model::write` with its parse-back
@@ -211,7 +211,7 @@ A5. [~] Round-trip matrix tests: every vendor → every vendor → parse back, c
   forced three fixes: largesize mpvd headers in `format.rs` (video
   start was hard-coded to mpvd + 8), Exif optional for HEIC motion
   photos (the Google fixture's still has none), and LONG8/SLONG8 field
-  sizes in `pyjpeg.rs` `maker_note` (real MakerNotes use type 16).
+  sizes in `compat/jpeg.rs` `maker_note` (real MakerNotes use type 16).
   Samsung sefd-form HEIC (S20) is documented as unsupported, not
   parsed. 2 regression tests. Full suite 97 tests pass,
   `check_rust_core.py` 16 inputs 0 mismatches.

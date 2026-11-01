@@ -121,22 +121,22 @@
 ```bash
 git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
-bash scripts/build_app.sh
+bash apple/macos/scripts/build_app.sh
 open dist/留刻.app
 ```
 
 使用已构建的应用，无需 Python、FFmpeg、ExifTool、Homebrew 或额外运行时。仅构建 Apple Silicon 时可显式选择：
 
 ```bash
-bash scripts/build_app.sh --arm64
-bash scripts/build_app.sh --universal
+bash apple/macos/scripts/build_app.sh --arm64
+bash apple/macos/scripts/build_app.sh --universal
 ```
 
 需要安装包时，从已构建应用生成 DMG、ZIP 与校验和：
 
 ```bash
-python3 -m pip install --target .build/dmg-tools -r packaging/dmg-requirements.txt
-bash scripts/make_dmg.sh
+python3 -m pip install --target .build/dmg-tools -r apple/macos/packaging/dmg-requirements.txt
+bash apple/macos/scripts/make_dmg.sh
 ```
 
 DMG 仅显示应用、Applications 链接与拖拽箭头。手册从应用内打开，许可文件位于应用包内。Python 工具仅用于打包，使用应用无需安装。
@@ -163,30 +163,35 @@ python3 scripts/check_publish.py
 
 ## 开发
 
-旧 Python CLI 已移除。Python 仅保留用于格式参考、回归测试、打包和文档工具；App 运行不依赖 Python。
+Python 版转换器已不再维护。实现以 Rust 核心（`core/`）和 Swift 引擎（`apple/shared/`）为准；Python 只用于 macOS 回归检查脚本、打包和文档工具，App 运行不依赖 Python。
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
-bash scripts/build_gui_tests.sh
-python3 scripts/check_gui_engine.py
-python3 scripts/check_reverse.py
-python3 scripts/check_workspace.py
+cd core && cargo test --release && cd ..
+bash apple/macos/scripts/build_gui_tests.sh
+python3 apple/macos/scripts/check_gui_engine.py
+python3 apple/macos/scripts/check_reverse.py
+python3 apple/macos/scripts/check_workspace.py
 ```
 
 原生布局检查使用虚构数据，需要可用的 macOS 桌面环境：
 
 ```bash
-bash scripts/build_app.sh --diagnostics
-python3 scripts/check_swiftui_ui.py
+bash apple/macos/scripts/build_app.sh --diagnostics
+python3 apple/macos/scripts/check_swiftui_ui.py
 ```
+
+仓库按平台划分。每个平台目录自带界面、构建脚本和测试；跨平台共享的逻辑放在 `core/`。
 
 | 范围 | 位置 |
 | --- | --- |
-| SwiftUI、任务状态、图库与共享 | `gui/` |
-| 解析、HDR、时间、转换与校验 | `native/` |
-| 回归测试与 Rust 对照用 Python 格式参考 | `motionlive/` |
-| 构建与回归入口 | `scripts/`、`tests/` |
-| 应用属性与可复现图标绘制 | `packaging/` |
+| 跨平台 Rust 核心（解析、重封装、厂商写入、C ABI） | `core/` |
+| macOS 与 iOS 共用的 Swift 转换引擎 | `apple/shared/` |
+| macOS App：SwiftUI、任务状态、图库与共享 | `apple/macos/Sources/` |
+| macOS 构建脚本、回归检查与测试数据 | `apple/macos/scripts/`、`apple/macos/tests/`、`apple/shared/tests/` |
+| macOS 应用属性、DMG 布局与图标绘制 | `apple/macos/packaging/` |
+| iOS App、分享扩展与 Swift 包（开发中） | `apple/ios/` |
+| Windows 与 Android App（规划中） | `windows/`、`android/` |
+| 仓库级工具（发布审计、网站同步） | `scripts/` |
 | 项目图标与 README 视觉素材 | [品牌素材](docs/branding/README.md) |
 
 进一步阅读：[实现说明](docs/development/SwiftUI实现说明.md)、[图库规范](docs/design/图库识别与自动入册规范.md)、[共享规范](docs/design/输出位置与系统共享规范.md)、[本地样片与隐私](docs/development/本地样片与隐私.md)。

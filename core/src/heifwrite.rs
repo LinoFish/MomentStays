@@ -18,9 +18,9 @@ use crate::format;
 use crate::heif;
 use crate::model::Vendor;
 use crate::mp4::{self, BoxRef};
-use crate::pyjpeg;
-use crate::pymotion::{visit_mut, CAMERA, CONTAINER, ITEM, RDF, XMPMETA};
-use crate::pyxml::{self, Element};
+use crate::compat;
+use crate::compat::motion::{visit_mut, CAMERA, CONTAINER, ITEM, RDF, XMPMETA};
+use crate::compat::xml::Element;
 use crate::{fail, Result};
 use std::collections::HashSet;
 
@@ -287,10 +287,10 @@ pub fn write_xmp(still: &[u8], xmp: &[u8]) -> Result<Vec<u8>> {
 }
 
 fn strip_exif_hdr(v: &[u8]) -> Result<Vec<u8>> {
-    if !v.starts_with(pyjpeg::EXIF_HDR) {
+    if !v.starts_with(compat::jpeg::EXIF_HDR) {
         return fail("EXIF 标识结果缺少 Exif 头");
     }
-    Ok(v[pyjpeg::EXIF_HDR.len()..].to_vec())
+    Ok(v[compat::jpeg::EXIF_HDR.len()..].to_vec())
 }
 
 /// Swift `PhotoFormat.liveStill(uuid, updateIdentifier:true)` for HEIC,
@@ -332,7 +332,7 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
         return fail("HEIC 含未知顶层结构，未冒险修改编码或私有引用");
     }
     let primary = primary_id(&base, &layout.children)?;
-    // Motion XMP strip: same key sets as `pymotion::live_still_clean`.
+    // Motion XMP strip: same key sets as `compat::motion::live_still_clean`.
     let motion_names = [
         "MotionPhoto",
         "MotionPhotoVersion",
@@ -369,7 +369,7 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
         while end > 0 && raw[end - 1] == 0 {
             end -= 1;
         }
-        let mut root = pyxml::parse(&raw[..end])?;
+        let mut root = compat::xml::parse(&raw[..end])?;
         let mut touched = false;
         visit_mut(&mut root, &mut |el| {
             let before = el.attrib.len();
@@ -378,22 +378,22 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
                 touched = true;
             }
         });
-        let removed = pyxml::remove_children_where(&mut root, &|child| {
+        let removed = compat::xml::remove_children_where(&mut root, &|child| {
             motion.contains(&(child.ns.clone(), child.local.clone()))
         });
         if removed > 0 {
             touched = true;
         }
-        let removed = pyxml::remove_children_where(&mut root, &|child| {
+        let removed = compat::xml::remove_children_where(&mut root, &|child| {
             child.ns == RDF
                 && child.local == "li"
-                && pyxml::values(child, ITEM, "Semantic").iter().any(|v| v == "MotionPhoto")
+                && compat::xml::values(child, ITEM, "Semantic").iter().any(|v| v == "MotionPhoto")
         });
         if removed > 0 {
             touched = true;
         }
         if touched {
-            replacements.push((item.id, pyxml::tostring(&root)));
+            replacements.push((item.id, compat::xml::tostring(&root)));
         }
     }
     // MakerNote identifier inject (same TIFF surgery as the JPEG version).
@@ -401,7 +401,7 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
     let mut added = None;
     match exifs.len() {
         0 => {
-            let new_tiff = strip_exif_hdr(&pyjpeg::exif_identifier(None, identifier)?)?;
+            let new_tiff = strip_exif_hdr(&compat::jpeg::exif_identifier(None, identifier)?)?;
             let new_id = layout.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
             if new_id > u32::MAX as usize || layout.items.len() >= 4096 {
                 return fail("HEIC 项目数量超限");
@@ -424,9 +424,9 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
                 return fail("HEIC EXIF TIFF 偏移越界");
             }
             let old_tiff = &raw[4 + off..];
-            let mut payload = pyjpeg::EXIF_HDR.to_vec();
+            let mut payload = compat::jpeg::EXIF_HDR.to_vec();
             payload.extend_from_slice(old_tiff);
-            let new_tiff = strip_exif_hdr(&pyjpeg::exif_identifier(Some(&payload), identifier)?)?;
+            let new_tiff = strip_exif_hdr(&compat::jpeg::exif_identifier(Some(&payload), identifier)?)?;
             let mut bytes = vec![0u8, 0, 0, 0];
             bytes.extend(new_tiff);
             replacements.push((exifs[0].id, bytes));
@@ -474,7 +474,7 @@ pub fn assemble_heic(still: &[u8], video: &[u8], vendor: Vendor, time: i64) -> R
         return fail("HEIC 封面时间无效");
     }
     let doc = motion_doc_heic(time, video.len());
-    let image = write_xmp(still, &pyxml::tostring(&doc))?;
+    let image = write_xmp(still, &compat::xml::tostring(&doc))?;
     let image_hash = heif::coding_hash(&image)?;
     let start = image.len() + 8;
     let tail = match vendor {
