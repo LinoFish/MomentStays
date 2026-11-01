@@ -1,15 +1,13 @@
 # momentstays-core (Rust)
 
-Cross-platform core of MomentStays: Motion Photo / Live Photo container parsing,
-remux and vendor writers. The macOS and iOS apps link it as a static library
-through the C ABI (`include/momentstays_core.h`, `src/capi.rs`); future Windows and
-Android front ends are meant to use the same ABI. Platform UI code stays outside
-this crate.
+Cross-platform Motion Photo / Live Photo engine for MomentStays: parser, vendor
+converters and Live ↔ Motion assembly. Rust is the only implementation.
 
 - Byte-level only: JPEG markers, MPF, XMP / Extended XMP, ISO BMFF boxes, Google
   cover-time descriptors, Huawei/Honor `LIVE_`, Samsung SEF (JPEG + HEIC `mpvd`), OPPO, vivo.
 - No pixel decode or encode, no AVFoundation. Video and audio bytes are never touched.
-- Error messages match `apple/shared/PhotoFormat.swift` verbatim so results can be diffed.
+- Error texts are stable and covered by tests; they were originally taken verbatim from the former Swift engine.
+- Every error also has a kind (`Error::kind()`, `error_kind` in JSON): `not_motion_photo`, `malformed`, `unsupported`, `cover`, `verify_failed`, `io`, `invalid_argument`. Branch on the kind, not the text.
 
 ## Build and use
 
@@ -17,62 +15,21 @@ this crate.
 cd core
 cargo build --release
 ./target/release/momentstays-core inspect photo.jpg            # JSON summary
-./target/release/momentstays-core inspect -j 8 ~/Photos/       # whole folder in parallel, JSON Lines
+./target/release/momentstays-core inspect -j 8 ~/Photos/       # folder (recursive, JPEG/HEIF) in parallel, JSON Lines
 ./target/release/momentstays-core bench                        # synthetic throughput (or pass files)
 ./target/release/momentstays-core extract photo.jpg --still s.jpg --video v.mp4
 cargo test --release
 ```
 
-Works on macOS, Linux and Windows; Android builds are on the roadmap. Inputs are memory-mapped,
+Works on macOS, Linux and Windows; Android builds via `android/build.sh`. Inputs are memory-mapped,
 never copied whole.
 
-## `momentstays` CLI (Google-only, Python-compatible)
+## Parity fixtures (`tests/pycli.rs`)
 
-A second binary, `momentstays`, ports the retired Python `motionlive` CLI (`scan` /
-`convert` / `verify`) to Rust. The Python converter is no longer maintained; this
-binary replaces it. (The macOS check scripts keep a copy of its parsing helpers
-in `apple/macos/scripts/testkit/` only to build test fixtures.) It shares the crate but uses the Python CLI's
-semantics, not the Swift engine's: only Google-marked Motion Photo JPEGs are
-accepted, and error text follows the Python wording (e.g. `Not a marked Google
-Motion Photo`, `Cannot locate embedded video from XMP`).
-
-```bash
-cargo build --release --bin momentstays
-./target/release/momentstays scan ~/MotionPhotos          # JSON report, same shape as Python
-./target/release/momentstays convert a.jpg -o out/        # Google JPEG -> Apple Live Photo
-./target/release/momentstays verify out/*.json            # manifest + file hashes
-```
-
-Differences from the Python CLI, all deliberate:
-
-- `convert` still needs the macOS Swift helper (`apple/shared/MotionLive.swift`,
-  compiled on demand and cached in `.build/`): the QuickTime metadata step
-  (content identifier, still-image-time mett track) and the legacy gain-map
-  path run there, exactly like the Python version. The sample-copy MP4->MOV
-  remux itself is now done in Rust (`remux::remux_to_mov`, ROADMAP item 9a);
-  the CLI does not use it yet. On Linux `convert` fails at that step with
-  `Conversion requires macOS 12 or later`; `scan` and `verify` work everywhere.
-- `implementation_id` is the SHA-256 of the sorted `core/src/**/*.rs` sources
-  plus `apple/shared/MotionLive.swift`. Python outputs are therefore never reported
-  as `resumed` by this binary (they fail with "already exists and is not
-  equivalent" instead); `verify_pair` itself only checks manifest structure
-  and file hashes, so it accepts both versions' manifests.
-- Cases where Python crashes or is undefined fail cleanly here instead:
-  missing MPF index after Ultra HDR generation, missing `stops`/ICC in a
-  native result, malformed XMP (details after the `Malformed XMP: ` prefix
-  differ from CPython's), I/O errors (Rust wording, not `[Errno ...]`), and
-  Unicode-digit integers (Python `int()` accepts them; this port does not).
-  Underscore-separated integers (`1_000`) are accepted, as in Python.
-
-Parity tests: `core/tests/pycli.rs` compares parse results, `live_still` /
-`ultra_from_apple` / `legacy_color_profile` byte output, `legacy_apple` stops
-and gain bytes, and full `scan` JSON against frozen outputs of the retired
-Python reference (`core/tests/fixtures-pycli/`). These fixtures are now the
-source of truth for the `compat` modules (`src/compat/`); they are no longer
-regenerated.
-Fixtures are stored base64-encoded (`.b64`) so they can go through the
-text-only file push; the test decodes them, and the scan test decodes the
-`.jpg` files into a temp dir before scanning.
+`core/tests/fixtures-pycli/` holds base64 fixtures and expected outputs that were generated
+once from the former Python reference (`motionlive`, since removed). The tests need no Python
+at run time; they pin parse results, `live_still` / `ultra_from_apple` / `legacy_color_profile`
+bytes and `legacy_apple` stops/gain bytes.
 
 ## Android writers (`model`, JPEG path)
 
@@ -134,7 +91,7 @@ decodes cleanly), 3 identifier tests, and 5 still-image-time tests
 and a target vendor plus cover, and returns a vendor Motion Photo JPEG:
 MOV->MP4 sample-copy remux (`remux::remux_to_mp4`: exactly one video and
 at most one audio track, mett dropped, ftyp `mp42`), JPEG still cleaning
-(`compat::motion::live_still_clean`: Swift `liveStill` with updateIdentifier
+(`pymotion::live_still_clean`: Swift `liveStill` with updateIdentifier
 false — static-only truncation, motion XMP strip, EXIF untouched,
 gain-map bytes verified), then `model::write` with its parse-back
 validation. `mett_cover_time` reads the cover from the marker track's
@@ -147,6 +104,30 @@ match (`Cover::Frame` for Huawei, `Cover::Time` otherwise — convert with
 `cover.rs` first). Verified on Linux: 8 tests plus ffprobe on the
 real-file MP4 (pts/dts/sizes identical to source, decodes cleanly).
 
+## Motion -> Live Photo pair (`live`, `motion-to-live`)
+
+`live::from_motion` turns any Motion Photo `format::parse` accepts (JPEG or
+HEIC, every vendor) into a complete Live Photo pair, and
+`momentstays-convert motion-to-live <file> -o <dir>` writes it as
+`<dir>/<stem>.jpg|.heic` + `<dir>/<stem>.mov`:
+
+- still: static-only, motion XMP removed, a new ContentIdentifier in the Apple
+  MakerNote (tag 17); coding data must hash the same as the source;
+- movie: sample-copy remux of the primary video track (`--video-index` picks
+  another) plus audio, the same identifier in `moov/udta`, and a
+  still-image-time track whose marker sits on the cover frame;
+- cover: the recorded time is matched to a real frame on the media timeline
+  and on the presentation (edit-list) timeline. If they name different frames
+  the conversion is refused; `--time-domain media|presentation` picks one.
+  Huawei frame numbers are used as is; no midpoint fallback.
+
+Before anything is written, the pair is read back: still identifier and
+coding hash, movie identifier, marker time, and the marker landing on the same
+frame in the output timeline. Both files are written and verified before
+either replaces a target. Not covered: converting legacy Apple HDR gain maps
+(needs pixel work); Ultra HDR bytes are kept. Photos import itself can only be
+checked on a Mac.
+
 ## Cross-platform convert CLI (`momentstays-convert`, ROADMAP item 11)
 
 ```bash
@@ -156,8 +137,14 @@ cargo build --release --bin momentstays-convert
 ./target/release/momentstays-convert to-motion still.jpg movie.mov --to google --cover-time 800000 -o out.jpg
 ```
 
-Unlike `momentstays convert`, this binary never calls the macOS Swift
-helper: vendor conversion, Motion->MOV remux and Live->Motion assembly
+Outputs are written safely (`output::write_atomic`): a temp file next to
+the target, checked from the bytes on disk (format read-back for Motion
+Photos, sample-by-sample for remuxed video), then renamed into place. A
+failed run never leaves a partial file or touches an existing one, and an
+output path that names an input is refused. Vendor conversion streams the
+video from the memory-mapped input instead of copying it.
+
+This binary has no platform dependency: vendor conversion, Motion->MOV remux and Live->Motion assembly
 all run on the Rust core, on any OS. `vendor` takes the cover from the
 input unless `--cover-time` / `--cover-frame` overrides it, converting
 Time<->Frame via the video sample tables when the target needs the other
@@ -171,24 +158,4 @@ aliases: `xiaomi` and `honor` use the Google-compatible layout. HEIC
 inputs are supported for Google/Samsung targets (`heifwrite`); other
 HEIC targets are refused.
 
-## Parity
-
-```bash
-bash apple/macos/scripts/build_backend.sh                            # macOS: build the Swift test driver
-python3 apple/macos/scripts/check_rust_core.py --swift .build/backend/native-tests --samples ~/MotionSamples
-```
-
-The script compares acceptance, error text, `timestamp_us`, `ultra` and
-`coding_hash` with the Swift engine (`apple/shared/`). Run it with real samples
-before relying on any module.
-
 See [ROADMAP.md](ROADMAP.md) for what is ported and what is next.
-
-
-### 容错盒子检查与确认后恢复（Rust CLI）
-
-`momentstays-convert boxes video.mp4` 容错列出顶层盒子并输出 `warnings`；加 `--strict` 可要求完整结构。库入口为 `mp4::boxes_with_mode`，不完整结果的 `complete` 为 false。
-
-`momentstays-convert to-live video.mp4 --uuid UUID -o new.mov --recover-boxes` 仅尝试修正末尾盒子声明长度；先验证样本范围，再显示警告并要求输入 `yes`。取消或 EOF 不写文件。未知尾部、缺失样本、重叠样本、损坏嵌套表不猜测修复，已有输出不覆盖。该操作不验证编码像素是否能解码；重封装仍须通过原有样本字节和时间校验。
-
-这些是 Rust 库/CLI 入口；App 尚未接入容错确认流程或新增 Rust 转换路径。App 接入前需补充 Swift 警告/确认传递，并执行一次正式 Universal 应用验证。

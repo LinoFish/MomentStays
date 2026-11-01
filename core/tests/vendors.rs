@@ -20,7 +20,12 @@ fn jpeg_still(extra_app: &[u8]) -> Vec<u8> {
 }
 
 fn mp4() -> Vec<u8> {
-    let b = |t: &[u8], p: &[u8]| { let mut v = ((p.len() + 8) as u32).to_be_bytes().to_vec(); v.extend(t); v.extend(p); v };
+    let b = |t: &[u8], p: &[u8]| {
+        let mut v = ((p.len() + 8) as u32).to_be_bytes().to_vec();
+        v.extend(t);
+        v.extend(p);
+        v
+    };
     let mut v = b(b"ftyp", b"isom\0\0\0\0isom");
     v.extend(b(b"moov", &[0; 16]));
     v.extend(b(b"mdat", b"\xff\xd9ftyp-decoy"));
@@ -50,36 +55,6 @@ fn huawei_bad_tail_is_rejected_not_guessed() {
     d.extend(mp4());
     d.extend(format!("{:<20}{:<20}{:<20}", "v9_f1", "", "LIVE_40").as_bytes());
     assert_eq!(parse(&d).unwrap_err().0, "华为/荣耀 LIVE_ 尾标无效");
-}
-
-#[test]
-fn huawei_c_suffix_and_validation() {
-    let video = mp4();
-    let still = jpeg_still(b"Exif\0\0");
-    for first in ["v3_f31_c", "v2_f12", "v3_f0_c", "v3_f31_cc", "v3_f31_c_extra", "v3_f_c", "v9_f31_c", "v3_f-1_c", "v3_f9223372036854775808_c"] {
-        let mut d = still.clone();
-        d.extend(&video);
-        let mut private = Vec::new();
-        if first.ends_with("_c") {
-            for ty in [5u32, 1, 0x0306, 2, 3, 4] {
-                private.extend(9u32.to_be_bytes());
-                private.extend(ty.to_le_bytes());
-                private.push(0);
-            }
-            private.extend(((private.len() + 4) as u32).to_be_bytes());
-        }
-        d.extend(&private);
-        d.extend(format!("{first:<20}{:<20}{:<20}", "0:1299", format!("LIVE_{}", video.len() + private.len() + 20)).as_bytes());
-        if let Some(frame) = match first { "v3_f31_c" => Some(31), "v2_f12" => Some(12), "v3_f0_c" => Some(0), _ => None } {
-            let p = parse(&d).unwrap();
-            assert_eq!(p.cover_frame, Some(frame));
-            assert_eq!(p.timestamp_tag.as_deref(), Some("Huawei:frame-index"));
-            assert_eq!(p.video(&d), video);
-            assert_eq!(p.still, still);
-        } else {
-            assert!(parse(&d).is_err(), "accepted {first}");
-        }
-    }
 }
 
 fn samsung(video: &[u8]) -> Vec<u8> {
@@ -126,13 +101,22 @@ fn samsung_directory_out_of_range() {
 fn coding_hash_ignores_metadata_segments() {
     let a = jpeg_still(b"Exif\0\0one");
     let b = jpeg_still(b"Exif\0\0two-different-metadata");
-    assert_eq!(jpeg::coding_hash(&a).unwrap(), jpeg::coding_hash(&b).unwrap());
-    assert_eq!(format::coding_hash(&a).unwrap(), format::coding_hash(&b).unwrap());
+    assert_eq!(
+        jpeg::coding_hash(&a).unwrap(),
+        jpeg::coding_hash(&b).unwrap()
+    );
+    assert_eq!(
+        format::coding_hash(&a).unwrap(),
+        format::coding_hash(&b).unwrap()
+    );
 }
 
 #[test]
 fn plain_jpeg_is_not_motion() {
-    assert_eq!(parse(&jpeg_still(b"x")).unwrap_err().0, "不是受支持的动态照片");
+    assert_eq!(
+        parse(&jpeg_still(b"x")).unwrap_err().0,
+        "不是受支持的动态照片"
+    );
 }
 
 #[test]

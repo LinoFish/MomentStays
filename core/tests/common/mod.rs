@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, clippy::type_complexity)] // shared by several test crates; each uses a subset
 //! Shared synthetic HEIC still builder for HEIC tests.
 //!
 //! No pixel decode anywhere in the core, so fake `hvc1` bytes are enough

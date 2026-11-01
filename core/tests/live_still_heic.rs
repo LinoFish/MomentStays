@@ -7,7 +7,9 @@
 mod common;
 
 use base64::Engine;
-use common::{build_still_spec, bx, exif_item, exif_item_with_makernote, motion_xmp, HeicItem, HeicStillSpec};
+use common::{
+    build_still_spec, bx, exif_item, exif_item_with_makernote, motion_xmp, HeicItem, HeicStillSpec,
+};
 use momentstays_core::format;
 use momentstays_core::heif;
 use momentstays_core::heifwrite::live_still_heic;
@@ -15,9 +17,12 @@ use momentstays_core::tiff::Tiff;
 use std::fs;
 
 fn real_mp4() -> Vec<u8> {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64");
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures-samples/real.mp4.b64");
     let text = fs::read_to_string(path).unwrap();
-    base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap()
 }
 
 fn hvc1() -> Vec<u8> {
@@ -25,7 +30,17 @@ fn hvc1() -> Vec<u8> {
 }
 
 fn spec_v0() -> HeicStillSpec {
-    HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 0, offset_width: 4, length_width: 4, base_width: 0, base: 0, index_width: 0, with_iref: false }
+    HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 0,
+        offset_width: 4,
+        length_width: 4,
+        base_width: 0,
+        base: 0,
+        index_width: 0,
+        with_iref: false,
+    }
 }
 
 /// (tag 17 uuid, tag 23 video index) read back from a HEIC still's
@@ -105,9 +120,27 @@ fn mime_text(heic: &[u8]) -> String {
 
 fn motion_still() -> Vec<u8> {
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item_with_makernote("AAAAAAAA-1111-2222-3333-444444444444", 7), method: 0, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: motion_xmp(1_420_000), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item_with_makernote("AAAAAAAA-1111-2222-3333-444444444444", 7),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: motion_xmp(1_420_000),
+            method: 0,
+            extents: 1,
+        },
     ];
     build_still_spec(&spec_v0(), &items)
 }
@@ -119,8 +152,15 @@ fn strips_motion_and_injects_identifier() {
     let out = live_still_heic(&src, uuid).expect("live_still_heic");
     assert_eq!(makernote_fields(&out).0.as_deref(), Some(uuid));
     assert_eq!(makernote_fields(&out).1, Some(7), "tag 23 kept");
-    assert_eq!(heif::coding_hash(&src).unwrap(), heif::coding_hash(&out).unwrap(), "coding unchanged");
-    assert!(!mime_text(&out).contains("MotionPhoto"), "motion keys stripped");
+    assert_eq!(
+        heif::coding_hash(&src).unwrap(),
+        heif::coding_hash(&out).unwrap(),
+        "coding unchanged"
+    );
+    assert!(
+        !mime_text(&out).contains("MotionPhoto"),
+        "motion keys stripped"
+    );
     assert!(format::parse(&out).is_err(), "no longer a motion photo");
 }
 
@@ -128,9 +168,19 @@ fn strips_motion_and_injects_identifier() {
 fn replaces_identifier_keeps_coding() {
     let first = live_still_heic(&motion_still(), "AAAAAAAA-0000-0000-0000-000000000001").unwrap();
     let second = live_still_heic(&first, "BBBBBBBB-0000-0000-0000-000000000002").unwrap();
-    assert_eq!(makernote_fields(&second).0.as_deref(), Some("BBBBBBBB-0000-0000-0000-000000000002"));
-    assert_eq!(makernote_fields(&second).1, Some(7), "tag 23 kept across replace");
-    assert_eq!(heif::coding_hash(&first).unwrap(), heif::coding_hash(&second).unwrap());
+    assert_eq!(
+        makernote_fields(&second).0.as_deref(),
+        Some("BBBBBBBB-0000-0000-0000-000000000002")
+    );
+    assert_eq!(
+        makernote_fields(&second).1,
+        Some(7),
+        "tag 23 kept across replace"
+    );
+    assert_eq!(
+        heif::coding_hash(&first).unwrap(),
+        heif::coding_hash(&second).unwrap()
+    );
 }
 
 #[test]
@@ -142,7 +192,10 @@ fn truncates_motion_input() {
     let uuid = "123E4567-E89B-12D3-A456-426614174000";
     let out = live_still_heic(&motion, uuid).expect("truncate + clean");
     assert!(!out.windows(4).any(|w| w == b"mpvd"), "no mpvd in output");
-    assert_eq!(heif::coding_hash(&still).unwrap(), heif::coding_hash(&out).unwrap());
+    assert_eq!(
+        heif::coding_hash(&still).unwrap(),
+        heif::coding_hash(&out).unwrap()
+    );
     assert_eq!(makernote_fields(&out).0.as_deref(), Some(uuid));
     assert!(!mime_text(&out).contains("MotionPhoto"));
 }
@@ -150,8 +203,20 @@ fn truncates_motion_input() {
 #[test]
 fn creates_exif_when_absent() {
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "mime", data: motion_xmp(1_420_000), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "mime",
+            data: motion_xmp(1_420_000),
+            method: 0,
+            extents: 1,
+        },
     ];
     let src = build_still_spec(&spec_v0(), &items);
     let uuid = "123E4567-E89B-12D3-A456-426614174000";
@@ -159,18 +224,46 @@ fn creates_exif_when_absent() {
     let layout = heif::layout(&out).unwrap();
     assert_eq!(layout.items.iter().filter(|i| i.ty == "Exif").count(), 1);
     assert_eq!(makernote_fields(&out).0.as_deref(), Some(uuid));
-    assert_eq!(heif::coding_hash(&src).unwrap(), heif::coding_hash(&out).unwrap());
+    assert_eq!(
+        heif::coding_hash(&src).unwrap(),
+        heif::coding_hash(&out).unwrap()
+    );
     assert!(!mime_text(&out).contains("MotionPhoto"));
 }
 
 #[test]
 fn refuses_non_heic_and_multiple_exif() {
-    assert!(live_still_heic(b"\xff\xd8\xff\xe0fake-jpeg", "123E4567-E89B-12D3-A456-426614174000").is_err());
+    assert!(live_still_heic(
+        b"\xff\xd8\xff\xe0fake-jpeg",
+        "123E4567-E89B-12D3-A456-426614174000"
+    )
+    .is_err());
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
-        HeicItem { id: 3, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
     ];
     let src = build_still_spec(&spec_v0(), &items);
-    assert!(live_still_heic(&src, "123E4567-E89B-12D3-A456-426614174000").is_err(), "multiple Exif refused");
+    assert!(
+        live_still_heic(&src, "123E4567-E89B-12D3-A456-426614174000").is_err(),
+        "multiple Exif refused"
+    );
 }

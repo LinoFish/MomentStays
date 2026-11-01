@@ -2,7 +2,7 @@
 use crate::mp4::{boxes, image_times, top_level_types};
 use crate::vendor::{locate, OPPO, VIVO};
 use crate::xmp::{integer, packets, vendor_integer, HDR, HEADER};
-use crate::{fail, heif, jpeg, sha256_hex, Error, Result};
+use crate::{fail, fail_as, heif, jpeg, sha256_hex, Error, ErrorKind, Result};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ops::Range;
@@ -29,16 +29,54 @@ pub struct MotionPhoto<'a> {
 }
 
 impl MotionPhoto<'_> {
-    pub fn video<'a>(&self, source: &'a [u8]) -> &'a [u8] { &source[self.video.clone()] }
+    pub fn video<'a>(&self, source: &'a [u8]) -> &'a [u8] {
+        &source[self.video.clone()]
+    }
 }
 
 pub fn coding_hash(d: &[u8]) -> Result<String> {
-    if heif::matches(d) { heif::coding_hash(d) } else { jpeg::coding_hash(d) }
+    if heif::matches(d) {
+        heif::coding_hash(d)
+    } else {
+        jpeg::coding_hash(d)
+    }
+}
+
+/// Coding hash and full SHA-256 in one pass over a precomputed JPEG
+/// segment list (perf item 4). Caller guarantees a JPEG still and
+/// `segs` exactly `segments(d)`; HEIC stills never reach this (inspect
+/// passes `None` for them and keeps the original paths).
+pub(crate) fn coding_and_full_hash_from_segments(
+    d: &[u8],
+    segs: &[jpeg::Segment],
+) -> (String, String) {
+    jpeg::coding_and_full_hash(d, segs)
 }
 
 pub fn auxiliary_hashes(d: &[u8]) -> Result<Vec<String>> {
-    if heif::matches(d) { return Ok(vec![]); }
-    Ok(jpeg::auxiliary(d)?.into_iter().skip(1).map(|r| sha256_hex(&d[r])).collect())
+    if heif::matches(d) {
+        return Ok(vec![]);
+    }
+    Ok(jpeg::auxiliary(d)?
+        .into_iter()
+        .skip(1)
+        .map(|r| sha256_hex(&d[r]))
+        .collect())
+}
+
+/// `auxiliary_hashes` over a precomputed JPEG segment list (perf item 3).
+pub(crate) fn auxiliary_hashes_from_segments(
+    d: &[u8],
+    segs: &[jpeg::Segment],
+) -> Result<Vec<String>> {
+    if heif::matches(d) {
+        return Ok(vec![]);
+    }
+    Ok(jpeg::auxiliary_from_segments(d, segs)?
+        .into_iter()
+        .skip(1)
+        .map(|r| sha256_hex(&d[r]))
+        .collect())
 }
 
 fn wrap_xmp(xml: &[u8]) -> Result<Vec<u8>> {
@@ -50,19 +88,22 @@ fn wrap_xmp(xml: &[u8]) -> Result<Vec<u8>> {
     Ok(v)
 }
 
-pub fn parse(d: &[u8]) -> Result<MotionPhoto<'_>> { parse_with_ownership(d, false) }
-
-// Swift's response must own its still. Preserve the mainline owned parse
-// schedule rather than borrowing first and copying after the remaining work.
-pub(crate) fn parse_owned(d: &[u8]) -> Result<MotionPhoto<'_>> { parse_with_ownership(d, true) }
-
-fn parse_with_ownership(d: &[u8], owned: bool) -> Result<MotionPhoto<'_>> {
-    if heif::matches(d) { return parse_heif(d, owned); }
-    let pk = packets(d)?;
+pub fn parse(d: &[u8]) -> Result<MotionPhoto<'_>> {
+    if heif::matches(d) {
+        return parse_heif(d);
+    }
+    // One shared JPEG segment walk for the whole parse (perf item 3):
+    // packets, image_end and the still rebuild all read this list.
+    // segments() stops at the still's EOI, and the video always starts
+    // at or after it, so this list is also exactly segments(d[..start]).
+    let segs = jpeg::segments(d)?;
+    let pk = crate::xmp::packets_from_segments(d, &segs)?;
     let motion = integer(&pk, "MotionPhoto")?;
     let micro = integer(&pk, "MicroVideo")?;
     let identified = motion == Some(1) || micro == Some(1);
-    if !(motion != Some(0) && (identified || (motion.is_none() && micro.is_none()))) { return fail(NOT_MOTION); }
+    if !(motion != Some(0) && (identified || (motion.is_none() && micro.is_none()))) {
+        return fail_as(ErrorKind::NotMotionPhoto, NOT_MOTION);
+    }
     let mut lengths: Vec<i64> = Vec::new();
     for p in &pk {
         for (semantic, length) in p.items() {
@@ -74,66 +115,118 @@ fn parse_with_ownership(d: &[u8], owned: bool) -> Result<MotionPhoto<'_>> {
             }
         }
     }
-    if lengths.iter().collect::<HashSet<_>>().len() > 1 { return fail("动态视频长度冲突"); }
-    let mut length = match lengths.first() { Some(l) => Some(*l), None => integer(&pk, "MicroVideoOffset")? };
-    if length.is_none() { length = integer(&pk, "MediaDataOffset")?; }
-    if length.is_none() { length = vendor_integer(&pk, OPPO, "MediaDataOffset")?; }
-    let image_end = jpeg::image_end(d)?;
+    if lengths.iter().collect::<HashSet<_>>().len() > 1 {
+        return fail("动态视频长度冲突");
+    }
+    let mut length = match lengths.first() {
+        Some(l) => Some(*l),
+        None => integer(&pk, "MicroVideoOffset")?,
+    };
+    if length.is_none() {
+        length = integer(&pk, "MediaDataOffset")?;
+    }
+    if length.is_none() {
+        length = vendor_integer(&pk, OPPO, "MediaDataOffset")?;
+    }
+    let image_end = jpeg::image_end_from_segments(d, &segs)?;
     let vendor = locate(d, image_end)?;
     let recovered = !identified && length.is_none() && vendor.is_none();
     if recovered {
-        if image_end + 8 > d.len() || &d[image_end + 4..image_end + 8] != b"ftyp" { return fail(NOT_MOTION); }
+        if image_end + 8 > d.len() || &d[image_end + 4..image_end + 8] != b"ftyp" {
+            return fail_as(ErrorKind::NotMotionPhoto, NOT_MOTION);
+        }
         length = Some((d.len() - image_end) as i64);
     }
-    let (start, end) = if let Some(v) = &vendor { (v.start, v.end) } else {
-        let count = match length { Some(c) if c >= 16 && (c as i128) < d.len() as i128 => c as usize, _ => return fail("无法从 XMP 定位动态视频") };
+    let (start, end) = if let Some(v) = &vendor {
+        (v.start, v.end)
+    } else {
+        let count = match length {
+            Some(c) if c >= 16 && (c as i128) < d.len() as i128 => c as usize,
+            _ => return fail("无法从 XMP 定位动态视频"),
+        };
         let start = d.len() - count;
         let end = match vendor_integer(&pk, OPPO, "VideoLength")? {
             Some(b) => {
-                if b < 16 || (b as i128) > (d.len() - start) as i128 { return fail("OPPO 视频长度无效"); }
+                if b < 16 || (b as i128) > (d.len() - start) as i128 {
+                    return fail("OPPO 视频长度无效");
+                }
                 start + b as usize
             }
             None => d.len(),
         };
         (start, end)
     };
-    if start < image_end || end > d.len() || end < start || end - start < 16 { return fail("视频与 JPEG 图像范围重叠"); }
-    let still = if owned { Cow::Owned(jpeg::static_only(&d[..start])?) } else { jpeg::static_only_cow(&d[..start])? };
+    if start < image_end || end > d.len() || end < start || end - start < 16 {
+        return fail("视频与 JPEG 图像范围重叠");
+    }
+    let still = jpeg::static_only_cow_from_segments(&d[..start], &segs)?;
     let video = &d[start..end];
-    if &video[4..8] != b"ftyp" { return fail("XMP 偏移没有指向 MP4 视频"); }
+    if &video[4..8] != b"ftyp" {
+        return fail("XMP 偏移没有指向 MP4 视频");
+    }
     let types: HashSet<String> = top_level_types(video, "MP4")?.into_iter().collect();
-    if !types.contains("moov") || !types.contains("mdat") { return fail("视频缺少 moov/mdat"); }
+    if !types.contains("moov") || !types.contains("mdat") {
+        return fail("视频缺少 moov/mdat");
+    }
     let mut time = integer(&pk, "MotionPhotoPresentationTimestampUs")?;
     let mut tag = "MotionPhotoPresentationTimestampUs";
-    if time.map_or(true, |t| t < 0) {
+    if time.is_none_or(|t| t < 0) {
         let old = integer(&pk, "MicroVideoPresentationTimestampUs")?;
         time = old.filter(|t| *t >= 0);
         tag = "MicroVideoPresentationTimestampUs";
     }
     if time.is_none() {
         if let Some(v) = vendor_integer(&pk, OPPO, "MotionPhotoPrimaryPresentationTimestampUs")? {
-            if v >= 0 { time = Some(v); tag = "OpCamera:MotionPhotoPrimaryPresentationTimestampUs"; }
+            if v >= 0 {
+                time = Some(v);
+                tag = "OpCamera:MotionPhotoPrimaryPresentationTimestampUs";
+            }
         }
     }
     if recovered {
         match image_times(video)?.and_then(|t| t.primary) {
-            Some(t) => { time = Some(t); tag = "MP4:motionphoto-image-meta"; }
-            None => return fail("原片缺少主 XMP，内嵌视频也未记录有效封面时间，无法无损恢复封面位置"),
+            Some(t) => {
+                time = Some(t);
+                tag = "MP4:motionphoto-image-meta";
+            }
+            None => {
+                return fail_as(
+                    ErrorKind::Cover,
+                    "原片缺少主 XMP，内嵌视频也未记录有效封面时间，无法无损恢复封面位置",
+                )
+            }
         }
     }
     let mut ultra = pk.iter().any(|p| !p.values(HDR, "Version").is_empty());
-    let images = jpeg::auxiliary(&still)?;
+    // Borrowed stills are byte-identical to d[..start], so the parse
+    // segment list still applies; rebuilt (owned) stills get a fresh
+    // walk over their own bytes.
+    let images = match &still {
+        Cow::Borrowed(_) => jpeg::auxiliary_from_segments(&still, &segs)?,
+        Cow::Owned(_) => jpeg::auxiliary(&still)?,
+    };
     if !ultra {
         for r in images.iter().skip(1) {
-            if packets(&still[r.clone()])?.iter().any(|p| !p.values(HDR, "Version").is_empty()) { ultra = true; }
+            if packets(&still[r.clone()])?
+                .iter()
+                .any(|p| !p.values(HDR, "Version").is_empty())
+            {
+                ultra = true;
+            }
         }
     }
     if ultra {
-        if images.len() < 2 { return fail("声明为 Ultra HDR，但缺少 MPF 增益图"); }
-        for r in images.iter().skip(1) { jpeg::segments(&still[r.clone()])?; }
+        if images.len() < 2 {
+            return fail("声明为 Ultra HDR，但缺少 MPF 增益图");
+        }
+        for r in images.iter().skip(1) {
+            jpeg::segments(&still[r.clone()])?;
+        }
     }
     let oppo_len = vendor_integer(&pk, OPPO, "VideoLength")?;
-    let is_vivo = pk.iter().any(|p| !p.values(VIVO, "VMotionPhotoVersion").is_empty());
+    let is_vivo = pk
+        .iter()
+        .any(|p| !p.values(VIVO, "VMotionPhotoVersion").is_empty());
     let frame = vendor.as_ref().and_then(|v| v.frame);
     let format = match &vendor {
         Some(v) => v.format.to_string(),
@@ -142,25 +235,46 @@ fn parse_with_ownership(d: &[u8], owned: bool) -> Result<MotionPhoto<'_>> {
         None => "google-compatible".into(),
     };
     Ok(MotionPhoto {
-        still, video: start..end, timestamp: time,
-        timestamp_tag: if frame.is_none() { time.map(|_| tag.to_string()) } else { Some("Huawei:frame-index".into()) },
-        ultra, cover_frame: frame, format,
+        still,
+        video: start..end,
+        timestamp: time,
+        timestamp_tag: if frame.is_none() {
+            time.map(|_| tag.to_string())
+        } else {
+            Some("Huawei:frame-index".into())
+        },
+        ultra,
+        cover_frame: frame,
+        format,
     })
 }
 
-fn parse_heif(d: &[u8], owned: bool) -> Result<MotionPhoto<'_>> {
+fn parse_heif(d: &[u8]) -> Result<MotionPhoto<'_>> {
     let vendor = locate(d, 0)?;
     let mut p = 0;
     let mut mpvd: Option<(usize, usize, usize)> = None;
     let mut sefd: Option<(usize, usize, usize)> = None;
     while p < d.len() {
-        if d.len() - p < 8 { return fail("HEIC 顶层 box 被截断"); }
+        if d.len() - p < 8 {
+            return fail("HEIC 顶层 box 被截断");
+        }
         let mut size = crate::binary::be(d, p, 4)?;
         let mut header = 8;
-        if size == 1 { size = crate::binary::be(d, p + 8, 8)?; header = 16; }
-        if size < header || size > d.len() - p { return fail("HEIC 顶层 box 长度无效"); }
-        if &d[p + 4..p + 8] == b"mpvd" { mpvd = Some((p, p + size, header)); break; }
-        if &d[p + 4..p + 8] == b"sefd" { sefd = Some((p, p + size, header)); break; }
+        if size == 1 {
+            size = crate::binary::be(d, p + 8, 8)?;
+            header = 16;
+        }
+        if size < header || size > d.len() - p {
+            return fail("HEIC 顶层 box 长度无效");
+        }
+        if &d[p + 4..p + 8] == b"mpvd" {
+            mpvd = Some((p, p + size, header));
+            break;
+        }
+        if &d[p + 4..p + 8] == b"sefd" {
+            sefd = Some((p, p + size, header));
+            break;
+        }
         p += size;
     }
     // Two motion forms: mpvd (Google + Samsung S22) and sefd (Samsung
@@ -170,54 +284,88 @@ fn parse_heif(d: &[u8], owned: bool) -> Result<MotionPhoto<'_>> {
     // timestamp source — the real S20 file has no mime item at all.
     let (boundary, range, time) = if let Some((b, mpvd_end, mpvd_header)) = mpvd {
         let consistent = mpvd_end == d.len()
-            && vendor.as_ref().map_or(true, |v| v.format == "samsung-sef" && v.start == b + mpvd_header && v.end <= mpvd_end);
-        if !consistent { return fail("三星 HEIC 的 mpvd/SEF 视频边界不一致"); }
+            && vendor.as_ref().is_none_or(|v| {
+                v.format == "samsung-sef" && v.start == b + mpvd_header && v.end <= mpvd_end
+            });
+        if !consistent {
+            return fail("三星 HEIC 的 mpvd/SEF 视频边界不一致");
+        }
         let still = &d[..b];
         let l = heif::layout(still)?;
         let mut xmps = Vec::new();
         for item in l.items.iter().filter(|i| i.ty == "mime") {
             let w = wrap_xmp(&heif::item_bytes(still, item))?;
-            if integer(&packets(&w)?, "MotionPhoto")? == Some(1) { xmps.push(item); }
+            if integer(&packets(&w)?, "MotionPhoto")? == Some(1) {
+                xmps.push(item);
+            }
         }
-        if xmps.len() != 1 { return fail("HEIC 缺少唯一动态照片 XMP 项目"); }
+        if xmps.len() != 1 {
+            return fail("HEIC 缺少唯一动态照片 XMP 项目");
+        }
         let pk = packets(&wrap_xmp(&heif::item_bytes(still, xmps[0]))?)?;
-        if integer(&pk, "MotionPhoto")? != Some(1) { return fail(NOT_MOTION); }
+        if integer(&pk, "MotionPhoto")? != Some(1) {
+            return fail_as(ErrorKind::NotMotionPhoto, NOT_MOTION);
+        }
         let mut time = integer(&pk, "MotionPhotoPresentationTimestampUs")?;
-        if time.map_or(true, |t| t < 0) { time = integer(&pk, "MicroVideoPresentationTimestampUs")?; }
-        if time.map_or(false, |t| t < 0) { time = None; }
-        let range = match &vendor { Some(v) => v.start..v.end, None => b + mpvd_header..mpvd_end };
+        if time.is_none_or(|t| t < 0) {
+            time = integer(&pk, "MicroVideoPresentationTimestampUs")?;
+        }
+        if time.is_some_and(|t| t < 0) {
+            time = None;
+        }
+        let range = match &vendor {
+            Some(v) => v.start..v.end,
+            None => b + mpvd_header..mpvd_end,
+        };
         (b, range, time)
     } else if let Some((b, sefd_end, sefd_header)) = sefd {
-        if sefd_end != d.len() { return fail("三星 HEIC 的 sefd 未延伸至文件末尾"); }
-        let v = match &vendor { Some(v) if v.format == "samsung-sef" => v, _ => return fail(NOT_MOTION) };
+        if sefd_end != d.len() {
+            return fail("三星 HEIC 的 sefd 未延伸至文件末尾");
+        }
+        let v = match &vendor {
+            Some(v) if v.format == "samsung-sef" => v,
+            _ => return fail_as(ErrorKind::NotMotionPhoto, NOT_MOTION),
+        };
         // Unlike mpvd, the video does not start right after the sefd
         // header: other records (Image_UTC_Data, MCC_Data) come first.
         // The SEF record's own range is authoritative; it only has to
         // lie inside the sefd payload.
-        if v.start < b + sefd_header || v.end > sefd_end { return fail("三星 HEIC 的 sefd/SEF 视频边界不一致"); }
+        if v.start < b + sefd_header || v.end > sefd_end {
+            return fail("三星 HEIC 的 sefd/SEF 视频边界不一致");
+        }
         let still = &d[..b];
         let l = heif::layout(still)?;
         let mut time = None;
         for item in l.items.iter().filter(|i| i.ty == "mime") {
-            let w = wrap_xmp(&heif::item_bytes(still, item))?;
-            let pk = packets(&w)?;
-            let mut t = integer(&pk, "MotionPhotoPresentationTimestampUs")?;
-            if t.map_or(true, |x| x < 0) { t = integer(&pk, "MicroVideoPresentationTimestampUs")?; }
-            if let Some(t) = t.filter(|x| *x >= 0) {
-                if time.map_or(false, |previous| previous != t) {
-                    return fail("HEIC 封面时间冲突");
+            let t = (|| -> Option<i64> {
+                let w = wrap_xmp(&heif::item_bytes(still, item)).ok()?;
+                let pk = packets(&w).ok()?;
+                let mut t = integer(&pk, "MotionPhotoPresentationTimestampUs")
+                    .ok()
+                    .flatten();
+                if t.is_none_or(|x| x < 0) {
+                    t = integer(&pk, "MicroVideoPresentationTimestampUs")
+                        .ok()
+                        .flatten();
                 }
-                time = Some(t);
+                t.filter(|x| *x >= 0)
+            })();
+            if t.is_some() {
+                time = t;
+                break;
             }
         }
         (b, v.start..v.end, time)
     } else {
-        return fail(NOT_MOTION);
+        return fail_as(ErrorKind::NotMotionPhoto, NOT_MOTION);
     };
     let still = &d[..boundary];
     let video = &d[range.clone()];
     let top = boxes(video, 0, video.len())?;
-    if top.first().map_or(true, |b| !b.is(b"ftyp")) || !top.iter().any(|b| b.is(b"moov")) || !top.iter().any(|b| b.is(b"mdat")) {
+    if top.first().is_none_or(|b| !b.is(b"ftyp"))
+        || !top.iter().any(|b| b.is(b"moov"))
+        || !top.iter().any(|b| b.is(b"mdat"))
+    {
         return fail("HEIC 动态视频无效");
     }
     // No Exif gate here: an Exif item is optional for HEIC motion
@@ -226,10 +374,17 @@ fn parse_heif(d: &[u8], owned: bool) -> Result<MotionPhoto<'_>> {
     // above; `heif::exif` stays available for callers that need it
     // (e.g. `inspect`'s make/model, which tolerates its absence).
     Ok(MotionPhoto {
-        still: if owned { Cow::Owned(still.to_vec()) } else { Cow::Borrowed(still) }, video: range, timestamp: time,
+        still: Cow::Borrowed(still),
+        video: range,
+        timestamp: time,
         timestamp_tag: time.map(|_| "MotionPhotoPresentationTimestampUs".to_string()),
-        ultra: false, cover_frame: None,
-        format: if vendor.is_none() { "google-heic".into() } else { "samsung-heic-sef".into() },
+        ultra: false,
+        cover_frame: None,
+        format: if vendor.is_none() {
+            "google-heic".into()
+        } else {
+            "samsung-heic-sef".into()
+        },
     })
 }
 

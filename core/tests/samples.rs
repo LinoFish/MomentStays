@@ -143,7 +143,10 @@ fn file_with_chunks(spec: &TrackSpec, chunks: &[Vec<usize>]) -> Vec<u8> {
         }
     }
     spec0.stco = offsets.clone();
-    spec0.co64 = spec.co64.as_ref().map(|_| offsets.iter().map(|o| *o as u64).collect());
+    spec0.co64 = spec
+        .co64
+        .as_ref()
+        .map(|_| offsets.iter().map(|o| *o as u64).collect());
     let moov = bx("moov", &[track(&spec0), bx("mvhd", &[])].concat());
     let mut out = ftyp;
     out.extend(moov);
@@ -190,7 +193,9 @@ fn video_track_samples() {
     expect(&t.samples[3], base + 60, 40, 240, 250, false);
     expect(&t.samples[4], base + 100, 50, 280, 290, true);
     for (i, s) in t.samples.iter().enumerate() {
-        assert!(data[s.offset..s.offset + s.size].iter().all(|b| *b == (i + 1) as u8));
+        assert!(data[s.offset..s.offset + s.size]
+            .iter()
+            .all(|b| *b == (i + 1) as u8));
     }
 }
 
@@ -217,7 +222,10 @@ fn co64_constant_size_and_defaults() {
         t.samples.iter().map(|s| s.decode_time).collect::<Vec<_>>(),
         vec![0, 3000, 6000]
     );
-    assert!(t.samples.iter().all(|s| s.presentation_time == s.decode_time as i64));
+    assert!(t
+        .samples
+        .iter()
+        .all(|s| s.presentation_time == s.decode_time as i64));
     assert!(t.samples.iter().all(|s| s.sync));
 }
 
@@ -269,7 +277,8 @@ fn empty_track_is_ok() {
 fn real_file_matches_ffprobe() {
     use base64::Engine;
     let text = std::fs::read_to_string(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64"),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures-samples/real.mp4.b64"),
     )
     .unwrap();
     let data = base64::engine::general_purpose::STANDARD

@@ -26,13 +26,13 @@
 //!   entries.
 
 use crate::binary::be;
-use crate::format::{self, NOT_MOTION};
-use crate::heif;
+use crate::format;
 use crate::hdr;
+use crate::heif;
 use crate::jpeg;
 use crate::mp4;
-use crate::compat;
-use crate::compat::motion::XMP_HDR;
+use crate::pyjpeg;
+use crate::pymotion::{self, XMP_HDR};
 use crate::vendor;
 use crate::xmp;
 use crate::Result;
@@ -71,8 +71,36 @@ pub fn identify(data: &[u8], format: &str) -> Identity {
                 return identify(&fake, format);
             }
         }
+        // HEIC without a usable EXIF item: no Make/Model to read. (Falling
+        // through to `identify_from_segments` would call back into
+        // `identify` for HEIC data and recurse until the stack overflows.)
+        return identity_from(String::new(), String::new(), format);
     }
-    let (make, model) = vendor::make_model(data);
+    let jsegs = jpeg::segments(data).ok();
+    identify_from_segments(data, format, jsegs.as_deref())
+}
+
+/// `identify` over a precomputed JPEG segment list (perf item 3).
+/// `jsegs` is `Some(segments(data))` when the caller already walked
+/// the still, `None` to fall back to a fresh walk. HEIC inputs always
+/// take the original path (their segment walk is over the tiny fake
+/// JPEG built above, not over the still).
+pub(crate) fn identify_from_segments(
+    data: &[u8],
+    format: &str,
+    jsegs: Option<&[jpeg::Segment]>,
+) -> Identity {
+    if heif::matches(data) {
+        return identify(data, format);
+    }
+    let (make, model) = match jsegs {
+        Some(s) => vendor::make_model_from_segments(data, s),
+        None => vendor::make_model(data),
+    };
+    identity_from(make, model, format)
+}
+
+fn identity_from(make: String, model: String, format: &str) -> Identity {
     let normalized = make.to_uppercase();
     let name = format_name(format);
     let camera = [make.as_str(), model.as_str()]
@@ -114,7 +142,11 @@ pub fn identify(data: &[u8], format: &str) -> Identity {
             name: brand.to_string(),
             detail: format!(
                 "厂商依据：动态照片格式（非机身识别）\nEXIF：{}\n动态格式：{name}",
-                if camera.is_empty() { "未记录" } else { &camera }
+                if camera.is_empty() {
+                    "未记录"
+                } else {
+                    &camera
+                }
             ),
         };
     }
@@ -122,24 +154,41 @@ pub fn identify(data: &[u8], format: &str) -> Identity {
         name: "未知".to_string(),
         detail: format!(
             "未找到可确认的厂商字段\nEXIF：{}\n动态格式：{}。Google 兼容格式不代表 Google 厂商。",
-            if camera.is_empty() { "未记录" } else { &camera },
+            if camera.is_empty() {
+                "未记录"
+            } else {
+                &camera
+            },
             if name.is_empty() { "未知" } else { name }
         ),
     }
 }
 
 /// Port of Swift `PhotoHDR.hasISO`: an APP2 segment carrying the
-/// ISO 21496-1 urn, in the still or any MPF auxiliary image.
-fn has_iso(still: &[u8]) -> Result<bool> {
+/// ISO 21496-1 urn, in the still or any MPF auxiliary image. Works over a
+/// precomputed segment list (perf item 3): the primary image reuses `segs`;
+/// only MPF auxiliary images (separate small slices) get fresh walks.
+fn has_iso_from_segments(still: &[u8], segs: &[jpeg::Segment]) -> Result<bool> {
     const ISO_URN: &[u8] = b"urn:iso:std:iso:ts:21496:-1\0";
     let mut images: Vec<&[u8]> = vec![still];
-    for r in compat::jpeg::mpf_images(still)?.iter().skip(1) {
+    for r in pyjpeg::mpf_images_from_segments(still, segs)?
+        .iter()
+        .skip(1)
+    {
         images.push(&still[r.clone()]);
     }
-    for image in images {
-        for s in compat::jpeg::segments(image)? {
-            if s.marker == 0xE2 && s.payload(image).starts_with(ISO_URN) {
-                return Ok(true);
+    for (i, image) in images.iter().enumerate() {
+        if i == 0 {
+            for s in segs {
+                if s.marker == 0xE2 && s.payload(image).starts_with(ISO_URN) {
+                    return Ok(true);
+                }
+            }
+        } else {
+            for s in pyjpeg::segments(image)? {
+                if s.marker == 0xE2 && s.payload(image).starts_with(ISO_URN) {
+                    return Ok(true);
+                }
             }
         }
     }
@@ -157,15 +206,35 @@ pub fn classify_hdr(still: &[u8], ultra: bool) -> Result<&'static str> {
     if ultra {
         return Ok("Ultra HDR");
     }
-    let ranges = jpeg::image_ranges(still)?;
+    let segs = jpeg::segments(still)?;
+    classify_hdr_from_segments(still, &segs, ultra)
+}
+
+/// `classify_hdr` over a precomputed segment list (perf item 3): one walk
+/// shared by the range, ISO and legacy-Apple checks.
+pub(crate) fn classify_hdr_from_segments(
+    still: &[u8],
+    segs: &[jpeg::Segment],
+    ultra: bool,
+) -> Result<&'static str> {
+    if heif::matches(still) {
+        return Ok("HEIC（原样保留）");
+    }
+    if ultra {
+        return Ok("Ultra HDR");
+    }
+    let ranges = jpeg::image_ranges_from_segments(still, segs)?;
     let image_end = ranges.iter().map(|r| r.end).max().unwrap_or(still.len());
     if hdr::honor_private(still, image_end)?.is_some() {
         return Ok("荣耀私有 HDR");
     }
-    if has_iso(still)? {
+    if has_iso_from_segments(still, segs)? {
         return Ok("ISO HDR");
     }
-    if compat::motion::legacy_apple(still)?.0.is_some() {
+    if pymotion::legacy_apple_from_segments(still, segs)?
+        .0
+        .is_some()
+    {
         return Ok("旧 Apple HDR");
     }
     Ok("SDR / 其他")
@@ -210,7 +279,7 @@ fn has_motion_claim(packets: &[xmp::Packet]) -> bool {
 /// JPEG dimensions from the first SOF marker (the `CGImageSource`
 /// dimension half of Swift's check; see the module docs).
 fn jpeg_dimensions(data: &[u8]) -> Option<(u32, u32)> {
-    let segs = compat::jpeg::segments(data).ok()?;
+    let segs = pyjpeg::segments(data).ok()?;
     for s in &segs {
         let m = s.marker;
         let is_sof = (0xC0..=0xCF).contains(&m) && m != 0xC4 && m != 0xC8 && m != 0xCC;
@@ -276,12 +345,12 @@ pub fn confirmed_static(data: &[u8]) -> bool {
                 return false;
             }
         }
-        return heif_dimensions(data).map_or(false, |(w, h)| w > 0 && h > 0);
+        return heif_dimensions(data).is_some_and(|(w, h)| w > 0 && h > 0);
     }
     let Ok(ranges) = jpeg::image_ranges(data) else {
         return false;
     };
-    if ranges.last().map_or(true, |r| r.end != data.len()) {
+    if ranges.last().is_none_or(|r| r.end != data.len()) {
         return false;
     }
     let Ok(packets) = xmp::packets(data) else {
@@ -290,7 +359,7 @@ pub fn confirmed_static(data: &[u8]) -> bool {
     if has_motion_claim(&packets) {
         return false;
     }
-    jpeg_dimensions(data).map_or(false, |(w, h)| w > 0 && h > 0)
+    jpeg_dimensions(data).is_some_and(|(w, h)| w > 0 && h > 0)
 }
 
 /// One Swift-aligned scan row. Never fails: every failure mode becomes
@@ -306,9 +375,10 @@ pub struct ScanRow {
     pub confirmed_static: bool,
 }
 
-fn error_row(data: &[u8], message: &str) -> ScanRow {
+fn error_row(data: &[u8], error: &crate::Error) -> ScanRow {
+    let message = error.0.as_str();
     let maker = identify(data, "");
-    let is_static = message == NOT_MOTION && confirmed_static(data);
+    let is_static = error.kind() == crate::ErrorKind::NotMotionPhoto && confirmed_static(data);
     ScanRow {
         is_motion: false,
         hdr: "—".to_string(),
@@ -327,8 +397,19 @@ fn error_row(data: &[u8], message: &str) -> ScanRow {
 pub fn scan_row(data: &[u8]) -> ScanRow {
     match format::parse(data) {
         Ok(photo) => {
-            let maker = identify(&photo.still, &photo.format);
-            match classify_hdr(&photo.still, photo.ultra) {
+            // One shared segment walk for identify + classify (perf item 3).
+            // If it fails (HEIC stills), fall back to the original paths,
+            // which handle HEIC and errors the same way as before.
+            let segs = jpeg::segments(&photo.still).ok();
+            let maker = match &segs {
+                Some(j) => identify_from_segments(&photo.still, &photo.format, Some(j)),
+                None => identify(&photo.still, &photo.format),
+            };
+            let hdr_result = match &segs {
+                Some(j) => classify_hdr_from_segments(&photo.still, j, photo.ultra),
+                None => classify_hdr(&photo.still, photo.ultra),
+            };
+            match hdr_result {
                 Ok(hdr) => {
                     let cover = cover_text(photo.cover_frame, photo.timestamp);
                     let detail = detail_text(hdr, &cover, &photo.format);
@@ -342,9 +423,9 @@ pub fn scan_row(data: &[u8]) -> ScanRow {
                         confirmed_static: false,
                     }
                 }
-                Err(e) => error_row(data, &e.to_string()),
+                Err(e) => error_row(data, &e),
             }
         }
-        Err(e) => error_row(data, &e.0),
+        Err(e) => error_row(data, &e),
     }
 }

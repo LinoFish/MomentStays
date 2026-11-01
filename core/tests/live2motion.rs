@@ -5,10 +5,10 @@ use momentstays_core::format;
 use momentstays_core::live2motion::{assemble, mett_cover_time, LivePhotoInput};
 use momentstays_core::model::{Cover, Vendor};
 use momentstays_core::mp4::sample_tables;
-use momentstays_core::compat::motion::{live_still_clean, live_still_with_identifier, XMP_HDR};
-use momentstays_core::tiff::Tiff;
-use momentstays_core::compat;
+use momentstays_core::pyjpeg;
+use momentstays_core::pymotion::{live_still_clean, live_still_with_identifier, XMP_HDR};
 use momentstays_core::remux::{check_remux, remux_to_mp4};
+use momentstays_core::tiff::Tiff;
 
 fn bx(t: &str, payload: &[u8]) -> Vec<u8> {
     let mut v = ((payload.len() + 8) as u32).to_be_bytes().to_vec();
@@ -18,7 +18,12 @@ fn bx(t: &str, payload: &[u8]) -> Vec<u8> {
 }
 
 fn full(t: &str, version: u8, flags: u32, body: &[u8]) -> Vec<u8> {
-    let mut p = vec![version, ((flags >> 16) & 0xff) as u8, ((flags >> 8) & 0xff) as u8, (flags & 0xff) as u8];
+    let mut p = vec![
+        version,
+        ((flags >> 16) & 0xff) as u8,
+        ((flags >> 8) & 0xff) as u8,
+        (flags & 0xff) as u8,
+    ];
     p.extend(body);
     bx(t, &p)
 }
@@ -52,7 +57,9 @@ fn track(s: &TSpec) -> (Vec<u8>, Vec<u8>) {
     tkhd_body.extend(0u16.to_be_bytes());
     tkhd_body.extend(0u16.to_be_bytes());
     tkhd_body.extend(0u16.to_be_bytes());
-    tkhd_body.extend(u32s(&[0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000]));
+    tkhd_body.extend(u32s(&[
+        0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000,
+    ]));
     tkhd_body.extend(u32s(&[0, 0]));
     let mut trak = full("tkhd", 0, 7, &tkhd_body);
     if let Some(entries) = &s.edts {
@@ -75,7 +82,12 @@ fn track(s: &TSpec) -> (Vec<u8>, Vec<u8>) {
     hdlr_body.extend([0u8; 12]);
     mdia.extend(full("hdlr", 0, 0, &hdlr_body));
     let total: u32 = s.stts.iter().map(|(c, _)| c).sum();
-    let mut stbl = full("stsd", 0, 0, &[u32s(&[1]), bx(s.stsd_entry, &[0; 6])].concat());
+    let mut stbl = full(
+        "stsd",
+        0,
+        0,
+        &[u32s(&[1]), bx(s.stsd_entry, &[0; 6])].concat(),
+    );
     let mut body = u32s(&[s.stts.len() as u32]);
     for (c, d) in &s.stts {
         body.extend(u32s(&[*c, *d]));
@@ -188,14 +200,29 @@ fn mov_to_mp4_drops_metadata_track() {
     check_remux(&src, &out, 0).expect("mp4 remux verifies");
     let tracks = sample_tables(&out).expect("output parses");
     assert_eq!(tracks.len(), 2);
-    assert!(tracks.iter().all(|t| t.handler == "vide" || t.handler == "soun"));
+    assert!(tracks
+        .iter()
+        .all(|t| t.handler == "vide" || t.handler == "soun"));
 }
 
 #[test]
 fn mov_to_mp4_refuses_unexpected_layout() {
-    let two_videos = mov(&[video_spec(), TSpec { track_id: 4, ..video_spec() }]);
+    let two_videos = mov(&[
+        video_spec(),
+        TSpec {
+            track_id: 4,
+            ..video_spec()
+        },
+    ]);
     assert!(remux_to_mp4(&two_videos).is_err());
-    let two_audios = mov(&[video_spec(), audio_spec(), TSpec { track_id: 5, ..audio_spec() }]);
+    let two_audios = mov(&[
+        video_spec(),
+        audio_spec(),
+        TSpec {
+            track_id: 5,
+            ..audio_spec()
+        },
+    ]);
     assert!(remux_to_mp4(&two_audios).is_err());
 }
 
@@ -205,7 +232,13 @@ fn mett_cover_time_through_edit_list() {
     assert_eq!(mett_cover_time(&src).expect("cover time"), Some(500000));
     let no_mett = mov(&[video_spec(), audio_spec()]);
     assert_eq!(mett_cover_time(&no_mett).expect("no mett"), None);
-    let no_elst = mov(&[video_spec(), TSpec { edts: None, ..mett_spec() }]);
+    let no_elst = mov(&[
+        video_spec(),
+        TSpec {
+            edts: None,
+            ..mett_spec()
+        },
+    ]);
     assert_eq!(mett_cover_time(&no_elst).expect("no elst"), Some(0));
 }
 
@@ -260,7 +293,7 @@ fn minimal_jpeg_with_motion_xmp() -> Vec<u8> {
 }
 
 fn exif_payload(jpeg: &[u8]) -> Vec<u8> {
-    compat::jpeg::segments(jpeg)
+    pyjpeg::segments(jpeg)
         .unwrap()
         .into_iter()
         .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(b"Exif\0\0"))
@@ -281,7 +314,7 @@ fn clean_strips_motion_xmp_keeps_exif_and_gainmap_li() {
     assert!(!text.contains("MotionPhoto\" Item:Mime=\"video/mp4\""));
     assert!(text.contains("GainMap"));
     assert_eq!(exif_payload(&cleaned), exif_payload(&src));
-    compat::jpeg::segments(&cleaned).expect("cleaned still parses");
+    pyjpeg::segments(&cleaned).expect("cleaned still parses");
 }
 
 #[test]
@@ -309,17 +342,24 @@ fn clean_refuses_heic() {
 
 fn fixture(name: &str) -> Vec<u8> {
     let text = std::fs::read_to_string(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-pycli").join(name),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures-pycli")
+            .join(name),
     )
     .unwrap();
-    base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap()
 }
 
 #[test]
 fn assemble_google_from_live_pair() {
     let still = fixture("static.jpg.b64");
     let movie = mov(&[video_spec(), audio_spec()]);
-    let input = LivePhotoInput { still_jpeg: still, movie_mov: movie };
+    let input = LivePhotoInput {
+        still_jpeg: still,
+        movie_mov: movie,
+    };
     let out = assemble(&input, Vendor::Google, Cover::Time(500000)).expect("assemble google");
     let parsed = format::parse(&out).expect("output parses");
     assert_eq!(parsed.timestamp, Some(500000));
@@ -354,7 +394,9 @@ fn jpeg_with_motion_xmp(with_exif: bool) -> Vec<u8> {
     out.extend(app1(&xmp));
     if with_exif {
         let mut exif = b"Exif\0\0".to_vec();
-        exif.extend([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        exif.extend([
+            0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]);
         out.extend(app1(&exif));
     }
     out.extend([0xFF, 0xDB, 0x00, 0x04, 0x00, 0x11]);
@@ -369,11 +411,11 @@ fn jpeg_with_motion_xmp(with_exif: bool) -> Vec<u8> {
 /// Coded image bytes: every segment except EXIF/XMP header segments,
 /// plus trailing scan data. Header-only edits must not move these.
 fn coding_bytes(jpeg: &[u8]) -> Vec<u8> {
-    let segs = compat::jpeg::segments(jpeg).expect("segments");
+    let segs = pyjpeg::segments(jpeg).expect("segments");
     let mut out = Vec::new();
     for s in &segs {
         let pl = s.payload(jpeg);
-        if s.marker == 0xE1 && (pl.starts_with(compat::jpeg::EXIF_HDR) || pl.starts_with(XMP_HDR)) {
+        if s.marker == 0xE1 && (pl.starts_with(pyjpeg::EXIF_HDR) || pl.starts_with(XMP_HDR)) {
             continue;
         }
         out.extend_from_slice(&jpeg[s.start..s.end]);
@@ -387,10 +429,10 @@ fn coding_bytes(jpeg: &[u8]) -> Vec<u8> {
 /// MakerNote tag 17 (ContentIdentifier) read back from a JPEG's EXIF,
 /// mirroring Swift `movie()`'s still check (`maker["17"] == uuid`).
 fn makernote_uuid(jpeg: &[u8]) -> Option<String> {
-    let segs = compat::jpeg::segments(jpeg).ok()?;
+    let segs = pyjpeg::segments(jpeg).ok()?;
     let exif = segs
         .iter()
-        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(compat::jpeg::EXIF_HDR))?;
+        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(pyjpeg::EXIF_HDR))?;
     let tiff_bytes = &exif.payload(jpeg)[6..];
     let t = Tiff::new(tiff_bytes).ok()?;
     let (root, _) = t.root().ok()?;
@@ -430,7 +472,11 @@ fn makernote_uuid(jpeg: &[u8]) -> Option<String> {
             let off = rd32(p + 8) as usize;
             note[off..off + count].to_vec()
         };
-        return Some(String::from_utf8_lossy(&raw).trim_end_matches('\0').to_string());
+        return Some(
+            String::from_utf8_lossy(&raw)
+                .trim_end_matches('\0')
+                .to_string(),
+        );
     }
     None
 }
@@ -441,7 +487,11 @@ fn still_with_identifier_inserts_and_reads_back() {
     let uuid = "123E4567-E89B-12D3-A456-426614174000";
     let out = live_still_with_identifier(&src, uuid).expect("identifier");
     assert_eq!(makernote_uuid(&out).as_deref(), Some(uuid));
-    assert_eq!(coding_bytes(&src), coding_bytes(&out), "coding data unchanged");
+    assert_eq!(
+        coding_bytes(&src),
+        coding_bytes(&out),
+        "coding data unchanged"
+    );
     let text = String::from_utf8_lossy(&out);
     assert!(!text.contains("MotionPhotoPresentationTimestampUs"));
     assert!(!text.contains("MicroVideoOffset"));
@@ -451,8 +501,11 @@ fn still_with_identifier_inserts_and_reads_back() {
 
 #[test]
 fn still_with_identifier_replaces_and_keeps_coding() {
-    let first =
-        live_still_with_identifier(&jpeg_with_motion_xmp(false), "AAAAAAAA-0000-0000-0000-000000000001").unwrap();
+    let first = live_still_with_identifier(
+        &jpeg_with_motion_xmp(false),
+        "AAAAAAAA-0000-0000-0000-000000000001",
+    )
+    .unwrap();
     let second =
         live_still_with_identifier(&first, "BBBBBBBB-0000-0000-0000-000000000002").unwrap();
     assert_eq!(
@@ -466,10 +519,10 @@ fn still_with_identifier_replaces_and_keeps_coding() {
 /// Real iPhone MakerNotes use LONG8 for LivePhotoVideoIndex (tag 0x17);
 /// the writer used to reject it as an unknown field type.
 fn makernote_long8(jpeg: &[u8], want: u16) -> Option<u64> {
-    let segs = compat::jpeg::segments(jpeg).ok()?;
+    let segs = pyjpeg::segments(jpeg).ok()?;
     let exif = segs
         .iter()
-        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(compat::jpeg::EXIF_HDR))?;
+        .find(|s| s.marker == 0xE1 && s.payload(jpeg).starts_with(pyjpeg::EXIF_HDR))?;
     let tiff_bytes = &exif.payload(jpeg)[6..];
     let t = Tiff::new(tiff_bytes).ok()?;
     let (root, _) = t.root().ok()?;
@@ -571,7 +624,11 @@ fn still_with_identifier_keeps_long8_makernote_fields() {
     let out = live_still_with_identifier(&jpeg, new_uuid).expect("live_still");
     assert_eq!(makernote_uuid(&out).as_deref(), Some(new_uuid));
     assert_eq!(makernote_long8(&out, 0x17), Some(long8), "LONG8 value kept");
-    assert_eq!(coding_bytes(&out), coding_bytes(&jpeg), "coding bytes unchanged");
+    assert_eq!(
+        coding_bytes(&out),
+        coding_bytes(&jpeg),
+        "coding bytes unchanged"
+    );
 }
 
 #[test]
@@ -590,7 +647,10 @@ fn still_with_identifier_refuses_heic() {
 fn assemble_huawei_from_live_pair_uses_frame() {
     let still = fixture("static.jpg.b64");
     let movie = mov(&[video_spec()]);
-    let input = LivePhotoInput { still_jpeg: still, movie_mov: movie };
+    let input = LivePhotoInput {
+        still_jpeg: still,
+        movie_mov: movie,
+    };
     let out = assemble(&input, Vendor::Huawei, Cover::Frame(2)).expect("assemble huawei");
     let parsed = format::parse(&out).expect("output parses");
     assert_eq!(parsed.cover_frame, Some(2));
