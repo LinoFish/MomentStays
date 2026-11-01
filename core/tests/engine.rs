@@ -518,3 +518,124 @@ fn ui_helper_modes_cover_preview_pairing_and_import_guard() {
     );
     assert!(pair["movie"].as_str().unwrap().ends_with("google.mov"));
 }
+
+#[test]
+fn hdr_writers_match_the_reference_bytes() {
+    let base = b64("tests/fixtures-pycli/base.jpg.b64");
+    assert_eq!(
+        still::ultra(&base, &base, 2.0).unwrap(),
+        b64("tests/fixtures-pycli/expected/ultra-2.0.bin.b64")
+    );
+    assert_eq!(
+        still::ultra(&base, &base, 1.8).unwrap(),
+        b64("tests/fixtures-pycli/expected/ultra-1.8.bin.b64")
+    );
+    assert_eq!(
+        still::color_profile(&b64("tests/fixtures-pycli/srgb.jpg.b64"), b"FAKEICC").unwrap(),
+        b64("tests/fixtures-pycli/expected/srgb-icc.bin.b64")
+    );
+}
+
+/// A host that "decodes" any gain map to 2x2 gray and "encodes" to base.jpg.
+struct FakeHost;
+impl momentstays_core::engine::Native for FakeHost {
+    fn srgb_icc(&self) -> momentstays_core::Result<Vec<u8>> {
+        Ok(b"FAKEICC".to_vec())
+    }
+    fn decode_gray_jpeg(
+        &self,
+        _: &[u8],
+    ) -> momentstays_core::Result<Option<momentstays_core::engine::Gray>> {
+        Ok(Some(momentstays_core::engine::Gray {
+            width: 2,
+            height: 2,
+            stride: 2,
+            pixels: vec![0, 64, 128, 255],
+        }))
+    }
+    fn encode_gray_jpeg(
+        &self,
+        g: &momentstays_core::engine::Gray,
+        quality: f64,
+    ) -> momentstays_core::Result<Vec<u8>> {
+        assert_eq!(quality, 1.0);
+        assert_eq!(g.pixels.len(), 4);
+        Ok(b64("tests/fixtures-pycli/base.jpg.b64"))
+    }
+}
+
+#[test]
+fn legacy_apple_hdr_is_converted_through_host_codecs() {
+    let (src, out) = (Dir::new("src"), Dir::new("out"));
+    let legacy = b64("tests/fixtures-pycli/legacy-mpf.jpg.b64");
+    let still_bytes = momentstays_core::jpeg::static_only(&legacy).unwrap();
+    // Swift refuses to guess the colour space: give the still an ICC profile.
+    let icc = momentstays_core::pyjpeg::app(0xE2, b"ICC_PROFILE\0\x01\x01FAKEICC").unwrap();
+    let still_bytes =
+        momentstays_core::pyjpeg::edit_header(&still_bytes, &Default::default(), &icc).unwrap();
+    assert!(momentstays_core::apple_hdr::legacy(&still_bytes)
+        .unwrap()
+        .0
+        .is_some());
+    let m = MotionModel {
+        still: still_bytes,
+        video: video(),
+        cover: Cover::Time(800_000),
+        source_format: "test".into(),
+    };
+    // The writer declares any second MPF image an Ultra HDR GainMap (like
+    // Swift's assembler). Rename that attribute in place (same length, so
+    // no offsets move) to keep a legacy-only Apple HDR Motion Photo.
+    let mut file = model::write(&m, Vendor::Google).unwrap();
+    let at = file
+        .windows(14)
+        .position(|w| w == b"hdrgm:Version=")
+        .unwrap();
+    file[at + 12] = b'x';
+    let p = format::parse(&file).unwrap();
+    assert!(!p.ultra);
+    std::fs::write(src.0.join("hdr.jpg"), &file).unwrap();
+    let outcome = batch::run(
+        &FakeHost,
+        &RunRequest {
+            sources: std::slice::from_ref(&src.0),
+            output: &out.0,
+            options: &ConversionOptions::default(),
+            scan_rows: None,
+            concurrency: Some(1),
+        },
+        &StopToken::new(),
+        None,
+        |_| {},
+    )
+    .unwrap();
+    let f = &files(&outcome)[0];
+    assert_eq!(f["status"], "converted", "{f:#}");
+    assert_eq!(f["hdr"]["status"], "converted", "{f:#}");
+    assert_eq!(f["hdr"]["output"], "ultra-hdr");
+    assert_eq!(
+        (f["hdr"]["width"].as_u64(), f["hdr"]["height"].as_u64()),
+        (Some(2), Some(2))
+    );
+    let live_still = std::fs::read(out.0.join("hdr.jpg.livephoto/hdr.jpg")).unwrap();
+    assert_eq!(
+        jpeg::auxiliary(&live_still).unwrap().len(),
+        2,
+        "gain map packed"
+    );
+    // Without host codecs the same file still converts, keeping the original HDR.
+    let out2 = Dir::new("out2");
+    let plain = run(
+        std::slice::from_ref(&src.0),
+        &out2.0,
+        &ConversionOptions::default(),
+        None,
+    );
+    let g = &files(&plain)[0];
+    assert_eq!(g["status"], "converted");
+    assert_eq!(g["hdr"]["reason"], "旧 HDR 尝试转换未完成，原格式已保留");
+    assert!(g["warnings"][0]
+        .as_str()
+        .unwrap()
+        .starts_with("需要原生处理"));
+}
