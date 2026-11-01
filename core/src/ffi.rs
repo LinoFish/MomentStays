@@ -29,6 +29,13 @@ fn respond(operation: u32, data: &[u8]) -> Response {
             }
             1 => json!({"hash":crate::format::coding_hash(data)?}),
             2 => json!({"hashes":crate::format::auxiliary_hashes(data)?}),
+            3 => {
+                // Apple HDR facts of a JPEG or HEIC still. Slot 1 carries the
+                // legacy gain-map JPEG when there is one.
+                let r = crate::apple_hdr::read(data)?;
+                still = r.gain.clone().unwrap_or_default();
+                r.to_json()
+            }
             _ => return crate::fail("Rust bridge: unknown operation"),
         };
         Ok(Response {
@@ -39,7 +46,8 @@ fn respond(operation: u32, data: &[u8]) -> Response {
     result.unwrap_or_else(|e| error(&e.0))
 }
 
-/// Run `operation` (0 parse, 1 coding hash, 2 auxiliary hashes) on `input`.
+/// Run `operation` (0 parse, 1 coding hash, 2 auxiliary hashes, 3 Apple HDR
+/// read) on `input`.
 ///
 /// # Safety
 /// `input` points to `len` readable bytes for the duration of the call

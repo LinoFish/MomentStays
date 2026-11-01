@@ -32,7 +32,7 @@ use crate::heif;
 use crate::jpeg;
 use crate::mp4;
 use crate::pyjpeg;
-use crate::pymotion::{self, XMP_HDR};
+use crate::pymotion::XMP_HDR;
 use crate::vendor;
 use crate::xmp;
 use crate::Result;
@@ -231,7 +231,7 @@ pub(crate) fn classify_hdr_from_segments(
     if has_iso_from_segments(still, segs)? {
         return Ok("ISO HDR");
     }
-    if pymotion::legacy_apple_from_segments(still, segs)?
+    if crate::apple_hdr::legacy_from_segments(still, segs)?
         .0
         .is_some()
     {

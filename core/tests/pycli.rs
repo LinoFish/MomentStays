@@ -109,7 +109,7 @@ fn ultra_from_apple_bytes_match_python() {
 
 #[test]
 fn legacy_apple_matches_python() {
-    let (info, _reason) = pymotion::legacy_apple(&read("legacy-mpf.jpg")).unwrap();
+    let (info, _reason) = momentstays_core::apple_hdr::legacy(&read("legacy-mpf.jpg")).unwrap();
     let info = info.expect("legacy gain map expected");
     assert!((info.stops - 1.5909).abs() < 1e-9, "stops {}", info.stops);
     assert_eq!(info.gain, read("expected/legacy-gain.bin"));

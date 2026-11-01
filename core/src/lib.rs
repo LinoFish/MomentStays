@@ -16,6 +16,7 @@
     clippy::doc_lazy_continuation
 )]
 
+pub mod apple_hdr;
 pub mod binary;
 pub mod capi;
 pub mod cover;

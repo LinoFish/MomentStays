@@ -34,7 +34,23 @@ fn overlaps(a: &Range<usize>, b: &Range<usize>) -> bool {
     a.start < b.end && b.start < a.end
 }
 
+/// Layout for writers and conversion: only the item types and MIME types
+/// this crate rewrites are accepted; anything else is refused rather than
+/// carried along unseen.
 pub fn layout(d: &[u8]) -> Result<Layout> {
+    layout_impl(d, true)
+}
+
+/// Layout for read-only inspection (Apple HDR): every item type and MIME
+/// type is accepted and reported, so a camera file with extra items (depth,
+/// matte, thumbnails) can still be read. All structural checks (versions,
+/// widths, extents inside the file, no overlapping items) are unchanged.
+/// Never use it to decide that a file is safe to rewrite.
+pub fn layout_lenient(d: &[u8]) -> Result<Layout> {
+    layout_impl(d, false)
+}
+
+fn layout_impl(d: &[u8], strict: bool) -> Result<Layout> {
     let top = boxes(d, 0, d.len())?;
     if top.first().is_none_or(|b| !b.is(b"ftyp"))
         || top.iter().any(|b| b.is(b"moov") || b.is(b"mpvd"))
@@ -94,7 +110,8 @@ pub fn layout(d: &[u8]) -> Result<Layout> {
             return fail_as(ErrorKind::Unsupported, "HEIC 加密项目不受支持");
         }
         let ty = String::from_utf8_lossy(&d[type_at..type_at + 4]).into_owned();
-        if !["hvc1", "grid", "Exif", "mime", "tmap", "iden", "jpeg"].contains(&ty.as_str())
+        if (strict
+            && !["hvc1", "grid", "Exif", "mime", "tmap", "iden", "jpeg"].contains(&ty.as_str()))
             || types.contains_key(&id)
         {
             return fail_as(ErrorKind::Unsupported, "HEIC 含未知或重复项目，未推测处理");
@@ -114,7 +131,7 @@ pub fn layout(d: &[u8]) -> Result<Layout> {
                 None => return fail("HEIC MIME 项目被截断"),
             };
             mime = String::from_utf8_lossy(&rest[z + 1..e2]).into_owned();
-            if mime != "application/rdf+xml" {
+            if strict && mime != "application/rdf+xml" {
                 return fail_as(ErrorKind::Unsupported, "HEIC 未知 MIME 项目不受支持");
             }
         }

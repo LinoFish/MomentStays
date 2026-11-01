@@ -91,3 +91,21 @@ fn bad_input_is_an_error_reply_not_a_crash() {
     let (json, _) = call(99, b"x");
     assert!(json["error"].is_string());
 }
+
+#[test]
+fn op3_reads_apple_hdr_and_returns_the_legacy_gain_map() {
+    let data = fixture("legacy-mpf.jpg");
+    let (json, gain) = call(3, &data);
+    assert!(json.get("error").is_none(), "{json}");
+    assert_eq!(json["status"], "legacy");
+    assert_eq!(json["container"], "jpeg");
+    assert!((json["stops"].as_f64().unwrap() - 1.5909).abs() < 1e-9);
+    assert_eq!(gain, fixture("expected/legacy-gain.bin"));
+    // A file with nothing to recover: status none, empty slot 1.
+    let (json, gain) = call(3, &fixture("ultra.jpg"));
+    assert_eq!(json["status"], "none");
+    assert!(gain.is_empty());
+    // Not an image at all: an error reply, not a crash.
+    let (json, _) = call(3, b"not an image");
+    assert!(json["error"].is_string());
+}
