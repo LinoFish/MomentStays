@@ -121,14 +121,37 @@ struct MSHomeButtonStyle: ButtonStyle {
     }
 }
 
+/// Icon left of text normally; at accessibility sizes icon on top, text full width (same rule as Home rows).
+struct MSAboutRow: View {
+    let text: LocalizedStringKey
+    let symbol: String
+    @Environment(\.dynamicTypeSize) private var size
+
+    var body: some View {
+        let layout = size.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 16))
+        layout {
+            Image(systemName: symbol)
+                .foregroundStyle(Color.msLink)
+                .frame(minWidth: 28, alignment: .leading)
+                .accessibilityHidden(true)
+            Text(text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct MSAboutView: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Label("照片只在本机处理，不会上传。", systemImage: "lock")
-                    Label("也可以从照片或文件的分享菜单打开留刻。", systemImage: "square.and.arrow.up")
+                    MSAboutRow(text: "照片只在本机处理，不会上传。", symbol: "lock")
+                    MSAboutRow(text: "也可以从照片或文件的分享菜单打开留刻。", symbol: "square.and.arrow.up")
                 }
                 Section {
                     LabeledContent("版本", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
