@@ -370,7 +370,7 @@ fn build_moov(
     chunk_offsets: &[Vec<usize>],
     movie_duration: u32,
     next_track_id: u32,
-    udta: Option<&[u8]>,
+    meta: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
     let mut moov_body = mvhd_box(movie_duration, next_track_id);
     for (t, offsets) in tracks.iter().zip(chunk_offsets.iter()) {
@@ -396,86 +396,166 @@ fn build_moov(
         trak_body.extend(bx(b"mdia", &mdia_body));
         moov_body.extend(bx(b"trak", &trak_body));
     }
-    if let Some(u) = udta {
+    if let Some(u) = meta {
         moov_body.extend(u);
     }
     Ok(bx(b"moov", &moov_body))
 }
 
-/// Movie-level QuickTime metadata carrying the Live Photo content identifier:
-/// moov/udta/meta/hdlr(mdta) + ilst/----/mean + name + data (UTF-8, type 1).
-/// Layout follows the QuickTime File Format metadata chapter and ffmpeg's
-/// `mov_read_custom` reader (mean/name/data full boxes, data locale 0).
-pub fn content_identifier_udta(uuid: &str) -> Vec<u8> {
+const CONTENT_IDENTIFIER_KEY: &[u8] = b"com.apple.quicktime.content.identifier";
+
+/// Movie-level QuickTime metadata carrying the Live Photo content identifier,
+/// in the form iPhone camera files and AVAssetWriter use (QuickTime File
+/// Format, "Metadata"): `moov/meta` holding `hdlr(mdta)`, a `keys` box with
+/// one `mdta` key, and an `ilst` whose item type is the 1-based key index
+/// with a UTF-8 (`data` type 1, locale 0) value. QuickTime's `meta` atom has
+/// no version/flags, unlike the ISO BMFF full box.
+pub fn content_identifier_meta(uuid: &str) -> Vec<u8> {
     let mut hdlr_body = u32b(0).to_vec();
     hdlr_body.extend(b"mdta");
     hdlr_body.extend([0u8; 12]);
     hdlr_body.push(0);
     let hdlr = full(b"hdlr", 0, 0, &hdlr_body);
-    let mean = full(b"mean", 0, 0, b"com.apple.quicktime.metadata");
-    let name = full(b"name", 0, 0, b"com.apple.quicktime.content.identifier");
+    let mut key = u32b(8 + CONTENT_IDENTIFIER_KEY.len() as u32).to_vec();
+    key.extend(b"mdta");
+    key.extend(CONTENT_IDENTIFIER_KEY);
+    let mut keys_body = u32b(1).to_vec();
+    keys_body.extend(key);
+    let keys = full(b"keys", 0, 0, &keys_body);
     let mut data_body = u32b(0).to_vec();
     data_body.extend(uuid.as_bytes());
     let data = full(b"data", 0, 1, &data_body);
-    let mut item = mean;
-    item.extend(name);
-    item.extend(data);
-    let ilst = bx(b"ilst", &bx(b"----", &item));
+    let item = bx(&1u32.to_be_bytes(), &data);
     let mut meta_body = hdlr;
-    meta_body.extend(ilst);
-    bx(b"udta", &full(b"meta", 0, 0, &meta_body))
+    meta_body.extend(keys);
+    meta_body.extend(bx(b"ilst", &item));
+    bx(b"meta", &meta_body)
 }
 
-/// Read the content identifier back from a MOV's udta/meta/ilst, if present.
-pub fn read_content_identifier(data: &[u8]) -> Result<Option<String>> {
-    let top = mp4::boxes(data, 0, data.len())?;
-    let moov = match top.iter().find(|b| b.is(b"moov")) {
-        Some(m) => m.clone(),
-        None => return Ok(None),
+/// Children of a `meta` box. QuickTime writes it without version/flags and
+/// ISO BMFF with; a zero first word can only be version/flags, because a
+/// child box of size 0 ("to end of file") cannot occur inside `moov`.
+fn meta_children(d: &[u8], meta: &BoxRef) -> Result<Vec<BoxRef>> {
+    let start = if meta.end - meta.payload >= 4 && d[meta.payload..meta.payload + 4] == [0; 4] {
+        meta.payload + 4
+    } else {
+        meta.payload
     };
-    let udta = match children(data, &moov)?.into_iter().find(|b| b.is(b"udta")) {
-        Some(u) => u,
-        None => return Ok(None),
+    mp4::boxes(d, start, meta.end)
+}
+
+/// UTF-8 value of a `data` atom (type indicator 1), or None for other types.
+fn utf8_data(d: &[u8], data: &BoxRef) -> Result<Option<String>> {
+    let body = &d[data.payload..data.end];
+    if body.len() < 8 || body[..4] != [0, 0, 0, 1] {
+        return Ok(None);
+    }
+    String::from_utf8(body[8..].to_vec())
+        .map(Some)
+        .map_err(|_| crate::Error::new("内容标识不是 UTF-8"))
+}
+
+/// Content identifier from QuickTime keyed metadata (`hdlr` + `keys` + `ilst`).
+fn keyed_identifier(d: &[u8], meta: &BoxRef) -> Result<Option<String>> {
+    let kids = meta_children(d, meta)?;
+    let (Some(keys), Some(ilst)) = (
+        kids.iter().find(|b| b.is(b"keys")),
+        kids.iter().find(|b| b.is(b"ilst")),
+    ) else {
+        return Ok(None);
     };
-    let meta = match children(data, &udta)?.into_iter().find(|b| b.is(b"meta")) {
-        Some(m) => m,
-        None => return Ok(None),
+    if keys.end - keys.payload < 8 {
+        return fail("QuickTime keys 被截断");
+    }
+    let count = crate::binary::be(d, keys.payload + 4, 4)?;
+    let mut at = keys.payload + 8;
+    let mut index = None;
+    for i in 0..count {
+        if keys.end - at < 8 {
+            return fail("QuickTime keys 被截断");
+        }
+        let size = crate::binary::be(d, at, 4)?;
+        if size < 8 || size > keys.end - at {
+            return fail("QuickTime keys 被截断");
+        }
+        if &d[at + 4..at + 8] == b"mdta" && &d[at + 8..at + size] == CONTENT_IDENTIFIER_KEY {
+            index = Some(i as u32 + 1);
+        }
+        at += size;
+    }
+    let Some(index) = index else {
+        return Ok(None);
     };
-    // `meta` is a full box: its children start after version/flags.
-    let ilst = match mp4::boxes(data, meta.payload + 4, meta.end)?
-        .into_iter()
-        .find(|b| b.is(b"ilst"))
-    {
-        Some(i) => i,
-        None => return Ok(None),
+    for item in children(d, ilst)? {
+        if d[item.start + 4..item.start + 8] != index.to_be_bytes() {
+            continue;
+        }
+        for c in children(d, &item)? {
+            if c.is(b"data") {
+                if let Some(v) = utf8_data(d, &c)? {
+                    return Ok(Some(v));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Content identifier from the `----` mean/name/data form this core wrote
+/// before it switched to keyed metadata (`moov/udta/meta/ilst`).
+fn freeform_identifier(d: &[u8], meta: &BoxRef) -> Result<Option<String>> {
+    let Some(ilst) = meta_children(d, meta)?.into_iter().find(|b| b.is(b"ilst")) else {
+        return Ok(None);
     };
-    for item in children(data, &ilst)? {
+    for item in children(d, &ilst)? {
         if !item.is(b"----") {
             continue;
         }
-        let mut mean = None;
-        let mut name = None;
-        let mut value = None;
-        for c in children(data, &item)? {
+        let (mut mean, mut name, mut value) = (None, None, None);
+        for c in children(d, &item)? {
             if c.end - c.payload < 4 {
                 continue;
             }
-            let body = &data[c.payload + 4..c.end];
+            let body = &d[c.payload + 4..c.end];
             if c.is(b"mean") {
-                mean = Some(body.to_vec());
+                mean = Some(body);
             } else if c.is(b"name") {
-                name = Some(body.to_vec());
-            } else if c.is(b"data") && body.len() >= 4 {
-                value = Some(body[4..].to_vec());
+                name = Some(body);
+            } else if c.is(b"data") {
+                value = utf8_data(d, &c)?;
             }
         }
-        if mean.as_deref() == Some(b"com.apple.quicktime.metadata".as_slice())
-            && name.as_deref() == Some(b"com.apple.quicktime.content.identifier".as_slice())
+        if mean == Some(b"com.apple.quicktime.metadata".as_slice())
+            && name == Some(CONTENT_IDENTIFIER_KEY)
         {
             if let Some(v) = value {
-                return Ok(Some(
-                    String::from_utf8(v).map_err(|_| crate::Error::new("内容标识不是 UTF-8"))?,
-                ));
+                return Ok(Some(v));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Read the movie-level content identifier: keyed `moov/meta` first (iPhone,
+/// AVAssetWriter, this writer), then keyed or freeform `moov/udta/meta`.
+pub fn read_content_identifier(data: &[u8]) -> Result<Option<String>> {
+    let top = mp4::boxes(data, 0, data.len())?;
+    let Some(moov) = top.iter().find(|b| b.is(b"moov")) else {
+        return Ok(None);
+    };
+    let kids = children(data, moov)?;
+    for meta in kids.iter().filter(|b| b.is(b"meta")) {
+        if let Some(v) = keyed_identifier(data, meta)? {
+            return Ok(Some(v));
+        }
+    }
+    for udta in kids.iter().filter(|b| b.is(b"udta")) {
+        for meta in children(data, udta)?.iter().filter(|b| b.is(b"meta")) {
+            if let Some(v) = keyed_identifier(data, meta)? {
+                return Ok(Some(v));
+            }
+            if let Some(v) = freeform_identifier(data, meta)? {
+                return Ok(Some(v));
             }
         }
     }
@@ -677,7 +757,7 @@ pub fn remux_mov(
     mett_cover_us: Option<i64>,
 ) -> Result<(Vec<u8>, Movie)> {
     let (mut tracks, mut max_track_id) = parse_tracks(data, movie, video_index)?;
-    let udta = identifier.map(content_identifier_udta);
+    let meta = identifier.map(content_identifier_meta);
     if let Some(cover) = mett_cover_us {
         tracks.push(mett_track_parts(max_track_id + 1, cover)?);
         max_track_id += 1;
@@ -688,7 +768,7 @@ pub fn remux_mov(
     let out = assemble(
         &tracks,
         max_track_id,
-        udta,
+        meta,
         bx(b"ftyp", &ftyp_payload),
         data,
     )?;
@@ -740,7 +820,7 @@ pub fn remux_mp4(data: &[u8], movie: &Movie) -> Result<Vec<u8>> {
 fn assemble(
     tracks: &[TrackParts],
     max_track_id: u32,
-    udta: Option<Vec<u8>>,
+    meta: Option<Vec<u8>>,
     ftyp: Vec<u8>,
     source: &[u8],
 ) -> Result<Vec<u8>> {
@@ -758,7 +838,7 @@ fn assemble(
         &zero,
         movie_duration,
         max_track_id + 1,
-        udta.as_deref(),
+        meta.as_deref(),
     )?
     .len();
     // Chunk offsets depend only on sample sizes, so compute them without
@@ -784,7 +864,7 @@ fn assemble(
         &chunk_offsets,
         movie_duration,
         max_track_id + 1,
-        udta.as_deref(),
+        meta.as_deref(),
     )?;
     debug_assert_eq!(moov.len(), moov_len);
     // The mdat header and stco offsets are 32-bit: refuse instead of
