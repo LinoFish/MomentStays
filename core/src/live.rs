@@ -66,10 +66,29 @@ pub struct LivePhoto {
 }
 
 /// A random UUID v4 in Apple's uppercase form, for a new ContentIdentifier.
+///
+/// The identifier only has to be unique, not secret, so std's OS-seeded
+/// SipHash keys (`RandomState`) mixed with time, pid and a process counter
+/// are enough; this avoids an extra RNG dependency in the app builds.
 pub fn new_content_identifier() -> Result<String> {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
     let mut b = [0u8; 16];
-    getrandom::fill(&mut b)
-        .map_err(|e| crate::Error::with_kind(ErrorKind::Io, format!("无法获取随机数: {e}")))?;
+    for i in 0..2 {
+        let mut h = RandomState::new().build_hasher();
+        h.write_u128(now);
+        h.write_u32(std::process::id());
+        h.write_u64(n);
+        h.write_usize(i);
+        b[i * 8..i * 8 + 8].copy_from_slice(&h.finish().to_be_bytes());
+    }
     b[6] = (b[6] & 0x0F) | 0x40;
     b[8] = (b[8] & 0x3F) | 0x80;
     let h = crate::hex(&b).to_uppercase();

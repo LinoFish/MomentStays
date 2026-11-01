@@ -24,15 +24,6 @@ serde_json = { version = "1", features = ["preserve_order"] }
 memmap2 = "0.9"
 memchr = "2"
 base64 = "0.22"
-getrandom = "0.3"
-
-# sha2's `asm` feature builds GNU-syntax assembly, which MSVC cannot
-# compile; Windows/MSVC uses the portable code (SHA-NI is still detected
-# at run time by sha2 itself).
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-sha2 = { version = "0.10", features = ["asm"] }
-
-[target.'cfg(target_env = "msvc")'.dependencies]
 sha2 = "0.10"
 
 [profile.release]
