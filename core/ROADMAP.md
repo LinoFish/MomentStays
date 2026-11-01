@@ -1,5 +1,7 @@
 # rust-core roadmap
 
+> Note (core-merge): the Android/JNI items below (`src/jni.rs`, `core/android`, `cdylib`) are historical and were intentionally not carried into this core; the Google-only `momentstays` CLI was also dropped. Apple HDR reading now lives in `src/apple_hdr.rs` (ms_core op 3).
+
 Goal: a cross-platform, high-performance core (Windows/Linux/macOS CLI first, then optional
 use from the Swift app via a C ABI) that produces byte-identical results to the Swift engine.
 
