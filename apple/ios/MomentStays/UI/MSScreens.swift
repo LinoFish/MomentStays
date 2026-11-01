@@ -318,11 +318,6 @@ struct MSScanView: View {
                     ProgressView(value: Double(checked), total: Double(total)).tint(.msAccentFill)
                         .accessibilityLabel("扫描进度")
                         .accessibilityValue("已检查 \(checked) 张，共 \(total) 张")
-                    if scanning {
-                        Button(stopping ? "正在停止…" : "取消扫描") { stop() }
-                            .disabled(stopping)
-                            .frame(minHeight: 44)
-                    }
                 }
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -352,7 +347,7 @@ struct MSScanView: View {
         .navigationBarBackButtonHidden(scanning)
         .toolbar {
             if scanning {
-                ToolbarItem(placement: .topBarLeading) { Button("取消") { stop() }.disabled(stopping) }
+                ToolbarItem(placement: .topBarLeading) { Button("取消") { scanning = false; dismiss() } }
             }
         }
         .task {
@@ -524,24 +519,6 @@ struct MSResultsView: View {
                 .accessibilityElement(children: .combine)
             }
             .listSectionSpacing(.custom(24))
-            if flow.failed > 0 && flow.succeeded > 0 {
-                if typeSize.isAccessibilitySize {
-                    Section {
-                        Picker("筛选", selection: $filter) { filterOptions }
-                            .pickerStyle(.menu)
-                            .frame(minHeight: 44)
-                    }
-                    .listSectionSpacing(.custom(24))
-                } else {
-                    Section {
-                        Picker("筛选", selection: $filter) { filterOptions }
-                            .pickerStyle(.segmented)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets())
-                    }
-                    .listSectionSpacing(.custom(24))
-                }
-            }
             Section {
                 ForEach(rows) { MSItemRow(item: $0, showShare: flow.direction == .liveToAndroid) }
             }
@@ -561,6 +538,16 @@ struct MSResultsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar {
+            if flow.failed > 0 && flow.succeeded > 0 {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Picker("筛选", selection: $filter) { filterOptions }.pickerStyle(.inline)
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(filterLabel)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) { Button("完成") { confirmLeave = true } }
         }
         .safeAreaInset(edge: .bottom) {
@@ -598,6 +585,14 @@ struct MSResultsView: View {
 }
 
 extension MSResultsView {
+    var filterLabel: Text {
+        switch filter {
+        case .all: Text("筛选：全部")
+        case .success: Text("筛选：成功")
+        case .failed: Text("筛选：失败")
+        }
+    }
+
     @ViewBuilder var filterOptions: some View {
         Text("全部").tag(Filter.all)
         Text("成功").tag(Filter.success)
@@ -617,6 +612,8 @@ struct MSItemRow: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     let item: MSItem
     let showShare: Bool
+    @ScaledMetric(relativeTo: .title2) private var thumbSize: CGFloat = 32
+    @ScaledMetric(relativeTo: .title2) private var statusSize: CGFloat = 20
 
     private var texts: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -629,10 +626,13 @@ struct MSItemRow: View {
         Group {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .center) {
-                        MSPlaceholderThumb(size: 32)
+                    HStack(alignment: .top) {
+                        MSPlaceholderThumb(size: min(thumbSize, 64))
                         Spacer()
-                        if !isShareable { trailing.font(.system(size: 22)) }
+                        if !isShareable {
+                            trailing.font(.system(size: min(statusSize, 40)))
+                                .frame(minWidth: min(statusSize, 40), minHeight: min(statusSize, 40))
+                        }
                     }
                     texts.frame(maxWidth: .infinity, alignment: .leading)
                     if isShareable { trailing }
@@ -666,7 +666,9 @@ struct MSItemRow: View {
     @ViewBuilder private var trailing: some View {
         switch item.status {
         case .waiting: Image(systemName: "clock").foregroundStyle(.secondary).accessibilityHidden(true)
-        case .converting: ProgressView()
+        case .converting:
+            // ProgressView ignores font size, so scale it to match the status icon at accessibility sizes.
+            ProgressView().scaleEffect(typeSize.isAccessibilitySize ? min(statusSize, 40) / 20 : 1)
         case .failed: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red).accessibilityHidden(true)
         case .skipped: Image(systemName: "minus.circle").foregroundStyle(.secondary).accessibilityHidden(true)
         case .done:
