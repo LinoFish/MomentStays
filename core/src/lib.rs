@@ -20,6 +20,7 @@ pub mod apple_hdr;
 pub mod binary;
 pub mod capi;
 pub mod cover;
+pub mod engine;
 pub mod ffi;
 pub mod files;
 pub mod format;

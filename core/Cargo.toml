@@ -18,11 +18,16 @@ path = "src/bin/momentstays-core.rs"
 name = "momentstays-convert"
 path = "src/bin/momentstays-convert.rs"
 
+[[bin]]
+name = "momentstays-driver"
+path = "src/bin/momentstays-driver.rs"
+
 [dependencies]
 md-5 = "0.10"
 serde_json = { version = "1", features = ["preserve_order"] }
 memmap2 = "0.9"
 memchr = "2"
+libc = "0.2"
 base64 = "0.22"
 sha2 = "0.10"
 

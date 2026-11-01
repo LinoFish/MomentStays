@@ -52,6 +52,10 @@ pub struct CoverMatch {
     /// Distance between the recorded time and the frame, microseconds
     /// (None for a frame-number cover).
     pub error_us: Option<i64>,
+    /// The recorded time mapped onto the track's media timeline,
+    /// microseconds (through the edit list for "presentation-edit-list";
+    /// None for a frame-number cover).
+    pub mapped_us: Option<i64>,
 }
 
 /// A verified Live Photo pair.
@@ -243,12 +247,12 @@ pub fn resolve_cover_in(
         (d > 0).then_some(d)
     };
 
-    let (frame, label, error_us) = match cover {
+    let (frame, label, error_us, mapped_us) = match cover {
         Cover::Frame(f) => {
             if f < 0 || f as usize >= sorted.len() {
                 return fail_as(ErrorKind::Cover, "封面帧号超出视频样本范围");
             }
-            (f as usize, "frame", None)
+            (f as usize, "frame", None, None)
         }
         Cover::Time(us) => {
             if us < 0 {
@@ -293,7 +297,7 @@ pub fn resolve_cover_in(
                     }
                 }
             }
-            let mut matches: Vec<(usize, &'static str, i128)> = Vec::new();
+            let mut matches: Vec<(usize, &'static str, i128, i128)> = Vec::new();
             for (c, label) in candidates {
                 let mut best: Option<(i128, usize)> = None;
                 let mut tie = false;
@@ -315,13 +319,19 @@ pub fn resolve_cover_in(
                     continue;
                 }
                 if !matches.iter().any(|m| m.0 == i) {
-                    matches.push((i, label, diff));
+                    matches.push((i, label, diff, c));
                 }
             }
             match matches.len() {
                 1 => {
-                    let (i, label, diff) = matches[0];
-                    (i, label, Some(round_div(diff, ts * mts) as i64))
+                    let (i, label, diff, c) = matches[0];
+                    // c is track ticks * 1e6 * movie_ts: microseconds = c / (ts * mts).
+                    (
+                        i,
+                        label,
+                        Some(round_div(diff, ts * mts) as i64),
+                        Some(round_div(c, ts * mts) as i64),
+                    )
                 }
                 0 => return fail_as(ErrorKind::Cover, "封面时间不在视频媒体时间线或编辑列表范围内；不自动改用其他帧"),
                 _ => {
@@ -374,6 +384,7 @@ pub fn resolve_cover_in(
         frame_time_us: round_div(pts * 1_000_000, ts) as i64,
         marker_us,
         error_us,
+        mapped_us,
     })
 }
 

@@ -7,6 +7,16 @@ pub struct Response {
     still: Vec<u8>,
 }
 
+impl Response {
+    /// A response carrying only JSON (slot 0).
+    pub(crate) fn json(value: serde_json::Value) -> Self {
+        Response {
+            json: value.to_string().into_bytes(),
+            still: vec![],
+        }
+    }
+}
+
 fn error(message: &str) -> Response {
     Response {
         json: json!({"error": message}).to_string().into_bytes(),

@@ -448,6 +448,39 @@ impl Plan {
     }
 }
 
+/// Swift `AndroidExport.assemble` (JPEG path): the XMP always records the
+/// cover time, and Huawei additionally gets the `LIVE_` tail with the cover
+/// frame number. Read-back checks the frame for Huawei, the time otherwise.
+pub fn plan_swift(
+    still: &[u8],
+    video: &[u8],
+    time: i64,
+    frame: i64,
+    target: Vendor,
+) -> Result<Plan> {
+    let aux = jpeg::auxiliary(still)?;
+    if aux.len() > 2 {
+        return fail_as(
+            ErrorKind::Unsupported,
+            "动态照片含多个辅助 JPEG，无法安全建立目录",
+        );
+    }
+    let gain_len = aux.get(1).map(|r| r.len()).unwrap_or(0);
+    let head = build_still(still, target, Some(time), video.len(), gain_len)?;
+    let (tail, cover) = match target {
+        Vendor::Samsung => (samsung_sef(head.len(), video.len())?, Cover::Time(time)),
+        Vendor::Huawei => (huawei_tail(frame, video.len())?, Cover::Frame(frame)),
+        _ => (Vec::new(), Cover::Time(time)),
+    };
+    Ok(Plan {
+        image_len: head.len(),
+        head,
+        tail,
+        cover,
+        label: "安卓",
+    })
+}
+
 /// Plan a vendor JPEG Motion Photo for `still` + `video` (borrowed; nothing
 /// is copied but the rewritten still). Same refusals as [`write`].
 pub fn plan(still: &[u8], video: &[u8], cover: Cover, target: Vendor) -> Result<Plan> {

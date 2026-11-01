@@ -191,7 +191,7 @@ fn maybe_edts(d: &[u8], trak: &BoxRef, movie_ts: usize) -> Result<Option<Vec<u8>
 /// The tracks a remux keeps: video track `video_index` (among video tracks)
 /// and every audio track, in file order. Other tracks (Google mett, hint,
 /// text, still-image-time) are dropped.
-fn kept_tracks(movie: &Movie, video_index: usize) -> Vec<&mp4::Track> {
+fn kept_tracks(movie: &Movie, video_index: usize, audio: bool) -> Vec<&mp4::Track> {
     let mut video_seen = 0usize;
     movie
         .tracks
@@ -201,20 +201,25 @@ fn kept_tracks(movie: &Movie, video_index: usize) -> Vec<&mp4::Track> {
                 video_seen += 1;
                 video_seen - 1 == video_index
             }
-            "soun" => true,
+            "soun" => audio,
             _ => false,
         })
         .collect()
 }
 
-fn parse_tracks(d: &[u8], movie: &Movie, video_index: usize) -> Result<(Vec<TrackParts>, u32)> {
+fn parse_tracks(
+    d: &[u8],
+    movie: &Movie,
+    video_index: usize,
+    audio: bool,
+) -> Result<(Vec<TrackParts>, u32)> {
     let movie_ts = movie.timescale as usize;
     let mut kept: Vec<TrackParts> = Vec::new();
     let mut max_track_id = 0u32;
     if movie.video(video_index).is_err() {
         return fail_as(ErrorKind::InvalidArgument, "视频没有所选的视频轨");
     }
-    for track in kept_tracks(movie, video_index) {
+    for track in kept_tracks(movie, video_index, audio) {
         let (trak, table) = (&track.trak, &track.samples);
         let tkhd = only(d, trak, b"tkhd", "tkhd")?;
         let mdia = only(d, trak, b"mdia", "mdia")?;
@@ -756,7 +761,21 @@ pub fn remux_mov(
     identifier: Option<&str>,
     mett_cover_us: Option<i64>,
 ) -> Result<(Vec<u8>, Movie)> {
-    let (mut tracks, mut max_track_id) = parse_tracks(data, movie, video_index)?;
+    remux_mov_with(data, movie, video_index, identifier, mett_cover_us, true)
+}
+
+/// [`remux_mov`] with a choice to drop the audio tracks (`audio: false`
+/// gives a silent movie of the one video track, like Swift
+/// `exportAuxiliary`).
+pub fn remux_mov_with(
+    data: &[u8],
+    movie: &Movie,
+    video_index: usize,
+    identifier: Option<&str>,
+    mett_cover_us: Option<i64>,
+    audio: bool,
+) -> Result<(Vec<u8>, Movie)> {
+    let (mut tracks, mut max_track_id) = parse_tracks(data, movie, video_index, audio)?;
     let meta = identifier.map(content_identifier_meta);
     if let Some(cover) = mett_cover_us {
         tracks.push(mett_track_parts(max_track_id + 1, cover)?);
@@ -774,7 +793,7 @@ pub fn remux_mov(
     )?;
     // The added still-image-time track is not a source track and is ignored.
     let out_movie = Movie::parse(&out)?;
-    verify(data, movie, video_index, &out, &out_movie)?;
+    verify(data, movie, video_index, audio, &out, &out_movie)?;
     Ok((out, out_movie))
 }
 
@@ -799,7 +818,7 @@ pub fn remux_mp4(data: &[u8], movie: &Movie) -> Result<Vec<u8>> {
     if count("vide") != 1 || count("soun") > 1 {
         return fail_as(ErrorKind::Unsupported, "实况视频轨道布局不受支持");
     }
-    let (tracks, max_track_id) = parse_tracks(data, movie, 0)?;
+    let (tracks, max_track_id) = parse_tracks(data, movie, 0, true)?;
     let mut ftyp_payload = b"mp42".to_vec();
     ftyp_payload.extend(u32b(0));
     ftyp_payload.extend(b"mp42");
@@ -811,7 +830,7 @@ pub fn remux_mp4(data: &[u8], movie: &Movie) -> Result<Vec<u8>> {
         bx(b"ftyp", &ftyp_payload),
         data,
     )?;
-    verify(data, movie, 0, &out, &Movie::parse(&out)?)?;
+    verify(data, movie, 0, true, &out, &Movie::parse(&out)?)?;
     Ok(out)
 }
 
@@ -910,6 +929,7 @@ pub fn check_remux(source: &[u8], output: &[u8], video_index: usize) -> Result<(
         source,
         &Movie::parse(source)?,
         video_index,
+        true,
         output,
         &Movie::parse(output)?,
     )
@@ -919,12 +939,13 @@ fn verify(
     src: &[u8],
     src_movie: &Movie,
     video_index: usize,
+    audio: bool,
     out: &[u8],
     out_movie: &Movie,
 ) -> Result<()> {
-    let s_tracks = kept_tracks(src_movie, video_index);
+    let s_tracks = kept_tracks(src_movie, video_index, audio);
     // The output holds only the selected video track, so it is index 0 there.
-    let o_tracks = kept_tracks(out_movie, 0);
+    let o_tracks = kept_tracks(out_movie, 0, audio);
     if s_tracks.len() != o_tracks.len() {
         return fail_as(ErrorKind::VerifyFailed, "重封装校验失败：轨道数不同");
     }
@@ -958,7 +979,7 @@ fn verify(
 
 /// Track kinds kept by remux, for callers that need a summary.
 pub fn kept_handlers(data: &[u8], video_index: usize) -> Result<Vec<String>> {
-    let (tracks, _) = parse_tracks(data, &Movie::parse(data)?, video_index)?;
+    let (tracks, _) = parse_tracks(data, &Movie::parse(data)?, video_index, true)?;
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for t in tracks {
@@ -967,4 +988,12 @@ pub fn kept_handlers(data: &[u8], video_index: usize) -> Result<Vec<String>> {
         }
     }
     Ok(out)
+}
+
+/// Track id and display size (16.16 fixed point, as floats) from a track's
+/// `tkhd`, like AVFoundation's `trackID` and `naturalSize`.
+pub fn track_header(d: &[u8], trak: &BoxRef) -> Result<(u32, f64, f64)> {
+    let tkhd = only(d, trak, b"tkhd", "tkhd")?;
+    let (id, width, height, ..) = parse_tkhd(d, &tkhd)?;
+    Ok((id, width as f64 / 65536.0, height as f64 / 65536.0))
 }

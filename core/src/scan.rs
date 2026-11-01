@@ -168,7 +168,7 @@ fn identity_from(make: String, model: String, format: &str) -> Identity {
 /// ISO 21496-1 urn, in the still or any MPF auxiliary image. Works over a
 /// precomputed segment list (perf item 3): the primary image reuses `segs`;
 /// only MPF auxiliary images (separate small slices) get fresh walks.
-fn has_iso_from_segments(still: &[u8], segs: &[jpeg::Segment]) -> Result<bool> {
+pub(crate) fn has_iso_from_segments(still: &[u8], segs: &[jpeg::Segment]) -> Result<bool> {
     const ISO_URN: &[u8] = b"urn:iso:std:iso:ts:21496:-1\0";
     let mut images: Vec<&[u8]> = vec![still];
     for r in pyjpeg::mpf_images_from_segments(still, segs)?
@@ -428,4 +428,10 @@ pub fn scan_row(data: &[u8]) -> ScanRow {
         }
         Err(e) => error_row(data, &e),
     }
+}
+
+/// Swift `PhotoHDR.hasISO`: an ISO 21496-1 gain-map marker in the still or
+/// any of its MPF images (JPEG only).
+pub fn has_iso(still: &[u8]) -> Result<bool> {
+    has_iso_from_segments(still, &jpeg::segments(still)?)
 }
