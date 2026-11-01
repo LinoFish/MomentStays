@@ -19,6 +19,7 @@
 pub mod binary;
 pub mod capi;
 pub mod cover;
+pub mod ffi;
 pub mod files;
 pub mod format;
 pub mod hdr;
