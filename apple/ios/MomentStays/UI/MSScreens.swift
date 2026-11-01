@@ -326,6 +326,7 @@ struct MSScanView: View {
             Section {
                 if scanning {
                     Text("已找到 \(found) 张照片，扫描结束后可选择。")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
