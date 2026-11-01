@@ -423,78 +423,46 @@ fn ffprobe_clean_packet_counts(
     Some(counts)
 }
 
-/// Regression for fuzzer finds: the box walk tolerates damage after
-/// the needed content (trailing dust, a bogus trailing header, a cut
-/// udta tail, a corrupt size on a complete final box), while damage
-/// to needed content still fails at content validation.
+/// Damage after the needed content is still damage: the default walk and every
+/// reader built on it reject it, and only the explicit tolerant walk (used by
+/// `recovery`) reports it. Damage to needed tables fails either way.
 #[test]
-fn trailing_damage_ignored_but_damaged_tables_still_fail() {
+fn damaged_framing_is_rejected_by_default_and_reported_by_the_tolerant_walk() {
+    use mp4::{boxes_with_mode, BoxParseMode};
     let mp4 = real_mp4();
-    let base: Vec<usize> = mp4::sample_tables(&mp4)
-        .unwrap()
-        .iter()
-        .map(|t| t.samples.len())
-        .collect();
-    for dust in 1..8 {
+    let boxes = mp4::boxes(&mp4, 0, mp4.len()).unwrap();
+    assert!(mp4::sample_tables(&mp4).is_ok());
+    let mut damaged: Vec<(String, Vec<u8>)> = Vec::new();
+    for dust in [1usize, 7, 20] {
         let mut v = mp4.clone();
         v.extend(std::iter::repeat_n(0xAB, dust));
-        let got: Vec<usize> = mp4::sample_tables(&v)
-            .unwrap()
-            .iter()
-            .map(|t| t.samples.len())
-            .collect();
-        assert_eq!(got, base, "{dust} trailing bytes ignored");
+        damaged.push((format!("{dust} trailing bytes"), v));
     }
-    // 20 trailing bytes with a bogus huge size: ignored, not an error.
-    let mut v = mp4.clone();
-    v.extend(std::iter::repeat_n(0xAB, 20));
-    let got: Vec<usize> = mp4::sample_tables(&v)
-        .unwrap()
-        .iter()
-        .map(|t| t.samples.len())
-        .collect();
-    assert_eq!(got, base, "trailing bogus box ignored");
-    // Cutting 31 bytes off the file (udta tail only, mirroring fuzz
-    // iter 18): sample tables are intact, so parsing still succeeds.
+    // Cut off the tail of the last box (the fuzz iter-18 shape).
     let mut cut = mp4.clone();
     cut.truncate(mp4.len() - 31);
-    let got: Vec<usize> = mp4::sample_tables(&cut)
-        .unwrap()
-        .iter()
-        .map(|t| t.samples.len())
-        .collect();
-    assert_eq!(got, base, "cut udta tail still parses");
-    // Cutting 100 bytes eats 2 bytes off stbl's last child through the
-    // chain of clamps: a needed table is truncated, must fail.
-    let mut cut2 = mp4.clone();
-    cut2.truncate(mp4.len() - 100);
-    assert!(
-        mp4::sample_tables(&cut2).is_err(),
-        "cut into stbl tail still fails"
-    );
-    // A corrupt size on the complete final box: clamped to file end,
-    // content is complete, so parsing still succeeds.
-    let moov_at = mp4::boxes(&mp4, 0, mp4.len())
-        .unwrap()
-        .into_iter()
-        .find(|b| b.is(b"moov"))
-        .unwrap()
-        .start;
+    damaged.push(("cut tail".into(), cut));
+    // An oversized length on the last box.
     let mut bad = mp4.clone();
-    bad[moov_at..moov_at + 4].copy_from_slice(&0xFFFF_FFFFu32.to_be_bytes());
-    let got: Vec<usize> = mp4::sample_tables(&bad)
-        .unwrap()
-        .iter()
-        .map(|t| t.samples.len())
-        .collect();
-    assert_eq!(got, base, "overrunning final box size clamped");
-    // Cutting deep into stbl: needed tables are gone, must fail.
+    let last = boxes.last().unwrap().start;
+    bad[last..last + 4].copy_from_slice(&0xFFFF_FFFFu32.to_be_bytes());
+    damaged.push(("oversized final length".into(), bad));
+    for (name, input) in &damaged {
+        assert!(
+            mp4::boxes(input, 0, input.len()).is_err(),
+            "{name}: strict walk"
+        );
+        assert!(
+            mp4::sample_tables(input).is_err(),
+            "{name}: sample tables must not read a damaged container"
+        );
+        let walk = boxes_with_mode(input, 0, input.len(), BoxParseMode::Tolerant).unwrap();
+        assert!(!walk.complete, "{name}: tolerant walk flags the damage");
+    }
+    // Needed tables cut away: fails regardless of mode.
     let mut deep = mp4.clone();
     deep.truncate(1600);
-    assert!(
-        mp4::sample_tables(&deep).is_err(),
-        "cut into stbl still fails"
-    );
+    assert!(mp4::sample_tables(&deep).is_err(), "cut into stbl fails");
 }
 
 #[test]
@@ -561,7 +529,9 @@ fn mp4_mutations_agree_with_ffprobe() {
                     disagreements.push((i, got, want));
                 }
             }
-            Ok(Err(_)) => disagreements.push((i, vec![usize::MAX], want)),
+            // A strict structural rejection is intentional even when ffprobe
+            // tolerates the damaged boxes: compare counts on accepted inputs only.
+            Ok(Err(_)) => {}
             Err(_) => panic!(
                 "fuzz panic: sample_tables on mp4 iter={i} len={} head={}",
                 input.len(),

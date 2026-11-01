@@ -20,6 +20,30 @@ impl BoxRef {
     }
 }
 
+/// How strictly a box walk treats damaged framing.
+///
+/// `Strict` is the default for every production read and every rewrite: any
+/// damaged header or length is an error, so nothing is silently skipped or
+/// clipped. `Tolerant` is an explicit diagnostic: it keeps what it can frame
+/// and reports whether anything was skipped. A tolerant walk is never
+/// evidence that a file is safe to rewrite or convert losslessly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoxParseMode {
+    Strict,
+    Tolerant,
+}
+
+/// Result of [`boxes_with_mode`].
+#[derive(Clone, Debug)]
+pub struct BoxWalk {
+    pub boxes: Vec<BoxRef>,
+    /// False when damaged bytes were skipped or a declared box was clipped.
+    /// Even `true` only describes box framing, not sample or payload validity.
+    pub complete: bool,
+}
+
+/// Boxes in `start..end`, strictly: every box must have a whole header and a
+/// length that fits inside the range.
 pub fn boxes(d: &[u8], start: usize, end: usize) -> Result<Vec<BoxRef>> {
     if end > d.len() || start > end {
         return fail("MP4 元数据范围无效");
@@ -27,25 +51,58 @@ pub fn boxes(d: &[u8], start: usize, end: usize) -> Result<Vec<BoxRef>> {
     let mut out = Vec::new();
     let mut p = start;
     while p < end {
-        // Robust walk: parse every box whose header fits, clamp a box
-        // whose declared size overruns the range to the range end, and
-        // stop at anything else unparseable (dust, nonsense size).
-        // Callers validate the presence and content of the boxes they
-        // need (every caller does: exactly-one checks for required
-        // boxes, layout requirements, first-box checks, table bounds),
-        // so tolerance here cannot produce a wrong success: damage to
-        // needed content still fails at content validation, while
-        // damage after the needed content (trailing bytes, a cut
-        // udta, a corrupt size on a complete final box) no longer
-        // fails a parse whose result does not depend on it. This
-        // matches what ffprobe tolerates on the same inputs.
         if end - p < 8 {
+            return fail("MP4 元数据头被截断");
+        }
+        let mut size = be(d, p, 4)?;
+        let mut header = 8;
+        if size == 1 {
+            if end - p < 16 {
+                return fail("MP4 扩展数据头被截断");
+            }
+            size = be(d, p + 8, 8)?;
+            header = 16;
+        } else if size == 0 {
+            size = end - p;
+        }
+        if size < header || size > end - p {
+            return fail("MP4 元数据长度无效");
+        }
+        out.push(BoxRef {
+            ty: [d[p + 4], d[p + 5], d[p + 6], d[p + 7]],
+            start: p,
+            payload: p + header,
+            end: p + size,
+        });
+        p += size;
+    }
+    Ok(out)
+}
+
+/// Walk with an explicit recovery policy; see [`BoxParseMode`].
+pub fn boxes_with_mode(d: &[u8], start: usize, end: usize, mode: BoxParseMode) -> Result<BoxWalk> {
+    if mode == BoxParseMode::Strict {
+        return boxes(d, start, end).map(|boxes| BoxWalk {
+            boxes,
+            complete: true,
+        });
+    }
+    if end > d.len() || start > end {
+        return fail("MP4 元数据范围无效");
+    }
+    let mut out = Vec::new();
+    let mut p = start;
+    let mut complete = true;
+    while p < end {
+        if end - p < 8 {
+            complete = false;
             break;
         }
         let mut size = be(d, p, 4)?;
         let mut header = 8;
         if size == 1 {
             if end - p < 16 {
+                complete = false;
                 break;
             }
             size = be(d, p + 8, 8)?;
@@ -54,9 +111,15 @@ pub fn boxes(d: &[u8], start: usize, end: usize) -> Result<Vec<BoxRef>> {
             size = end - p;
         }
         if size < header {
+            complete = false;
             break;
         }
-        let box_end = if size > end - p { end } else { p + size };
+        let box_end = if size > end - p {
+            complete = false;
+            end
+        } else {
+            p + size
+        };
         out.push(BoxRef {
             ty: [d[p + 4], d[p + 5], d[p + 6], d[p + 7]],
             start: p,
@@ -65,7 +128,10 @@ pub fn boxes(d: &[u8], start: usize, end: usize) -> Result<Vec<BoxRef>> {
         });
         p = box_end;
     }
-    Ok(out)
+    Ok(BoxWalk {
+        boxes: out,
+        complete,
+    })
 }
 
 fn child(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<BoxRef> {

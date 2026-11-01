@@ -34,6 +34,7 @@ pub mod output;
 pub mod pyjpeg;
 pub mod pymotion;
 pub mod pyxml;
+pub mod recovery;
 pub mod remux;
 pub mod scan;
 pub mod tiff;

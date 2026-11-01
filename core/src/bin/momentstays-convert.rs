@@ -60,7 +60,8 @@ fn usage() -> String {
         "usage:",
         "  momentstays-convert vendor <input> <output> --to <vendor> [--cover-time <us> | --cover-frame <n>] [--time-domain auto|media|presentation]",
         "  momentstays-convert motion-to-live <motion.jpg|heic> -o <目录> [--uuid <uuid>] [--time-domain auto|media|presentation] [--video-index <n>]",
-        "  momentstays-convert to-live <video.mp4> --uuid <uuid> -o <out.mov> [--video-index <n>] [--cover-time-us <us>]",
+        "  momentstays-convert to-live <video.mp4> --uuid <uuid> -o <out.mov> [--video-index <n>] [--cover-time-us <us>] [--recover-boxes]",
+        "  momentstays-convert boxes <video.mp4> [--strict] — 容错解析并报告容器警告；--strict 拒绝结构异常",
         "  momentstays-convert to-motion <still.jpg> <movie.mov> --to <vendor> -o <out.jpg> [--cover-time <us> | --cover-frame <n> | --cover-from-mett] [--time-domain auto|media|presentation]",
         "  momentstays-convert scan <文件或目录> [--jobs N] — Swift 对齐的扫描行（NativeDriver scan 行键：relative/motion/hdr/cover/manufacturer/manufacturer_detail，另含 detail/confirmed_static/source；默认并行，--jobs 1 串行）",
         "vendors: google, xiaomi, honor (= google layout), samsung, huawei, oppo, vivo",
@@ -313,6 +314,7 @@ fn cmd_to_live(args: &[String]) -> Result<()> {
     let mut o = Opts {
         rest: args.to_vec(),
     };
+    let recover = o.has("--recover-boxes");
     let uuid = o
         .take("--uuid")
         .ok_or_else(|| err("to-live 需要 --uuid <uuid>"))?;
@@ -337,7 +339,28 @@ fn cmd_to_live(args: &[String]) -> Result<()> {
     output::ensure_distinct(&[Path::new(&o.rest[0])], Path::new(&output))?;
     let mapped =
         Mapped::open(Path::new(&o.rest[0])).map_err(|e| err(format!("读取输入失败: {e}")))?;
-    let data = mapped.bytes();
+    // Opt-in recovery: a bounded fix of the last box's length only. It shows
+    // its warnings and needs an explicit "yes"; EOF, blank and any other
+    // answer refuse. It never replaces an existing output.
+    let recovered: Vec<u8>;
+    let data: &[u8] = if recover {
+        let candidate = momentstays_core::recovery::prepare_conversion(mapped.bytes())?;
+        for warning in &candidate.warnings {
+            eprintln!("警告：{warning}");
+        }
+        eprintln!("容错转换仍可能失败；不会覆盖源文件。是否继续尝试？输入 yes 确认：");
+        let mut answer = String::new();
+        std::io::stdin()
+            .read_line(&mut answer)
+            .map_err(|e| err(e.to_string()))?;
+        recovered = candidate.approve(answer.trim().eq_ignore_ascii_case("yes"))?;
+        if Path::new(&output).exists() {
+            return Err(err("容错转换输出已存在，未覆盖"));
+        }
+        &recovered
+    } else {
+        mapped.bytes()
+    };
     // The remux functions verify sample by sample before returning.
     let out = match cover_time_us {
         Some(t) => remux::remux_to_mov_with_identifier_and_mett(data, video_index, &uuid, t)?,
@@ -352,6 +375,31 @@ fn cmd_to_live(args: &[String]) -> Result<()> {
     if cover_time_us.is_none() {
         eprintln!("警告：still-image-time 标记尚未写入（未传 --cover-time-us），输出是有效且带内容标识的 MOV，尚不是完整的 Live Photo。");
     }
+    Ok(())
+}
+
+/// Report the box framing of a video, strictly (`--strict`, errors on any
+/// damage) or tolerantly (default: keeps what it can frame and warns).
+fn cmd_boxes(args: &[String]) -> Result<()> {
+    let mut opts = Opts {
+        rest: args.to_vec(),
+    };
+    let strict = opts.has("--strict");
+    if opts.rest.len() != 1 {
+        return Err(err("boxes 需要 <video.mp4> [--strict]"));
+    }
+    let mapped =
+        Mapped::open(Path::new(&opts.rest[0])).map_err(|e| err(format!("读取输入失败: {e}")))?;
+    let mode = if strict {
+        mp4::BoxParseMode::Strict
+    } else {
+        mp4::BoxParseMode::Tolerant
+    };
+    let (boxes, warnings) = momentstays_core::recovery::inspect_boxes(mapped.bytes(), mode)?;
+    println!(
+        "{}",
+        json!({"warnings": warnings, "boxes": boxes.iter().map(|b| json!({"type": b.type_str(), "start": b.start, "end": b.end})).collect::<Vec<_>>()})
+    );
     Ok(())
 }
 
@@ -556,6 +604,7 @@ fn run() -> Result<()> {
         "motion-to-live" => cmd_motion_to_live(&args[1..]),
         "to-live" => cmd_to_live(&args[1..]),
         "to-motion" => cmd_to_motion(&args[1..]),
+        "boxes" => cmd_boxes(&args[1..]),
         "scan" => cmd_scan(&args[1..]),
         other => Err(err(format!("未知命令: {other}"))),
     }
