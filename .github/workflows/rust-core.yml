@@ -14,5 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --check
+        working-directory: core
+      - run: cargo clippy --release --all-targets -- -D warnings
+        working-directory: core
       - run: cargo test --release
         working-directory: core

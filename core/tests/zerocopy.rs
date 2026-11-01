@@ -12,16 +12,19 @@ use momentstays_core::format;
 use momentstays_core::heifwrite::assemble_heic;
 use momentstays_core::jpeg;
 use momentstays_core::model::Vendor;
-use momentstays_core::compat;
-use momentstays_core::compat::motion::XMP_HDR;
+use momentstays_core::pyjpeg;
+use momentstays_core::pymotion::XMP_HDR;
 use std::borrow::Cow;
 use std::fs;
 use std::path::PathBuf;
 
 fn real_mp4() -> Vec<u8> {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64");
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64");
     let text = fs::read_to_string(path).unwrap();
-    base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap()
 }
 
 fn seg(marker: u8, payload: &[u8]) -> Vec<u8> {
@@ -37,7 +40,9 @@ fn read_fixture(name: &str) -> Vec<u8> {
         .join("tests/fixtures-pycli")
         .join(format!("{name}.b64"));
     let text = fs::read_to_string(path).unwrap();
-    base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap()
 }
 
 /// Single-image Google motion JPEG, no MPF segment: SOI, Exif,
@@ -65,7 +70,7 @@ fn single_image_motion_jpeg() -> Vec<u8> {
     tiff.extend(8u32.to_be_bytes());
     tiff.extend(0u16.to_be_bytes());
     tiff.extend(0u32.to_be_bytes());
-    let mut exif = compat::jpeg::EXIF_HDR.to_vec();
+    let mut exif = pyjpeg::EXIF_HDR.to_vec();
     exif.extend(tiff);
     let mut v = vec![0xFF, 0xD8];
     v.extend(seg(0xE1, &exif));
@@ -83,21 +88,35 @@ fn heic_still_is_borrowed() {
     let video = real_mp4();
     let motion = assemble_heic(&still, &video, Vendor::Google, 1_420_000).unwrap();
     let p = format::parse(&motion).expect("motion heic parses");
-    assert!(matches!(p.still, Cow::Borrowed(_)), "HEIC still must borrow");
+    assert!(
+        matches!(p.still, Cow::Borrowed(_)),
+        "HEIC still must borrow"
+    );
     // The still boundary is the mpvd box start: assemble_heic
     // repacks the still (rewritten XMP), so the parsed-back still
     // is the repacked image, not the `build_still` input. Google
     // output is image + 8-byte mpvd header + video, no tail.
     let boundary = motion.len() - 8 - video.len();
-    assert_eq!(&p.still[..], &motion[..boundary], "borrowed slice is the still");
+    assert_eq!(
+        &p.still[..],
+        &motion[..boundary],
+        "borrowed slice is the still"
+    );
 }
 
 #[test]
 fn jpeg_single_image_borrows_and_matches_rebuild() {
     let data = single_image_motion_jpeg();
     let p = format::parse(&data).expect("single-image motion parses");
-    assert!(matches!(p.still, Cow::Borrowed(_)), "single image, no MPF: must borrow");
-    assert_eq!(&p.still[..], &data[..p.video.start], "borrowed slice is the still");
+    assert!(
+        matches!(p.still, Cow::Borrowed(_)),
+        "single image, no MPF: must borrow"
+    );
+    assert_eq!(
+        &p.still[..],
+        &data[..p.video.start],
+        "borrowed slice is the still"
+    );
     // The borrow is only valid because the rebuild is identical.
     assert_eq!(
         &p.still[..],
@@ -111,7 +130,10 @@ fn jpeg_mpf_still_is_owned_but_matches_rebuild() {
     let data = read_fixture("ultra.jpg");
     let p = format::parse(&data).expect("ultra parses");
     assert!(p.ultra, "fixture has a gain map");
-    assert!(matches!(p.still, Cow::Owned(_)), "MPF gain map forces a rebuild");
+    assert!(
+        matches!(p.still, Cow::Owned(_)),
+        "MPF gain map forces a rebuild"
+    );
     assert_eq!(
         &p.still[..],
         &jpeg::static_only(&data[..p.video.start]).unwrap()[..],

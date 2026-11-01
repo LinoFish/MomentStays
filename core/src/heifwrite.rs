@@ -16,26 +16,14 @@
 
 use crate::format;
 use crate::heif;
-use crate::model::Vendor;
+use crate::model::{Cover, Plan, Vendor};
 use crate::mp4::{self, BoxRef};
-use crate::compat;
-use crate::compat::motion::{visit_mut, CAMERA, CONTAINER, ITEM, RDF, XMPMETA};
-use crate::compat::xml::Element;
-use crate::{fail, Result};
+use crate::mp4::{bx, full};
+use crate::pyjpeg;
+use crate::pymotion::{visit_mut, CAMERA, CONTAINER, ITEM, RDF, XMPMETA};
+use crate::pyxml::{self, Element};
+use crate::{fail, fail_as, ErrorKind, Result};
 use std::collections::HashSet;
-
-fn bx(t: &[u8; 4], payload: &[u8]) -> Vec<u8> {
-    let mut v = ((payload.len() + 8) as u32).to_be_bytes().to_vec();
-    v.extend(t);
-    v.extend(payload);
-    v
-}
-
-fn full(t: &[u8; 4], version: u8, flags: u32, payload: &[u8]) -> Vec<u8> {
-    let mut p = vec![version, ((flags >> 16) & 0xff) as u8, ((flags >> 8) & 0xff) as u8, (flags & 0xff) as u8];
-    p.extend(payload);
-    bx(t, &p)
-}
 
 fn be(v: u64, w: usize) -> Vec<u8> {
     v.to_be_bytes()[8 - w..].to_vec()
@@ -51,7 +39,11 @@ fn motion_doc_heic(time: i64, video_len: usize) -> Element {
     let mut desc = Element::new(RDF, "Description");
     desc.set_attr(CAMERA, "MotionPhoto", "1");
     desc.set_attr(CAMERA, "MotionPhotoVersion", "1");
-    desc.set_attr(CAMERA, "MotionPhotoPresentationTimestampUs", &time.to_string());
+    desc.set_attr(
+        CAMERA,
+        "MotionPhotoPresentationTimestampUs",
+        &time.to_string(),
+    );
     let mut dir = Element::new(CONTAINER, "Directory");
     let mut seq = Element::new(RDF, "Seq");
     let mut primary = Element::new(CONTAINER, "Item");
@@ -94,9 +86,6 @@ fn primary_id(still: &[u8], children: &[BoxRef]) -> Result<usize> {
         return fail("HEIC 主图引用无效");
     }
     let id_width = if still[pitm.payload] == 0 { 2 } else { 4 };
-    if pitm.end - pitm.payload < 4 + id_width {
-        return fail("HEIC 主图引用被截断");
-    }
     crate::binary::be(still, pitm.payload + 4, id_width)
 }
 
@@ -206,9 +195,6 @@ fn repack(
     }
     // `full` already adds the version/flags word: the meta payload is
     // exactly the children, no extra zero word.
-    if payload.len() > u32::MAX as usize - 8 || meta_children_out.len() > u32::MAX as usize - 12 {
-        return fail("HEIC 重写 box 超出 32 位长度范围");
-    }
     let mut out = prefix;
     out.extend(bx(b"mdat", &payload));
     out.extend(full(b"meta", 0, 0, &meta_children_out));
@@ -226,9 +212,10 @@ fn repack(
 /// be unchanged, like Swift's guard.
 pub fn write_xmp(still: &[u8], xmp: &[u8]) -> Result<Vec<u8>> {
     let layout = heif::layout(still)?;
-    let top_ok = layout.boxes.iter().all(|b| {
-        b.is(b"ftyp") || b.is(b"meta") || b.is(b"mdat") || b.is(b"free")
-    });
+    let top_ok = layout
+        .boxes
+        .iter()
+        .all(|b| b.is(b"ftyp") || b.is(b"meta") || b.is(b"mdat") || b.is(b"free"));
     if !top_ok {
         return fail("HEIC 含未知顶层结构，未冒险修改编码或私有引用");
     }
@@ -238,7 +225,7 @@ pub fn write_xmp(still: &[u8], xmp: &[u8]) -> Result<Vec<u8>> {
     let mut primary_descriptions: Vec<usize> = Vec::new();
     if let Some(iref) = children.iter().find(|b| b.is(b"iref")) {
         if iref.end - iref.payload < 4 || still[iref.payload] > 1 {
-            return fail("HEIC iref 版本不受支持");
+            return fail_as(ErrorKind::Unsupported, "HEIC iref 版本不受支持");
         }
         let width = if still[iref.payload] == 0 { 2 } else { 4 };
         for r in mp4::boxes(still, iref.payload + 4, iref.end)? {
@@ -262,9 +249,12 @@ pub fn write_xmp(still: &[u8], xmp: &[u8]) -> Result<Vec<u8>> {
         }
     }
     let mime: Vec<&heif::Item> = layout.items.iter().filter(|i| i.ty == "mime").collect();
-    let associated: Vec<&&heif::Item> = mime.iter().filter(|i| primary_descriptions.contains(&i.id)).collect();
+    let associated: Vec<&&heif::Item> = mime
+        .iter()
+        .filter(|i| primary_descriptions.contains(&i.id))
+        .collect();
     if associated.len() > 1 {
-        return fail("HEIC 主图有多份 XMP，未推测替换");
+        return fail_as(ErrorKind::Unsupported, "HEIC 主图有多份 XMP，未推测替换");
     }
     let selected = associated.first().copied().copied();
     let new_id = match selected {
@@ -281,16 +271,21 @@ pub fn write_xmp(still: &[u8], xmp: &[u8]) -> Result<Vec<u8>> {
             infe_entry.extend(be(new_id as u64, 4));
             infe_entry.extend([0u8, 0]);
             infe_entry.extend(b"mime\0application/rdf+xml\0\0");
-            repack(still, &layout, &[], Some((new_id, infe_entry, xmp.to_vec(), primary)))
+            repack(
+                still,
+                &layout,
+                &[],
+                Some((new_id, infe_entry, xmp.to_vec(), primary)),
+            )
         }
     }
 }
 
 fn strip_exif_hdr(v: &[u8]) -> Result<Vec<u8>> {
-    if !v.starts_with(compat::jpeg::EXIF_HDR) {
+    if !v.starts_with(pyjpeg::EXIF_HDR) {
         return fail("EXIF 标识结果缺少 Exif 头");
     }
-    Ok(v[compat::jpeg::EXIF_HDR.len()..].to_vec())
+    Ok(v[pyjpeg::EXIF_HDR.len()..].to_vec())
 }
 
 /// Swift `PhotoFormat.liveStill(uuid, updateIdentifier:true)` for HEIC,
@@ -311,9 +306,11 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
         return fail("不是 HEIC 文件");
     }
     let brand = &still[8..12];
-    if ![b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs", b"mif1", b"msf1"]
-        .iter()
-        .any(|b| brand == *b)
+    if ![
+        b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs", b"mif1", b"msf1",
+    ]
+    .iter()
+    .any(|b| brand == *b)
     {
         return fail("不是 HEIC 文件");
     }
@@ -325,14 +322,15 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
         }
     };
     let layout = heif::layout(&base)?;
-    let top_ok = layout.boxes.iter().all(|b| {
-        b.is(b"ftyp") || b.is(b"meta") || b.is(b"mdat") || b.is(b"free")
-    });
+    let top_ok = layout
+        .boxes
+        .iter()
+        .all(|b| b.is(b"ftyp") || b.is(b"meta") || b.is(b"mdat") || b.is(b"free"));
     if !top_ok {
         return fail("HEIC 含未知顶层结构，未冒险修改编码或私有引用");
     }
     let primary = primary_id(&base, &layout.children)?;
-    // Motion XMP strip: same key sets as `compat::motion::live_still_clean`.
+    // Motion XMP strip: same key sets as `pymotion::live_still_clean`.
     let motion_names = [
         "MotionPhoto",
         "MotionPhotoVersion",
@@ -357,7 +355,10 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
     for n in motion_names {
         motion.insert((CAMERA.to_string(), n.to_string()));
     }
-    for ns in ["http://ns.oplus.com/photos/1.0/camera/", "http://ns.vivo.com/photos/1.0/camera/"] {
+    for ns in [
+        "http://ns.oplus.com/photos/1.0/camera/",
+        "http://ns.vivo.com/photos/1.0/camera/",
+    ] {
         for n in vendor_names {
             motion.insert((ns.to_string(), n.to_string()));
         }
@@ -369,31 +370,34 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
         while end > 0 && raw[end - 1] == 0 {
             end -= 1;
         }
-        let mut root = compat::xml::parse(&raw[..end])?;
+        let mut root = pyxml::parse(&raw[..end])?;
         let mut touched = false;
         visit_mut(&mut root, &mut |el| {
             let before = el.attrib.len();
-            el.attrib.retain(|(n, l, _)| !motion.contains(&(n.clone(), l.clone())));
+            el.attrib
+                .retain(|(n, l, _)| !motion.contains(&(n.clone(), l.clone())));
             if el.attrib.len() != before {
                 touched = true;
             }
         });
-        let removed = compat::xml::remove_children_where(&mut root, &|child| {
+        let removed = pyxml::remove_children_where(&mut root, &|child| {
             motion.contains(&(child.ns.clone(), child.local.clone()))
         });
         if removed > 0 {
             touched = true;
         }
-        let removed = compat::xml::remove_children_where(&mut root, &|child| {
+        let removed = pyxml::remove_children_where(&mut root, &|child| {
             child.ns == RDF
                 && child.local == "li"
-                && compat::xml::values(child, ITEM, "Semantic").iter().any(|v| v == "MotionPhoto")
+                && pyxml::values(child, ITEM, "Semantic")
+                    .iter()
+                    .any(|v| v == "MotionPhoto")
         });
         if removed > 0 {
             touched = true;
         }
         if touched {
-            replacements.push((item.id, compat::xml::tostring(&root)));
+            replacements.push((item.id, pyxml::tostring(&root)));
         }
     }
     // MakerNote identifier inject (same TIFF surgery as the JPEG version).
@@ -401,7 +405,7 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
     let mut added = None;
     match exifs.len() {
         0 => {
-            let new_tiff = strip_exif_hdr(&compat::jpeg::exif_identifier(None, identifier)?)?;
+            let new_tiff = strip_exif_hdr(&pyjpeg::exif_identifier(None, identifier)?)?;
             let new_id = layout.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
             if new_id > u32::MAX as usize || layout.items.len() >= 4096 {
                 return fail("HEIC 项目数量超限");
@@ -424,40 +428,16 @@ pub fn live_still_heic(still: &[u8], identifier: &str) -> Result<Vec<u8>> {
                 return fail("HEIC EXIF TIFF 偏移越界");
             }
             let old_tiff = &raw[4 + off..];
-            let mut payload = compat::jpeg::EXIF_HDR.to_vec();
+            let mut payload = pyjpeg::EXIF_HDR.to_vec();
             payload.extend_from_slice(old_tiff);
-            let new_tiff = strip_exif_hdr(&compat::jpeg::exif_identifier(Some(&payload), identifier)?)?;
+            let new_tiff = strip_exif_hdr(&pyjpeg::exif_identifier(Some(&payload), identifier)?)?;
             let mut bytes = vec![0u8, 0, 0, 0];
             bytes.extend(new_tiff);
             replacements.push((exifs[0].id, bytes));
         }
-        _ => return fail("HEIC 有多份 EXIF 项目，未推测替换"),
+        _ => return fail_as(ErrorKind::Unsupported, "HEIC 有多份 EXIF 项目，未推测替换"),
     }
     repack(&base, &layout, &replacements, added)
-}
-
-fn samsung_sef(video_start: usize, length: usize) -> Result<Vec<u8>> {
-    if video_start > u32::MAX as usize || length > u32::MAX as usize {
-        return fail("三星 SEF 4 GiB 范围超限");
-    }
-    let tag: [u8; 4] = [0, 0, 0x30, 0x0a];
-    let mut record = tag.to_vec();
-    record.extend_from_slice(&16u32.to_le_bytes());
-    record.extend_from_slice(b"MotionPhoto_Data");
-    record.extend_from_slice(b"mpv2");
-    record.extend_from_slice(&(video_start as u32).to_be_bytes());
-    record.extend_from_slice(&(length as u32).to_be_bytes());
-    let mut directory = b"SEFH".to_vec();
-    directory.extend_from_slice(&107u32.to_le_bytes());
-    directory.extend_from_slice(&1u32.to_le_bytes());
-    directory.extend_from_slice(&tag);
-    directory.extend_from_slice(&(record.len() as u32).to_le_bytes());
-    directory.extend_from_slice(&(record.len() as u32).to_le_bytes());
-    let mut out = record;
-    out.extend_from_slice(&directory);
-    out.extend_from_slice(&(directory.len() as u32).to_le_bytes());
-    out.extend_from_slice(b"SEFT");
-    Ok(out)
 }
 
 /// Assemble a HEIC Motion Photo, mirroring Swift
@@ -467,34 +447,48 @@ fn samsung_sef(video_start: usize, length: usize) -> Result<Vec<u8>> {
 /// The output is validated by parsing it back: video bytes, still
 /// coding hash and cover time must all match.
 pub fn assemble_heic(still: &[u8], video: &[u8], vendor: Vendor, time: i64) -> Result<Vec<u8>> {
+    let plan = plan_heic(still, video, vendor, time)?;
+    let out = plan.concat(video);
+    plan.verify(&out, video)?;
+    Ok(out)
+}
+
+/// [`assemble_heic`] as a [`Plan`]: `head` is the rewritten still plus the
+/// `mpvd` box header, `tail` the Samsung SEF trailer (inside `mpvd`). The
+/// video is not copied.
+pub fn plan_heic(still: &[u8], video: &[u8], vendor: Vendor, time: i64) -> Result<Plan> {
     if vendor != Vendor::Google && vendor != Vendor::Samsung {
-        return fail("此厂商的 HEIC 动态封装尚无可验证方案；请选择 Google 或三星");
+        return fail_as(
+            ErrorKind::Unsupported,
+            "此厂商的 HEIC 动态封装尚无可验证方案；请选择 Google 或三星",
+        );
     }
     if time < 0 {
-        return fail("HEIC 封面时间无效");
+        return fail_as(ErrorKind::Cover, "HEIC 封面时间无效");
     }
     let doc = motion_doc_heic(time, video.len());
-    let image = write_xmp(still, &compat::xml::tostring(&doc))?;
-    let image_hash = heif::coding_hash(&image)?;
+    let image = write_xmp(still, &pyxml::tostring(&doc))?;
     let start = image.len() + 8;
     let tail = match vendor {
-        Vendor::Samsung => samsung_sef(start, video.len())?,
+        Vendor::Samsung => crate::model::samsung_sef(start, video.len())?,
         _ => Vec::new(),
     };
-    let mut mpvd_body = video.to_vec();
-    mpvd_body.extend_from_slice(&tail);
-    let mut out = image;
-    out.extend(bx(b"mpvd", &mpvd_body));
-    // Parse-back validation, like Swift's convert guards.
-    let back = format::parse(&out)?;
-    if back.video(&out) != video {
-        return fail("HEIC 封装读回校验失败：视频数据不同");
-    }
-    if heif::coding_hash(&back.still)? != image_hash {
-        return fail("HEIC 封装读回校验失败：图像编码数据不同");
-    }
-    if back.timestamp != Some(time) {
-        return fail("HEIC 封装读回校验失败：封面时间不同");
-    }
-    Ok(out)
+    // The mpvd size field is 32-bit: refuse instead of truncating it.
+    let mpvd_size = u32::try_from(8 + video.len() + tail.len()).map_err(|_| {
+        crate::Error::with_kind(
+            ErrorKind::Unsupported,
+            "HEIC 动态视频超过 4 GB，无法写入 32 位 mpvd",
+        )
+    })?;
+    let image_len = image.len();
+    let mut head = image;
+    head.extend_from_slice(&mpvd_size.to_be_bytes());
+    head.extend_from_slice(b"mpvd");
+    Ok(Plan {
+        head,
+        tail,
+        image_len,
+        cover: Cover::Time(time),
+        label: "HEIC ",
+    })
 }

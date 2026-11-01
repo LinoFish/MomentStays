@@ -17,20 +17,20 @@
 //!   exact; do not compare these times against edit-list-adjusted players.
 
 use crate::mp4::TrackSamples;
-use crate::{fail, Result};
+use crate::{fail, fail_as, ErrorKind, Result};
 
 /// The single video track of a file, or an error when there is none or more than one.
-pub fn video_track<'a>(tracks: &'a [TrackSamples]) -> Result<&'a TrackSamples> {
+pub fn video_track(tracks: &[TrackSamples]) -> Result<&TrackSamples> {
     let videos: Vec<&TrackSamples> = tracks.iter().filter(|t| t.handler == "vide").collect();
     match videos.len() {
-        0 => fail("视频没有视频轨，无法换算封面"),
+        0 => fail_as(ErrorKind::Cover, "视频没有视频轨，无法换算封面"),
         1 => Ok(videos[0]),
-        _ => fail("视频含多个视频轨，无法确定封面所在轨"),
+        _ => fail_as(ErrorKind::Cover, "视频含多个视频轨，无法确定封面所在轨"),
     }
 }
 
 /// Presentation times in ascending order, each paired with its decode-order index.
-fn sorted_presentation(track: &TrackSamples) -> Vec<(i64, usize)> {
+pub(crate) fn sorted_presentation(track: &TrackSamples) -> Vec<(i64, usize)> {
     let mut v: Vec<(i64, usize)> = track
         .samples
         .iter()
@@ -56,23 +56,24 @@ pub fn frame_to_time_us(track: &TrackSamples, frame: usize) -> Result<i64> {
     let sorted = sorted_presentation(track);
     let (t, _) = match sorted.get(frame) {
         Some(v) => v,
-        None => return fail("封面帧号超出视频样本范围"),
+        None => return fail_as(ErrorKind::Cover, "封面帧号超出视频样本范围"),
     };
     if *t < 0 {
-        return fail("封面帧的显示时间为负，无法换算");
+        return fail_as(ErrorKind::Cover, "封面帧的显示时间为负，无法换算");
     }
     let ts = track.timescale as i64;
     if ts <= 0 {
         return fail("视频时间尺度无效");
     }
     // Round (t * 1_000_000 / ts), Swift's `.rounded()` on non-negative values.
-    Ok((*t * 1_000_000 + ts / 2) / ts)
+    let us = (*t as i128 * 1_000_000 + ts as i128 / 2) / ts as i128;
+    i64::try_from(us).map_err(|_| crate::Error::with_kind(ErrorKind::Cover, "封面时间超出范围"))
 }
 
 /// Cover time in microseconds -> frame (presentation-sorted index).
 pub fn time_us_to_frame(track: &TrackSamples, time_us: i64) -> Result<usize> {
     if time_us < 0 {
-        return fail("封面时间为负，无法换算");
+        return fail_as(ErrorKind::Cover, "封面时间为负，无法换算");
     }
     let ts = track.timescale as i64;
     if ts <= 0 {
@@ -80,7 +81,7 @@ pub fn time_us_to_frame(track: &TrackSamples, time_us: i64) -> Result<usize> {
     }
     let sorted = sorted_presentation(track);
     if sorted.is_empty() {
-        return fail("视频没有样本，无法换算封面");
+        return fail_as(ErrorKind::Cover, "视频没有样本，无法换算封面");
     }
     // Compare in units of us * timescale to stay in integers:
     // |time_us * ts - pts * 1_000_000| <= duration * 1_000_000 / 2 + 2 * ts
@@ -102,14 +103,14 @@ pub fn time_us_to_frame(track: &TrackSamples, time_us: i64) -> Result<usize> {
     }
     let (diff, i) = best.unwrap();
     if best_count > 1 {
-        return fail("封面时间对应多个样本，存在歧义");
+        return fail_as(ErrorKind::Cover, "封面时间对应多个样本，存在歧义");
     }
     let duration = match sorted_duration(track, &sorted, i) {
         Some(d) if d > 0 => d as i128,
-        _ => return fail("封面样本时长无效，无法换算"),
+        _ => return fail_as(ErrorKind::Cover, "封面样本时长无效，无法换算"),
     };
     if 2 * diff > duration * 1_000_000 + 4 * ts as i128 {
-        return fail("封面时间越界或超出半个样本时长");
+        return fail_as(ErrorKind::Cover, "封面时间越界或超出半个样本时长");
     }
     Ok(i)
 }

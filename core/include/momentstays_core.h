@@ -16,7 +16,10 @@
  *   momentstays_free_string(). Any other return value is a failure and
  *   *out_json is left untouched. NULL data/out_json pointers fail
  *   instead of crashing. Invalid file bytes are NOT a failure: they
- *   produce {"ok": false, "error": "..."} JSON, like Rust `inspect`.
+ *   produce {"ok": false, "error": "...", "error_kind": "..."} JSON, like Rust
+ *   `inspect`. `error_kind` is one of: not_motion_photo, malformed,
+ *   unsupported, cover, verify_failed, io, invalid_argument (more may be
+ *   added; treat unknown values as malformed).
  * - A Rust panic inside inspect is caught at the FFI boundary and
  *   reported as failure, never unwound across FFI.
  */

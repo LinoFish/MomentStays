@@ -21,6 +21,16 @@ enum AndroidHDR {
         let value = max(a < 1 ? (b <= 0.01 ? -20*b + 1.8 : -0.101*b + 1.601) : (b <= 0.01 ? -70*b + 3 : -0.303*b + 2.303),0)
         return value > 0 && value <= 16 ? value : nil
     }
+    /// Headroom in stops from the Apple MakerNote. The Rust core reads it from
+    /// the file bytes (JPEG and HEIC); the Swift reference reads ImageIO's
+    /// property dictionary.
+    static func stops(_ bytes:[UInt8], properties:[String:Any]) -> Double? {
+#if MOTIONLIVE_SWIFT_REFERENCE
+        return stops(properties)
+#else
+        return (try? RustCore.appleHDR(bytes))?.stops
+#endif
+    }
     static func prepare(_ url:URL, options:AndroidOptions) throws -> ([UInt8],[String:Any]) {
         guard options.imageQuality > 0 && options.imageQuality <= 1 && options.gainQuality > 0 && options.gainQuality <= 1 else { throw Failure("JPEG 质量需在 1–100% 之间") }
         let original = Array(try Data(contentsOf:url)), heic = PhotoHEIF.matches(original)
@@ -63,9 +73,15 @@ enum AndroidHDR {
         let auxiliary = CGImageSourceCopyAuxiliaryDataInfoAtIndex(source,0,kCGImageAuxiliaryDataTypeHDRGainMap) as? [String:Any]
         guard let auxiliary = auxiliary else {
             let layout = try PhotoHEIF.layout(original)
+#if MOTIONLIVE_SWIFT_REFERENCE
             let props = layout.children.first { $0.type == "iprp" }
             let marker = props.map { String(decoding:original[$0.payload..<$0.end],as:UTF8.self) } ?? ""
             guard !marker.contains("hdrgainmap"), !layout.items.contains(where: { $0.type == "tmap" }), !highDynamicRange(original,layout:layout) else { throw Failure("此 HEIC HDR 不能在 macOS 12 安全提取；请保留 HEIC 原编码，或提供支持的 Apple HDR 增益图") }
+#else
+            // The Rust core reads the same signals (hdrgainmap marker, tmap item,
+            // 10-bit / PQ / HLG, missing property boxes) from the file bytes.
+            guard try RustCore.appleHDR(original).status == "none" else { throw Failure("此 HEIC HDR 不能在 macOS 12 安全提取；请保留 HEIC 原编码，或提供支持的 Apple HDR 增益图") }
+#endif
             return (base,["status":"sdr","reason":"未检测到可恢复 HDR；不生成增益图"])
         }
         guard let metadataValue = auxiliary[kCGImageAuxiliaryDataInfoMetadata as String],
@@ -79,10 +95,10 @@ enum AndroidHDR {
         // headroom. Accept only when it agrees with the documented Maker model.
         if versions == ["131072"] {
             guard headrooms.count == 1, headrooms[0].isFinite, headrooms[0] > 1,
-                  let makerStops = stops(properties), abs(log2(headrooms[0]) - makerStops) < 0.002,
+                  let makerStops = stops(original, properties: properties), abs(log2(headrooms[0]) - makerStops) < 0.002,
                   !(try PhotoHEIF.layout(original)).items.contains(where: { $0.type == "tmap" }) else { throw Failure("新版 Apple HDR 参数不能验证为已支持模型；请保留 HEIC 原编码") }
         }
-        guard let stops = stops(properties), let desc = auxiliary[kCGImageAuxiliaryDataInfoDataDescription as String] as? [String:Any],
+        guard let stops = stops(original, properties: properties), let desc = auxiliary[kCGImageAuxiliaryDataInfoDataDescription as String] as? [String:Any],
               let raw = auxiliary[kCGImageAuxiliaryDataInfoData as String] as? Data,
               let width = (desc["Width"] as? NSNumber)?.intValue, let height = (desc["Height"] as? NSNumber)?.intValue,
               let stride = (desc["BytesPerRow"] as? NSNumber)?.intValue,

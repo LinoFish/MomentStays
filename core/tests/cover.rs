@@ -160,7 +160,8 @@ fn video_track_selection_is_strict() {
 fn real_file_frame_time() {
     use base64::Engine;
     let text = std::fs::read_to_string(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64"),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures-samples/real.mp4.b64"),
     )
     .unwrap();
     let data = base64::engine::general_purpose::STANDARD
@@ -172,4 +173,25 @@ fn real_file_frame_time() {
     assert_eq!(frame_to_time_us(v, 2).unwrap(), 800_000);
     assert_eq!(time_us_to_frame(v, 800_000).unwrap(), 2);
     assert_eq!(time_us_to_frame(v, 400_000).unwrap(), 0);
+}
+
+/// A crafted presentation time near i64::MAX used to wrap in
+/// `t * 1_000_000` (release builds do not trap) and yield a garbage cover.
+#[test]
+#[allow(clippy::single_range_in_vec_init)] // one chunk holding sample 0
+fn huge_presentation_time_is_an_error_not_a_wrapped_value() {
+    let track = momentstays_core::mp4::TrackSamples {
+        handler: "vide".into(),
+        timescale: 1,
+        samples: vec![momentstays_core::mp4::Sample {
+            offset: 0,
+            size: 1,
+            decode_time: 0,
+            duration: 1,
+            presentation_time: i64::MAX / 2,
+            sync: true,
+        }],
+        chunks: vec![0..1],
+    };
+    assert!(momentstays_core::cover::frame_to_time_us(&track, 0).is_err());
 }
