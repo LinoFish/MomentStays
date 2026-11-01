@@ -338,8 +338,10 @@ struct MSScanView: View {
                     .frame(minHeight: 44)
                 }
             } footer: {
+                // Same font and size cap as the "已检查" line so it never outranks the card title.
                 Label("只检查你允许访问的照片原件。", systemImage: "info.circle")
-                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                    .font(.subheadline)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             }
         }
         .listStyle(.insetGrouped)
