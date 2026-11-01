@@ -79,20 +79,33 @@ struct MSHomeView: View {
     }
 
     private func row(_ direction: MSDirection) -> some View {
-        Button { sourceFor = direction } label: {
-            HStack(spacing: 14) {
-                Image(systemName: direction.symbol)
-                    .font(.system(size: 22))
-                    .foregroundStyle(Color.msLink)
-                    .frame(width: 28)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(direction.title).font(.body).foregroundStyle(.primary)
-                    Text(direction.subtitle).font(.subheadline).foregroundStyle(.secondary)
+        let icon = Image(systemName: direction.symbol)
+            .font(.title2)
+            .foregroundStyle(Color.msLink)
+            .accessibilityHidden(true)
+        // Fixed size: the chevron does not grow with Dynamic Type.
+        let chevron = Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
+        let texts = VStack(alignment: .leading, spacing: 3) {
+            Text(direction.title).font(.body).foregroundStyle(.primary)
+            Text(direction.subtitle).font(.subheadline).foregroundStyle(.secondary)
+        }
+        return Button { sourceFor = direction } label: {
+            Group {
+                if typeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack { icon; Spacer(); chevron }
+                        texts.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.vertical, 8)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 14) {
+                        icon.frame(minWidth: 28)
+                        texts.frame(maxWidth: .infinity, alignment: .leading)
+                        chevron
+                    }
+                    .padding(.vertical, 8)
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
             }
             .frame(minHeight: 64)
             .contentShape(Rectangle())
@@ -120,8 +133,10 @@ struct MSSelectionView: View {
                     grid.listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
                 }
             } header: {
+                // Explicit secondaryLabel and a size cap: list headers are drawn lighter and grow large.
                 Text("已选 \(flow.selected.count) / \(ids.count) 张")
-                    .font(.subheadline).foregroundStyle(.secondary).textCase(nil).monospacedDigit()
+                    .font(.subheadline).foregroundStyle(Color(uiColor: .secondaryLabel)).textCase(nil).monospacedDigit()
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             } footer: {
                 Text("灰色图形仅为布局占位，不是用户照片。")
             }
@@ -170,7 +185,8 @@ struct MSSelectionView: View {
                         .overlay {
                             VStack(spacing: 6) {
                                 Image(systemName: "photo").font(.title2).foregroundStyle(.secondary)
-                                Text(flow.candidateName(id)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                Text(flow.candidateName(id)).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge).padding(.horizontal, 6)
                             }
                         }
                         .overlay { if isOn { RoundedRectangle(cornerRadius: 2).strokeBorder(Color.msAccentFill, lineWidth: 2) } }
@@ -184,18 +200,26 @@ struct MSSelectionView: View {
                 .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
             }
         }
-        .padding(.vertical, 4)
+        .padding(4)
     }
 
     private func fileRow(_ id: Int) -> some View {
         let isOn = flow.selected.contains(id)
+        let thumb = RoundedRectangle(cornerRadius: 6).fill(Color(uiColor: .tertiarySystemFill))
+            .frame(width: typeSize.isAccessibilitySize ? 32 : 44, height: typeSize.isAccessibilitySize ? 32 : 44)
+            .overlay { Image(systemName: "doc").foregroundStyle(.secondary).imageScale(.small) }
+        let name = Text(flow.candidateName(id)).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
         return Button { toggle(id) } label: {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 6).fill(Color(uiColor: .tertiarySystemFill)).frame(width: 44, height: 44)
-                    .overlay { Image(systemName: "doc").foregroundStyle(.secondary) }
-                Text(flow.candidateName(id)).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
-                Spacer()
-                selectionMark(isOn)
+            Group {
+                if typeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack { thumb; Spacer(); selectionMark(isOn) }
+                        name.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.vertical, 6)
+                } else {
+                    HStack(spacing: 12) { thumb; name; Spacer(); selectionMark(isOn) }
+                }
             }
             .frame(minHeight: 56).contentShape(Rectangle())
         }
@@ -237,7 +261,9 @@ struct MSScanView: View {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(scanning ? "正在扫描相册…" : "扫描已停止，结果不完整").font(.headline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Text("已检查 \(checked) / \(total) 张").font(.subheadline).foregroundStyle(.secondary).monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.7)
                     ProgressView(value: Double(checked), total: Double(total)).tint(.msAccentFill)
                         .accessibilityLabel("扫描进度")
                         .accessibilityValue("已检查 \(checked) 张，共 \(total) 张")
@@ -248,11 +274,15 @@ struct MSScanView: View {
                     }
                 }
                 .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             }
             Section {
                 if scanning {
                     Text("已找到 \(found) 张照片，扫描结束后可选择。")
                         .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                 } else {
                     Button("选择已找到的 \(found) 张") {
                         flow.source = .scan; flow.candidateCount = found; flow.selected = []
@@ -262,6 +292,7 @@ struct MSScanView: View {
                 }
             } footer: {
                 Label("只检查你允许访问的照片原件。", systemImage: "info.circle")
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             }
         }
         .listStyle(.insetGrouped)
@@ -305,12 +336,13 @@ struct MSBrandView: View {
                         dismiss()
                     } label: {
                         HStack {
-                            Text(brand.name).foregroundStyle(.primary)
+                            Text(brand.name).foregroundStyle(Color(uiColor: .label))
                             Spacer()
                             if flow.brandID == brand.id { Image(systemName: "checkmark").foregroundStyle(Color.msLink) }
                         }
                         .frame(minHeight: 44).contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityAddTraits(flow.brandID == brand.id ? .isSelected : [])
                 }
             } footer: {
@@ -327,6 +359,8 @@ struct MSBrandView: View {
 
 struct MSConvertingView: View {
     @Environment(MSFlow.self) private var flow
+    private var succeededText: some View { Text("成功 \(flow.succeeded) 张").lineLimit(1) }
+    private var failedText: some View { Text("失败 \(flow.failed) 张").lineLimit(1) }
     @State private var confirmStop = false
 
     var body: some View {
@@ -335,20 +369,28 @@ struct MSConvertingView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(flow.direction.title).font(.footnote).foregroundStyle(.secondary)
                     Text("已处理 \(flow.processed) / \(flow.items.count) 张").font(.title2.weight(.semibold)).monospacedDigit()
-                    Text("成功 \(flow.succeeded) 张 · 失败 \(flow.failed) 张").font(.subheadline).foregroundStyle(.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    // Two phrases so a line never breaks inside a word.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) { succeededText; Text("·"); failedText }
+                        VStack(alignment: .leading, spacing: 2) { succeededText; failedText }
+                    }
+                    .font(.subheadline).foregroundStyle(.secondary)
                     ProgressView(value: Double(flow.processed), total: Double(max(flow.items.count, 1)))
                         .tint(.msAccentFill)
                         .padding(.top, 6)
                         .accessibilityLabel("转换进度")
                         .accessibilityValue("已处理 \(flow.processed) 张，共 \(flow.items.count) 张")
                 }
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
             }
+            .listSectionSpacing(.custom(24))
             Section {
                 ForEach(flow.items) { MSItemRow(item: $0, showShare: false) }
             } header: {
-                Text("转换明细")
+                Text("转换明细").font(.footnote).dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             } footer: {
                 Text("请保持留刻在前台")
             }
@@ -381,6 +423,7 @@ struct MSResultsView: View {
     @State private var filter: Filter = .all
     @State private var confirmLeave = false
     @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .title) private var badge: CGFloat = 48
 
     private var rows: [MSItem] {
         switch filter {
@@ -393,36 +436,59 @@ struct MSResultsView: View {
     var body: some View {
         List {
             Section {
-                VStack(spacing: 8) {
-                    ZStack(alignment: .bottomTrailing) {
-                        Circle().fill(Color(uiColor: .tertiarySystemFill)).frame(width: 56, height: 56)
-                            .overlay { Image(systemName: "checkmark").font(.title2.weight(.semibold)).foregroundStyle(Color.msLink) }
-                        if flow.failed > 0 {
-                            Image(systemName: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor)
-                                .font(.system(size: 18)).offset(x: 8, y: 6)
+                VStack(alignment: typeSize.isAccessibilitySize ? .leading : .center, spacing: 8) {
+                    Circle().fill(Color(uiColor: .tertiarySystemFill)).frame(width: badge, height: badge)
+                        .overlay { Image(systemName: flow.succeeded > 0 ? "checkmark" : "xmark").font(.system(size: badge * 0.5, weight: .semibold)).foregroundStyle(flow.succeeded > 0 ? Color.green : Color.red) }
+                        .overlay(alignment: .bottomTrailing) {
+                            if flow.failed > 0 && flow.succeeded > 0 {
+                                // Sits on the circle's rim, clear of the checkmark.
+                                Image(systemName: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor)
+                                    .font(.system(size: badge * 0.3))
+                                    .padding(badge * 0.06)
+                                    .background(Circle().fill(Color.msBackground))
+                                    .offset(x: badge * 0.04, y: badge * 0.04)
+                            }
                         }
+                        .accessibilityHidden(true)
+                    // Two phrases so a line never breaks inside a word.
+                    let headline = Group {
+                        Text("\(flow.succeeded) 张已转换")
+                        if flow.failed > 0 { Text("\(flow.failed) 张失败") }
                     }
-                    .accessibilityHidden(true)
-                    Text(flow.failed > 0 ? "\(flow.succeeded) 张已转换，\(flow.failed) 张失败" : "\(flow.succeeded) 张已转换")
-                        .font(.title2.weight(.semibold)).multilineTextAlignment(.center)
+                    .font(.title2.weight(.semibold))
+                    if typeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 2) { headline }
+                    } else {
+                        ViewThatFits { HStack(spacing: 8) { headline }; VStack(spacing: 2) { headline } }
+                    }
                     Text(flow.skipped > 0 ? "\(flow.skipped) 张未转换" : (flow.direction == .liveToAndroid ? "实况照片 → 安卓 · 文件已就绪" : "安卓 → 实况照片 · 可以存入照片"))
                         .font(.subheadline).foregroundStyle(.secondary)
+                        .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .center)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: typeSize.isAccessibilitySize ? .leading : .center)
                 .padding(.top, 8)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                 .accessibilityElement(children: .combine)
             }
+            .listSectionSpacing(.custom(24))
             if flow.failed > 0 && flow.succeeded > 0 {
-                Section {
-                    Picker("筛选", selection: $filter) {
-                        Text("全部").tag(Filter.all)
-                        Text("成功").tag(Filter.success)
-                        Text("失败").tag(Filter.failed)
+                if typeSize.isAccessibilitySize {
+                    Section {
+                        Picker("筛选", selection: $filter) { filterOptions }
+                            .pickerStyle(.menu)
+                            .frame(minHeight: 44)
                     }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
+                    .listSectionSpacing(.custom(24))
+                } else {
+                    Section {
+                        Picker("筛选", selection: $filter) { filterOptions }
+                            .pickerStyle(.segmented)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                    }
+                    .listSectionSpacing(.custom(24))
                 }
             }
             Section {
@@ -481,6 +547,12 @@ struct MSResultsView: View {
 }
 
 extension MSResultsView {
+    @ViewBuilder var filterOptions: some View {
+        Text("全部").tag(Filter.all)
+        Text("成功").tag(Filter.success)
+        Text("失败").tag(Filter.failed)
+    }
+
     /// Secondary text action whose whole half of the bar is tappable (at least 44 pt high).
     func secondaryLabel(_ title: LocalizedStringKey) -> some View {
         Text(title)
@@ -491,22 +563,44 @@ extension MSResultsView {
 
 struct MSItemRow: View {
     @Environment(MSFlow.self) private var flow
+    @Environment(\.dynamicTypeSize) private var typeSize
     let item: MSItem
     let showShare: Bool
 
+    private var texts: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.name).lineLimit(1).truncationMode(.middle)
+            Text(statusText).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            MSPlaceholderThumb()
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name).lineLimit(2).truncationMode(.middle)
-                Text(statusText).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        Group {
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .center) {
+                        MSPlaceholderThumb(size: 32)
+                        Spacer()
+                        if !isShareable { trailing.font(.system(size: 22)) }
+                    }
+                    texts.frame(maxWidth: .infinity, alignment: .leading)
+                    if isShareable { trailing }
+                }
+                .padding(.vertical, 6)
+            } else {
+                HStack(spacing: 12) {
+                    MSPlaceholderThumb()
+                    texts
+                    Spacer(minLength: 8)
+                    trailing
+                }
             }
-            Spacer(minLength: 8)
-            trailing
         }
         .frame(minHeight: 72)
         .accessibilityElement(children: .combine)
     }
+
+    private var isShareable: Bool { showShare && item.status == .done }
 
     private var statusText: String {
         switch item.status {

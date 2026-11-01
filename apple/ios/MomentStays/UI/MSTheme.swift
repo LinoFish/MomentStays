@@ -56,7 +56,8 @@ struct MSPlaceholderThumb: View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
             .fill(Color(uiColor: .tertiarySystemFill))
             .frame(width: size, height: size)
-            .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
+            // Icon sized from the box, not Dynamic Type, so it never spills out.
+            .overlay { Image(systemName: "photo").font(.system(size: size * 0.42)).foregroundStyle(.secondary) }
             .accessibilityHidden(true)
     }
 }
