@@ -510,7 +510,7 @@ struct MSResultsView: View {
                     } else {
                         ViewThatFits { HStack(spacing: 8) { headline }; VStack(spacing: 2) { headline } }
                     }
-                    Text(flow.skipped > 0 ? "\(flow.skipped) 张未转换" : (flow.direction == .liveToAndroid ? "实况照片 → 安卓 · 文件已就绪" : "安卓 → 实况照片 · 可以存入照片"))
+                    Text(flow.skipped > 0 ? "\(flow.skipped) 张未转换" : (flow.direction == .liveToAndroid ? "转成动态照片 · 文件已就绪" : "转成实况照片 · 可以存入照片"))
                         .font(.subheadline).foregroundStyle(.secondary)
                         .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .center)
                 }
