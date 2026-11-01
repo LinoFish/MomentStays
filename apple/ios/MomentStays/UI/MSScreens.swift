@@ -23,95 +23,123 @@ struct MSRootView: View {
     }
 }
 
-// MARK: - Home (design.md §6.1)
+// MARK: - Home v2 (home-v2.md: one line of explanation, two large buttons)
 
 struct MSHomeView: View {
     @Environment(MSFlow.self) private var flow
-    @Environment(\.dynamicTypeSize) private var typeSize
-    private var shareHint: some View {
-        Text("也可从照片或文件的分享菜单中打开留刻")
-            .font(.footnote).foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-    }
     @State private var sourceFor: MSDirection?
     @State private var about = false
 
     var body: some View {
-        List {
-            // A plain row, not a section header: list headers are drawn lighter than body secondary text.
-            Section {
-                Text("实况照片与动态照片互转")
-                    .font(.subheadline).foregroundStyle(Color(uiColor: .secondaryLabel))
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("留刻")
+                    .font(.largeTitle.bold())
+                    .accessibilityAddTraits(.isHeader)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                Text("iPhone 实况照片与安卓动态照片互相转换。")
+                    .font(.body)
+                    .foregroundStyle(Color(uiColor: .secondaryLabel))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                VStack(spacing: 16) {
+                    MSHomeButton(direction: .androidToLive) { sourceFor = .androidToLive }
+                    MSHomeButton(direction: .liveToAndroid) { sourceFor = .liveToAndroid }
+                }
+                .padding(.top, 28)
             }
-            .listSectionSpacing(.custom(12))
-            Section {
-                row(.androidToLive)
-                row(.liveToAndroid)
-            } footer: {
-                Text("照片只在本机处理，不会上传。")
-            }
-            if typeSize.isAccessibilitySize {
-                Section { shareHint.frame(maxWidth: .infinity).listRowBackground(Color.clear) }
-            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .listStyle(.insetGrouped)
-        .navigationTitle("留刻")
+        .background(Color.msBackground)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { about = true } label: { Image(systemName: "info.circle") }
-                    .accessibilityLabel("关于")
+                Button { about = true } label: { Image(systemName: "info.circle").frame(width: 44, height: 44) }
+                    .accessibilityLabel("说明")
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            if !typeSize.isAccessibilitySize {
-                shareHint.padding(.horizontal, 20).padding(.bottom, 8)
-            }
-        }
-        .confirmationDialog(sourceFor?.title ?? "", isPresented: Binding(get: { sourceFor != nil }, set: { if !$0 { sourceFor = nil } }), titleVisibility: .visible, presenting: sourceFor) { direction in
+        .confirmationDialog(sourceFor?.buttonTitle ?? "", isPresented: Binding(get: { sourceFor != nil }, set: { if !$0 { sourceFor = nil } }), titleVisibility: .visible, presenting: sourceFor) { direction in
             Button("从照片中选择") { flow.open(direction, .photos) }
             Button("从文件中选择") { flow.open(direction, .files) }
             if direction == .androidToLive { Button("扫描相册") { flow.open(direction, .scan) } }
             Button("取消", role: .cancel) {}
         }
-        .sheet(isPresented: $about) { AboutView() }
+        .sheet(isPresented: $about) { MSAboutView() }
     }
+}
 
-    private func row(_ direction: MSDirection) -> some View {
-        let icon = Image(systemName: direction.symbol)
-            .font(.title2)
-            .foregroundStyle(Color.msLink)
-            .accessibilityHidden(true)
-        // Fixed size: the chevron does not grow with Dynamic Type.
-        let chevron = Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
-            .accessibilityHidden(true)
-        let texts = VStack(alignment: .leading, spacing: 3) {
-            Text(direction.title).font(.body).foregroundStyle(.primary)
-            Text(direction.subtitle).font(.subheadline).foregroundStyle(.secondary)
-        }
-        return Button { sourceFor = direction } label: {
-            Group {
-                if typeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack { icon; Spacer(); chevron }
-                        texts.frame(maxWidth: .infinity, alignment: .leading)
+struct MSHomeButton: View {
+    let direction: MSDirection
+    let action: () -> Void
+    @ScaledMetric(relativeTo: .title2) private var height: CGFloat = 132
+    @ScaledMetric(relativeTo: .title2) private var diameter: CGFloat = 56
+    @ScaledMetric private var gap: CGFloat = 12
+
+    var body: some View {
+        let d = min(diameter, 88)
+        Button(action: action) {
+            VStack(spacing: gap) {
+                Circle().fill(Color.msAccentFill)
+                    .frame(width: d, height: d)
+                    .overlay {
+                        Image(systemName: direction.homeSymbol)
+                            .font(.system(size: d * 0.5, weight: .semibold))
+                            .foregroundStyle(Color.msOnAccent)
                     }
-                    .padding(.vertical, 8)
-                } else {
-                    HStack(alignment: .firstTextBaseline, spacing: 14) {
-                        icon.frame(minWidth: 28)
-                        texts.frame(maxWidth: .infinity, alignment: .leading)
-                        chevron
-                    }
-                    .padding(.vertical, 8)
-                }
+                    .accessibilityHidden(true)
+                Text(direction.buttonTitle)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color(uiColor: .label))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(minHeight: 64)
-            .contentShape(Rectangle())
+            .padding(.vertical, 20)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: min(height, 210))
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MSHomeButtonStyle())
         .accessibilityHint("选择照片来源")
+    }
+}
+
+/// Pressed state only changes colour, no scaling (also under Reduce Motion).
+struct MSHomeButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.msSurface)
+                    .overlay {
+                        if configuration.isPressed {
+                            RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .tertiarySystemFill))
+                        }
+                    }
+            }
+    }
+}
+
+struct MSAboutView: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Label("照片只在本机处理，不会上传。", systemImage: "lock")
+                    Label("也可以从照片或文件的分享菜单打开留刻。", systemImage: "square.and.arrow.up")
+                }
+                Section {
+                    LabeledContent("版本", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                }
+                Section { MadeWithAirBuild() }
+            }
+            .navigationTitle("说明")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+        }
+        .tint(.msLink)
     }
 }
 

@@ -8,6 +8,9 @@ enum MSDirection: Hashable {
     var title: LocalizedStringKey { self == .androidToLive ? "安卓 → 实况照片" : "实况照片 → 安卓" }
     var subtitle: LocalizedStringKey { self == .androidToLive ? "将动态照片转换为实况照片" : "转换为对方手机的动态照片" }
     var symbol: String { self == .androidToLive ? "livephoto" : "iphone" }
+    /// Home button titles (Camo, msg267). The one-line explanation names both platforms.
+    var buttonTitle: LocalizedStringKey { self == .androidToLive ? "转成实况照片" : "转成动态照片" }
+    var homeSymbol: String { self == .androidToLive ? "livephoto" : "play.rectangle" }
 }
 
 enum MSSource: Hashable { case photos, files, scan }
