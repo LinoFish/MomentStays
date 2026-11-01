@@ -116,3 +116,38 @@ fn deep_nesting_is_an_error_not_a_stack_overflow() {
         .unwrap();
     handle.join().expect("no stack overflow");
 }
+
+#[test]
+fn xml_illegal_characters_are_rejected_like_the_old_reader_and_python() {
+    // Control characters (NUL, ESC, ...) are not XML 1.0 characters. The
+    // parser the app shipped with rejected them, as does Python's; accepting
+    // them would let a damaged packet through as a clean one.
+    for bad in ["\u{0}", "\u{1b}", "\u{b}", "\u{1f}", "\u{FFFE}", "\u{FFFF}"] {
+        let xml = doc(&format!(r#"GCamera:MotionPhoto="1" dc:x="a{bad}b"/>"#));
+        let err = xmp::packets(&jpeg(&xml)).unwrap_err();
+        assert!(err.0.contains("invalid character"), "{bad:?}: {}", err.0);
+        // Also in text content and in comments.
+        let xml = doc(&format!(
+            "><GCamera:MotionPhoto>1{bad}</GCamera:MotionPhoto></rdf:Description>"
+        ));
+        assert!(xmp::packets(&jpeg(&xml)).is_err(), "{bad:?} in text");
+    }
+    // ...and through character references.
+    for r in [
+        "&#0;",
+        "&#1;",
+        "&#x1B;",
+        "&#xFFFE;",
+        "&#xD800;",
+        "&#x110000;",
+    ] {
+        let xml = doc(&format!(r#"GCamera:MotionPhoto="1" dc:x="{r}"/>"#));
+        assert!(xmp::packets(&jpeg(&xml)).is_err(), "{r}");
+    }
+}
+
+#[test]
+fn tab_newline_cr_and_unicode_remain_valid() {
+    let xml = doc("GCamera:MotionPhoto=\"1\" dc:x=\"a\tb\nc\r\nd 中 😀 &#9;&#xA;&#x1F600;\"/>");
+    assert_eq!(motion_photo(&xml), Some(1));
+}

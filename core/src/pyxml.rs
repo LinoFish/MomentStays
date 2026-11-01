@@ -204,6 +204,19 @@ fn is_name_char(c: u8) -> bool {
     is_name_start(c) || c.is_ascii_digit() || c == b'-' || c == b'.'
 }
 
+/// XML 1.0 `Char`: tab, LF, CR, and everything from U+0020 except the
+/// surrogates (never present in a `str`) and U+FFFE / U+FFFF.
+fn is_xml_char(c: char) -> bool {
+    matches!(c, '\t' | '\n' | '\r') || (c >= ' ' && c != '\u{FFFE}' && c != '\u{FFFF}')
+}
+
+/// True when `text` holds a character XML 1.0 forbids (e.g. NUL, ESC).
+fn has_illegal_char(text: &str) -> bool {
+    text.bytes()
+        .any(|b| b < 0x20 && !matches!(b, b'\t' | b'\n' | b'\r'))
+        || text.contains(['\u{FFFE}', '\u{FFFF}'])
+}
+
 fn normalize_line_ends(s: &str) -> String {
     if !s.contains('\r') {
         return s.to_string();
@@ -249,6 +262,7 @@ fn decode_entities(raw: &str, attr: bool) -> Result<String> {
                     .map_err(|_| Error::new("Malformed XMP: bad character reference"))?;
                 out.push(
                     char::from_u32(n)
+                        .filter(|c| is_xml_char(*c))
                         .ok_or_else(|| Error::new("Malformed XMP: bad character reference"))?,
                 );
             }
@@ -258,6 +272,7 @@ fn decode_entities(raw: &str, attr: bool) -> Result<String> {
                     .map_err(|_| Error::new("Malformed XMP: bad character reference"))?;
                 out.push(
                     char::from_u32(n)
+                        .filter(|c| is_xml_char(*c))
                         .ok_or_else(|| Error::new("Malformed XMP: bad character reference"))?,
                 );
             }
@@ -581,6 +596,9 @@ pub fn parse(data: &[u8]) -> Result<Element> {
     }
     let text =
         std::str::from_utf8(bytes).map_err(|_| Error::new("Malformed XMP: not valid UTF-8"))?;
+    if has_illegal_char(text) {
+        return fail("Malformed XMP: invalid character");
+    }
     let mut p = Parser {
         s: text,
         b: text.as_bytes(),
