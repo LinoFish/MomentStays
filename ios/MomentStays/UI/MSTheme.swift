@@ -38,7 +38,9 @@ struct MSPrimaryButtonStyle: ButtonStyle {
 struct MSBottomBar<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
+        // Capped so the pinned bar never covers the list at the largest text sizes.
         VStack(spacing: 8) { content }
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)

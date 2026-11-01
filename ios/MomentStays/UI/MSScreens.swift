@@ -27,20 +27,33 @@ struct MSRootView: View {
 
 struct MSHomeView: View {
     @Environment(MSFlow.self) private var flow
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var shareHint: some View {
+        Text("也可从照片或文件的分享菜单中打开留刻")
+            .font(.footnote).foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+    }
     @State private var sourceFor: MSDirection?
     @State private var about = false
 
     var body: some View {
         List {
+            // A plain row, not a section header: list headers are drawn lighter than body secondary text.
+            Section {
+                Text("实况照片与动态照片互转")
+                    .font(.subheadline).foregroundStyle(Color(uiColor: .secondaryLabel))
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            }
+            .listSectionSpacing(.custom(12))
             Section {
                 row(.androidToLive)
                 row(.liveToAndroid)
-            } header: {
-                Text("实况照片与动态照片互转")
-                    .font(.subheadline).foregroundStyle(.secondary).textCase(nil)
-                    .padding(.bottom, 8)
             } footer: {
                 Text("照片只在本机处理，不会上传。")
+            }
+            if typeSize.isAccessibilitySize {
+                Section { shareHint.frame(maxWidth: .infinity).listRowBackground(Color.clear) }
             }
         }
         .listStyle(.insetGrouped)
@@ -52,10 +65,9 @@ struct MSHomeView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Text("也可从照片或文件的分享菜单中打开留刻")
-                .font(.footnote).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20).padding(.bottom, 8)
+            if !typeSize.isAccessibilitySize {
+                shareHint.padding(.horizontal, 20).padding(.bottom, 8)
+            }
         }
         .confirmationDialog(sourceFor?.title ?? "", isPresented: Binding(get: { sourceFor != nil }, set: { if !$0 { sourceFor = nil } }), titleVisibility: .visible, presenting: sourceFor) { direction in
             Button("从照片中选择") { flow.open(direction, .photos) }
@@ -368,6 +380,7 @@ struct MSResultsView: View {
     @Environment(MSFlow.self) private var flow
     @State private var filter: Filter = .all
     @State private var confirmLeave = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var rows: [MSItem] {
         switch filter {
@@ -385,7 +398,8 @@ struct MSResultsView: View {
                         Circle().fill(Color(uiColor: .tertiarySystemFill)).frame(width: 56, height: 56)
                             .overlay { Image(systemName: "checkmark").font(.title2.weight(.semibold)).foregroundStyle(Color.msLink) }
                         if flow.failed > 0 {
-                            Image(systemName: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor).font(.subheadline).offset(x: 6, y: 4)
+                            Image(systemName: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor)
+                                .font(.system(size: 18)).offset(x: 8, y: 6)
                         }
                     }
                     .accessibilityHidden(true)
@@ -414,6 +428,16 @@ struct MSResultsView: View {
             Section {
                 ForEach(rows) { MSItemRow(item: $0, showShare: flow.direction == .liveToAndroid) }
             }
+            if typeSize.isAccessibilitySize && flow.succeeded > 0 {
+                Section {
+                    if flow.direction == .liveToAndroid {
+                        Button { flow.notice = "存到文件" } label: { Text("存到文件").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle()) }
+                    }
+                    if flow.failed > 0 {
+                        Button { filter = .all; flow.retryFailed() } label: { Text("重试失败的 \(flow.failed) 张").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle()) }
+                    }
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("转换结果")
@@ -432,16 +456,18 @@ struct MSResultsView: View {
                         flow.notice = flow.direction == .liveToAndroid ? "分享" : "存入照片"
                     }
                     .buttonStyle(MSPrimaryButtonStyle())
-                    HStack(spacing: 16) {
+                    if !typeSize.isAccessibilitySize {
+                    HStack(spacing: 8) {
                         if flow.direction == .liveToAndroid {
-                            Button("存到文件") { flow.notice = "存到文件" }.frame(minHeight: 44)
+                            Button { flow.notice = "存到文件" } label: { secondaryLabel("存到文件") }
                         }
                         if flow.direction == .liveToAndroid && flow.failed > 0 { Divider().frame(height: 16) }
                         if flow.failed > 0 {
-                            Button("重试失败的 \(flow.failed) 张") { filter = .all; flow.retryFailed() }.frame(minHeight: 44)
+                            Button { filter = .all; flow.retryFailed() } label: { secondaryLabel("重试失败的 \(flow.failed) 张") }
                         }
                     }
                     .font(.subheadline)
+                    }
                 }
             }
         }
@@ -454,6 +480,15 @@ struct MSResultsView: View {
     }
 }
 
+extension MSResultsView {
+    /// Secondary text action whose whole half of the bar is tappable (at least 44 pt high).
+    func secondaryLabel(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
+    }
+}
+
 struct MSItemRow: View {
     @Environment(MSFlow.self) private var flow
     let item: MSItem
@@ -463,7 +498,7 @@ struct MSItemRow: View {
         HStack(spacing: 12) {
             MSPlaceholderThumb()
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.name).lineLimit(1).truncationMode(.middle)
+                Text(item.name).lineLimit(2).truncationMode(.middle)
                 Text(statusText).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
