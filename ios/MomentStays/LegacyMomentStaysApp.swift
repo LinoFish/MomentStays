@@ -4,8 +4,8 @@ import SwiftUI
 struct MomentStaysApp: App {
     var body: some Scene {
         WindowGroup {
-            HomeView(engine: ConversionClient(engine: NativeConversionAdapter()))
-                .tint(.orange)
+            // UI-only round: placeholder data, conversion engine not wired (see UI/MSFlow.swift).
+            MSRootView()
         }
     }
 }
