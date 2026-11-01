@@ -377,7 +377,25 @@ impl<'a> Parser<'a> {
         }
         None
     }
+    /// Namespaces in XML: a qualified name is `NCName` or `NCName:NCName`;
+    /// an NCName has no colon and does not start with a digit, `-` or `.`.
+    fn check_qname(&self, qname: &str) -> Result<()> {
+        fn ncname(s: &str) -> bool {
+            let b = s.as_bytes();
+            !b.is_empty()
+                && (b[0].is_ascii_alphabetic() || b[0] == b'_' || b[0] >= 0x80)
+                && !s.contains(':')
+        }
+        let mut parts = qname.split(':');
+        let first = parts.next().unwrap_or("");
+        match (parts.next(), parts.next()) {
+            (None, _) if ncname(first) => Ok(()),
+            (Some(local), None) if ncname(first) && ncname(local) => Ok(()),
+            _ => self.err("invalid qualified name"),
+        }
+    }
     fn expand(&self, qname: &str) -> Result<(String, String)> {
+        self.check_qname(qname)?;
         match qname.split_once(':') {
             Some((prefix, local)) => {
                 if prefix == "xmlns" {
@@ -411,7 +429,9 @@ impl<'a> Parser<'a> {
         let mut attrs: Vec<(String, String, String)> = Vec::new();
         let mut empty = false;
         loop {
+            let before_ws = self.pos;
             self.skip_ws();
+            let had_ws = self.pos > before_ws;
             match self.peek() {
                 Some(b'/') => {
                     self.pos += 1;
@@ -427,6 +447,11 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 Some(_) => {
+                    // Attributes must be separated from the name and from
+                    // each other by whitespace.
+                    if !had_ws {
+                        return self.err("expected whitespace before attribute");
+                    }
                     let aname = self.name()?;
                     self.skip_ws();
                     if self.peek() != Some(b'=') {
@@ -454,7 +479,7 @@ impl<'a> Parser<'a> {
                     if aname == "xmlns" {
                         scope.default = Some(value);
                     } else if let Some(prefix) = aname.strip_prefix("xmlns:") {
-                        if prefix == "xmlns" {
+                        if prefix == "xmlns" || prefix.contains(':') || prefix.is_empty() {
                             return self.err("invalid namespace declaration");
                         }
                         scope.prefixes.push((prefix.to_string(), value));
@@ -472,6 +497,7 @@ impl<'a> Parser<'a> {
         elem.local = local;
         // Resolve attribute names (attributes without a prefix have no namespace).
         for (aname, value, _) in attrs {
+            self.check_qname(&aname)?;
             let (ans, alocal) = match aname.split_once(':') {
                 Some((prefix, l)) => {
                     if prefix == "xmlns" {
@@ -569,7 +595,12 @@ impl<'a> Parser<'a> {
             // Text run.
             let start = self.pos;
             self.pos = memchr::memchr(b'<', &self.b[start..]).map_or(self.b.len(), |i| start + i);
-            let text = normalize_line_ends(&decode_entities(&self.s[start..self.pos], false)?);
+            let raw = &self.s[start..self.pos];
+            // `]]>` ends a CDATA section; it may not appear in plain content.
+            if memchr::memmem::find(raw.as_bytes(), b"]]>").is_some() {
+                return self.err("']]>' is not allowed in content");
+            }
+            let text = normalize_line_ends(&decode_entities(raw, false)?);
             if seen_child {
                 let last = elem.children.last_mut().unwrap();
                 last.tail = Some(match last.tail.take() {

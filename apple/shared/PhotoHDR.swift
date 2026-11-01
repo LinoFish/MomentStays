@@ -79,6 +79,7 @@ enum PhotoHDR {
         return output
     }
     static func legacy(_ still: [UInt8]) throws -> (LegacyMap?, String) {
+#if MOTIONLIVE_SWIFT_REFERENCE
         var maps: [[UInt8]] = []
         for image in try MLJPEG.auxiliary(still).dropFirst() {
             for packet in try MLXMP.packets(image) {
@@ -130,6 +131,15 @@ enum PhotoHDR {
             }
         }
         return (nil, "旧增益图亮度参数不完整，已保留原始数据")
+#else
+        // Read by the Rust core (`apple_hdr`): same decisions and reasons.
+        let report = try RustCore.appleHDR(still)
+        guard report.container == "jpeg" else { throw Failure("不是 JPEG 文件") }
+        if report.status == "legacy", let gain = report.gain, let stops = report.stops {
+            return (LegacyMap(image: gain, stops: stops), report.reason)
+        }
+        return (nil, report.reason)
+#endif
     }
     static func colorProfile(_ still: [UInt8], srgb: [UInt8]) throws -> [UInt8] {
         let segs = try MLJPEG.segments(still)

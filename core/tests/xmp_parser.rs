@@ -151,3 +151,42 @@ fn tab_newline_cr_and_unicode_remain_valid() {
     let xml = doc("GCamera:MotionPhoto=\"1\" dc:x=\"a\tb\nc\r\nd 中 😀 &#9;&#xA;&#x1F600;\"/>");
     assert_eq!(motion_photo(&xml), Some(1));
 }
+
+#[test]
+fn qualified_names_follow_the_namespaces_rules() {
+    // `rdf:2escription` (a digit after the prefix), `a:b:c`, `:a`, `a:` are not
+    // XML names; expat, the old reader and Python all reject them. Accepting
+    // them let a damaged element name through as a clean one.
+    for bad in ["rdf:2escription", "rdf:-x", "rdf:.x", "a:b:c", ":a", "rdf:"] {
+        let xml =
+            format!(r#"<x:xmpmeta {NS}><rdf:RDF><{bad} rdf:about=""/></rdf:RDF></x:xmpmeta>"#);
+        assert!(xmp::packets(&jpeg(&xml)).is_err(), "element {bad}");
+    }
+    for bad in ["GCamera:2x", "GCamera:a:b", ":x", "2x", "-x"] {
+        let xml = doc(&format!(r#"{bad}="1"/>"#));
+        assert!(xmp::packets(&jpeg(&xml)).is_err(), "attribute {bad}");
+    }
+    // Valid names keep working, including non-ASCII and underscores.
+    let xml = doc(r#"GCamera:MotionPhoto="1" dc:_x="a" dc:é="b" dc:a-b.c1="c"/>"#);
+    assert_eq!(motion_photo(&xml), Some(1));
+}
+
+#[test]
+fn attributes_need_whitespace_and_content_cannot_hold_cdata_end() {
+    // `"1"Item:Length=` (no space between attributes) and a bare `]]>` in
+    // text are not well-formed XML; expat rejects them and so must we.
+    let xml = doc(r#"GCamera:MotionPhoto="1"dc:x="a"/>"#);
+    assert!(xmp::packets(&jpeg(&xml)).is_err());
+    let xml = doc("GCamera:MotionPhoto=\"1\"><dc:x>a]]>b</dc:x></rdf:Description>");
+    assert!(xmp::packets(&jpeg(&xml)).is_err());
+    // Both are fine where XML allows them.
+    let xml = doc("GCamera:MotionPhoto=\"a]]>b\" dc:x='1'\n\tdc:y=\"2\" ><dc:z><![CDATA[x]]></dc:z></rdf:Description>");
+    let packets = xmp::packets(&jpeg(&xml)).unwrap();
+    assert_eq!(packets.len(), 1);
+}
+
+#[test]
+fn xmlns_prefix_with_colon_is_rejected() {
+    let doc = br#"<x:xmpmeta xmlns:x="adobe:ns:meta/" xmlns:s2:Aux="urn:a"></x:xmpmeta>"#;
+    assert!(momentstays_core::pyxml::parse(doc).is_err());
+}
