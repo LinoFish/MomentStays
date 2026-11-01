@@ -302,7 +302,110 @@ pub fn handle(
             write(&path(req, "output")?, &mov)?;
             Ok(info)
         }
+        "still-check" => {
+            // Photos import guard: the still holds only image data.
+            let data = read(&first()?)?;
+            let ok = if crate::heif::matches(&data) {
+                crate::heif::layout(&data).is_ok()
+            } else {
+                crate::jpeg::static_only(&data).is_ok_and(|s| s == data)
+            };
+            if !ok {
+                return Err(Error::new("静态图片仍含嵌入视频或额外载荷"));
+            }
+            Ok(json!({"ok": true}))
+        }
+        "preview-cover" => preview_cover(req, &first()?),
         "fixture" => needs_native("生成测试素材（H.264 编码）"),
         _ => Err(Error::new("Unknown mode")),
     }
+}
+
+/// Cover timing for the read-only motion preview (Swift `MotionPreview`,
+/// which used `sourceCoverTiming`): the cover frame on the primary video
+/// track and, for Motion Photos with a secondary track, each
+/// high-resolution candidate. Times are microseconds on the movie
+/// (presentation) timeline; a cover that cannot be placed gives `issue`.
+fn preview_cover(req: &Value, source: &Path) -> Result<Value> {
+    use crate::live::{resolve_cover_in, TimeDomain};
+    use crate::model::Cover;
+    use crate::mp4::Movie;
+    let domain = match req["time_domain"].as_str().unwrap_or("auto") {
+        "media" => TimeDomain::Media,
+        "presentation" => TimeDomain::Presentation,
+        _ => TimeDomain::Auto,
+    };
+    let direction = req["direction"].as_str().unwrap_or("to-apple");
+    let (video, cover, movie_path): (Vec<u8>, Option<Cover>, Option<PathBuf>) =
+        if direction == "to-android" {
+            let p = android::pair(source, req["time_domain"].as_str().unwrap_or("auto"))?;
+            (
+                read(&p.movie)?,
+                Some(Cover::Frame(p.frame as i64)),
+                Some(p.movie),
+            )
+        } else {
+            let data = read(source)?;
+            let photo = format::parse(&data)?;
+            let cover = match (photo.cover_frame, photo.timestamp) {
+                (Some(f), _) => Some(Cover::Frame(f)),
+                (None, Some(t)) => Some(Cover::Time(t)),
+                _ => None,
+            };
+            (photo.video(&data).to_vec(), cover, None)
+        };
+    let movie = Movie::parse(&video)?;
+    let track = movie
+        .video(0)
+        .map_err(|_| Error::new("没有可预览的视频轨"))?;
+    let frames = crate::cover::sorted_presentation(&track.samples).len();
+    if frames == 0 {
+        return Err(Error::new("视频没有可预览的画面"));
+    }
+    let place = |c: Cover, d: TimeDomain| -> Value {
+        match resolve_cover_in(&video, &movie, c, d, 0) {
+            Ok(m) => {
+                json!({"frame": m.frame, "presented_us": m.marker_us, "media_us": m.frame_time_us})
+            }
+            Err(e) => json!({"issue": crate::engine::movie::cover_error(e, false).0}),
+        }
+    };
+    let cover_json = match cover {
+        Some(c) => place(c, domain),
+        None => {
+            json!({"issue": "No valid source cover timestamp; use --missing-time midpoint only if intended"})
+        }
+    };
+    let mut result = json!({"frames": frames, "cover": cover_json});
+    if let Some(m) = movie_path {
+        result["movie"] = json!(m.to_string_lossy());
+    }
+    if direction != "to-android"
+        && movie
+            .tracks
+            .iter()
+            .filter(|t| t.samples.handler == "vide")
+            .count()
+            > 1
+    {
+        let work = crate::engine::batch::WorkDir::new()?;
+        match candidates::prepare(&video, work.path()) {
+            Ok(Some(s)) => {
+                let list: Vec<Value> = s
+                    .candidates
+                    .iter()
+                    .map(|c| {
+                        let mut v = place(Cover::Time(c.timestamp_us), TimeDomain::Presentation);
+                        v["index"] = json!(c.index);
+                        v["timestamp_us"] = json!(c.timestamp_us);
+                        v
+                    })
+                    .collect();
+                result["candidates"] = Value::from(list);
+            }
+            Ok(None) => {}
+            Err(e) => result["candidate_issue"] = json!(e.0),
+        }
+    }
+    Ok(result)
 }

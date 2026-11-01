@@ -489,3 +489,32 @@ fn c_abi_runs_requests_and_reports_progress() {
         assert_eq!(v["error"], "Missing request");
     }
 }
+
+#[test]
+fn ui_helper_modes_cover_preview_pairing_and_import_guard() {
+    use momentstays_core::engine::request::{handle, NoEvents};
+    let (src, out) = (Dir::new("src"), Dir::new("out"));
+    inputs(&src.0);
+    let call = |req: Value| handle(&NoNative, &NoEvents, &StopToken::new(), &req);
+    let v = call(json!({"mode": "preview-cover", "input": src.0.join("samsung.jpg")})).unwrap();
+    assert_eq!(v["cover"]["frame"], 1);
+    assert_eq!(v["frames"], 5);
+    assert!(call(json!({"mode": "still-check", "input": src.0.join("google.jpg")})).is_err());
+    run(
+        std::slice::from_ref(&src.0),
+        &out.0,
+        &ConversionOptions::default(),
+        None,
+    );
+    let still_path = out.0.join("google.jpg.livephoto/google.jpg");
+    assert_eq!(
+        call(json!({"mode": "still-check", "input": still_path})).unwrap()["ok"],
+        true
+    );
+    let pair = call(json!({"mode": "android-pair", "input": still_path})).unwrap();
+    assert_eq!(
+        (pair["frame"].as_i64(), pair["cover_us"].as_i64()),
+        (Some(2), Some(800_000))
+    );
+    assert!(pair["movie"].as_str().unwrap().ends_with("google.mov"));
+}

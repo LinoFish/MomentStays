@@ -27,6 +27,14 @@ Revisions written: `gui-native-1.1.5` (to Apple), `reverse-native-1.2.1`
 (to Android), `google-to-honor-a-modern-1` (Google → Honor). Resume accepts
 the same earlier revisions as Swift.
 
+Besides the NativeDriver modes (`format`, `scan`, `batch`,
+`android-assemble`, `android-still`, `cover-candidates`), the request layer
+has the calls the UI makes outside a batch: `scan-file` (one row, with the
+version used to reuse it in `batch` via `scan_rows`), `android-pair`
+(Photos import, preview), `preview-cover` (cover frame and candidates for
+the motion preview, replacing `sourceCoverTiming` there), `still-check`
+(the import guard on stills), plus `movie` and `export-auxiliary`.
+
 ## Host callbacks (`Native` / `MsNative`)
 
 | Callback | Swift code it replaces |
