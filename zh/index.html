@@ -130,7 +130,7 @@ footer{padding:44px 0 56px;font-size:14px;color:var(--faint)}
 @media (max-width:900px){.nav .lk{display:none}.cols{grid-template-columns:1fr}.keep{grid-template-columns:1fr}.keep dt{padding:0}}
 @media (max-width:640px){body{font-size:16px}.strip{grid-template-columns:repeat(4,1fr);row-gap:34px;padding:26px 14px}.steps{grid-template-columns:1fr;gap:26px}.stripcap{flex-direction:column;gap:4px}.replay{align-self:flex-start}}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.ring,.btn{transition:none}.f .tail{animation:none}}
-.fb{background:color-mix(in srgb,var(--amber) 14%,var(--paper));border:1px solid var(--amber);border-radius:12px;padding:26px 28px}.fb p{color:var(--soft);margin-top:10px}.fb .btn{margin-top:18px}#feedback,#feedback + #keeps{border-top:0}</style>
+#feedback p{color:var(--soft)}#feedback .btn{margin-top:18px}</style>
 </head>
 <body>
 <header><div class="wrap nav">
@@ -150,7 +150,7 @@ footer{padding:44px 0 56px;font-size:14px;color:var(--faint)}
 </figure>
 <div class="cta"><a class="btn" href="https://github.com/LinoFish/MomentStays/releases">下载 macOS 版</a><a class="tl" href="https://github.com/LinoFish/MomentStays">GitHub 源码</a><span class="meta">免费开源，macOS 12+，全程在本机处理</span></div>
 </div>
-<section id="feedback"><div class="wrap"><div class="cols fb"><div><h2>欢迎反馈</h2><p class="sub">遇到失败？告诉我们，我们来修</p></div><div><p>如果转换失败、或者结果不对，请提交 issue，并说明：来源设备与格式、转换方向、App 版本、你期望的结果、实际得到的结果。如果能提供可复现失败的样片，请先抹除敏感信息：用不含个人内容的照片，并去掉位置等私人元数据再上传。</p><a class="btn" href="https://github.com/LinoFish/MomentStays/issues">提交 issue</a></div></div></div></section>
+<section id="feedback"><div class="wrap cols"><div><h2>欢迎反馈</h2><p class="sub">遇到失败？告诉我们，我们来修</p></div><div><p>如果转换失败、或者结果不对，请提交 issue，并说明：来源设备与格式、转换方向、App 版本、你期望的结果、实际得到的结果。如果能提供可复现失败的样片，请先抹除敏感信息：用不含个人内容的照片，并去掉位置等私人元数据再上传。</p><a class="btn" href="https://github.com/LinoFish/MomentStays/issues">提交 issue</a></div></div></section>
 <section id="keeps"><div class="wrap cols"><div><h2>三样都留住</h2><p class="sub">该留的，一个不少</p></div><div><dl class="keep"><dt>封面</dt><dd><h3>还是你选的那一帧</h3><ul><li>按原时间戳对齐到对应的那一帧</li><li>时间信息缺失会直接提示，不拿中间帧凑数</li><li>想更清晰？部分照片可改选高清候选帧，动态不变</li></ul></dd></dl><dl class="keep"><dt>音视频</dt><dd><h3>不重新编码</h3><ul><li>原始音视频数据直接重新封装</li><li>输出前逐个样本校验</li><li class="n">注：苹果 HEIC 转安卓 JPEG 时，静态图需重新编码：格式不同，且安卓对 HEIC 支持有限</li></ul></dd></dl><dl class="keep"><dt>HDR</dt><dd><h3>能留的都留，留不了就说明</h3><ul><li>Ultra HDR 增益图连同参数保留</li><li>不支持的 HDR 会标出，不假装转好</li><li class="n">注：苹果增益图转成安卓格式时，可能无法完全无损</li><li class="n">注：高清候选帧不含 HDR 增益图</li></ul></dd></dl></div></div></section>
 <section id="how"><div class="wrap cols"><div><h2>怎么用</h2><p class="sub">三步就好</p></div><ol class="steps"><li><span class="num">1</span><h3>添加</h3><p>文件、文件夹，或「照片」图库</p></li><li><span class="num">2</span><h3>转换</h3><p>选方向和格式，支持批量</p></li><li><span class="num">3</span><h3>收好</h3><p>直接导入相册，或导出为文件</p></li></ol></div></section>
 <section id="support"><div class="wrap cols"><div><h2>格式支持</h2></div><div class="tw"><table><tr><th>方向</th><th>支持来源</th><th>输出</th></tr><tr><td>Android → Apple</td><td>Google 兼容格式、华为/荣耀、三星（含部分 HEIC）、OPPO、vivo</td><td>实况照片（JPEG/HEIC + MOV）</td></tr><tr><td>Apple → Android</td><td>Google/通用、小米、三星、华为/荣耀、OPPO、vivo</td><td>动态照片（JPEG）</td></tr><tr><td>Apple → Android</td><td>三星</td><td>动态照片（HEIC，保留原编码）</td></tr></table></div></div></section>
