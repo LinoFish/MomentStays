@@ -248,6 +248,30 @@ fn live_to_motion_for_every_vendor_and_resume() {
             counts(&run(std::slice::from_ref(&pair), &back.0, &options, None)),
             [0, 1, 0, 0]
         );
+        if ["google", "honor"].contains(&vendor) {
+            let manifest_path = back.0.join("g.jpg.motionphoto/manifest.json");
+            let mut manifest: Value =
+                serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+            manifest.as_object_mut().unwrap().remove("xmp_profile");
+            std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+            let refused = run(std::slice::from_ref(&pair), &back.0, &options, None);
+            assert_eq!(counts(&refused), [0, 0, 0, 1]);
+            assert!(refused.report_data.to_string().contains("旧版XMP"));
+            assert_eq!(std::fs::read(&file).unwrap(), bytes);
+            assert_eq!(
+                counts(&run(
+                    std::slice::from_ref(&pair),
+                    &back.0,
+                    &options,
+                    Some(ExistingOutput::Overwrite)
+                )),
+                [1, 0, 0, 0]
+            );
+            assert_eq!(
+                counts(&run(std::slice::from_ref(&pair), &back.0, &options, None)),
+                [0, 1, 0, 0]
+            );
+        }
     }
 }
 
@@ -517,6 +541,41 @@ fn ui_helper_modes_cover_preview_pairing_and_import_guard() {
         (Some(2), Some(800_000))
     );
     assert!(pair["movie"].as_str().unwrap().ends_with("google.mov"));
+}
+
+#[test]
+fn byte_helpers_use_real_writers_and_reject_invalid_base64() {
+    use momentstays_core::engine::request::{handle, NoEvents};
+    let call = |req: Value| handle(&NoNative, &NoEvents, &StopToken::new(), &req);
+    let base = b64("tests/fixtures-pycli/base.jpg.b64");
+    let movie = video();
+    let enc = |v: &[u8]| base64::engine::general_purpose::STANDARD.encode(v);
+    let result = call(json!({"mode":"android-assemble", "still_base64":enc(&base),
+        "video_base64":enc(&movie), "vendor":"google", "time_us":800_000}))
+    .unwrap();
+    let motion = base64::engine::general_purpose::STANDARD
+        .decode(result["data_base64"].as_str().unwrap())
+        .unwrap();
+    let photo = format::parse(&motion).unwrap();
+    assert_eq!(photo.video(&motion), movie);
+    assert_eq!(photo.timestamp, Some(800_000));
+    let result = call(json!({"mode":"live-still", "data_base64":enc(&motion),
+        "identifier":"REAL-HELPER-ID"}))
+    .unwrap();
+    let image = base64::engine::general_purpose::STANDARD
+        .decode(result["data_base64"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(
+        live::still_content_identifier(&image).unwrap().as_deref(),
+        Some("REAL-HELPER-ID")
+    );
+    assert_eq!(
+        format::coding_hash(&image).unwrap(),
+        format::coding_hash(&base).unwrap()
+    );
+    assert_eq!(jpeg::static_only(&image).unwrap(), image);
+    assert!(call(json!({"mode":"live-still", "data_base64":"!bad"})).is_err());
+    assert!(call(json!({"mode":"android-assemble", "still_base64":enc(&base)})).is_err());
 }
 
 #[test]

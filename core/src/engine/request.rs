@@ -9,6 +9,7 @@ use crate::engine::options::{AndroidOptions, ConversionOptions};
 use crate::engine::scanrow::{ScanRow, SourceVersion};
 use crate::engine::{android, candidates, needs_native, still, Native, StopToken};
 use crate::{format, sha256_hex, Error, Result};
+use base64::Engine;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
@@ -34,6 +35,19 @@ fn path(req: &Value, key: &str) -> Result<PathBuf> {
         .as_str()
         .map(PathBuf::from)
         .ok_or_else(|| Error::new(format!("Missing {key}")))
+}
+
+// Bounded byte input for headless callers; all writes use the same Rust engine.
+fn request_bytes(req: &Value, key: &str) -> Result<Vec<u8>> {
+    let text = req[key]
+        .as_str()
+        .ok_or_else(|| Error::new(format!("Missing {key}")))?;
+    if text.len() > 256 * 1024 * 1024 {
+        return Err(Error::new("Byte request exceeds resource limit"));
+    }
+    base64::engine::general_purpose::STANDARD
+        .decode(text)
+        .map_err(|_| Error::new(format!("Invalid {key}")))
 }
 
 fn read(p: &Path) -> Result<Vec<u8>> {
@@ -257,17 +271,27 @@ pub fn handle(
             Ok(out)
         }
         "android-assemble" => {
-            let data = read(&first()?)?;
-            let photo = format::parse(&data)?;
+            let (still_bytes, video_bytes) = if req["still_base64"].is_string() {
+                (
+                    request_bytes(req, "still_base64")?,
+                    request_bytes(req, "video_base64")?,
+                )
+            } else {
+                let data = read(&first()?)?;
+                let photo = format::parse(&data)?;
+                (photo.still.to_vec(), photo.video(&data).to_vec())
+            };
             let options = AndroidOptions::vendor(req["vendor"].as_str().unwrap_or("honor"));
             let out = android::assemble(
-                &photo.still,
-                photo.video(&data),
+                &still_bytes,
+                &video_bytes,
                 &options,
                 req["time_us"].as_i64().unwrap_or(400_000),
                 req["frame"].as_i64().unwrap_or(12),
             )?;
-            write(&path(req, "output")?, &out)?;
+            if req["output"].is_string() {
+                write(&path(req, "output")?, &out)?;
+            }
             let back = format::parse(&out)?;
             Ok(json!({
                 "format": back.format,
@@ -275,6 +299,7 @@ pub fn handle(
                 "cover_frame": back.cover_frame,
                 "video_sha256": sha256_hex(back.video(&out)),
                 "coding_hash": format::coding_hash(&back.still)?,
+                "data_base64": if req["output"].is_string() { Value::Null } else { json!(base64::engine::general_purpose::STANDARD.encode(&out)) },
             }))
         }
         "android-still" => {
@@ -342,6 +367,15 @@ pub fn handle(
             let (mov, info) = movie::export_auxiliary(&read(&first()?)?)?;
             write(&path(req, "output")?, &mov)?;
             Ok(info)
+        }
+        "live-still" => {
+            let data = request_bytes(req, "data_base64")?;
+            let out = still::live_still(
+                &data,
+                req["identifier"].as_str().unwrap_or(""),
+                req["update_identifier"].as_bool().unwrap_or(true),
+            )?;
+            Ok(json!({"data_base64": base64::engine::general_purpose::STANDARD.encode(out)}))
         }
         "still-check" => {
             // Photos import guard: the still holds only image data.

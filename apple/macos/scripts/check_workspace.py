@@ -12,9 +12,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 from testkit.fixtures import motion
 
-native = ["RustCore", "MotionLive", "PhotoFormat", "PhotoHEIF", "PhotoHDR", "BatchEngine", "CoverCandidates", "HEIFMetadata", "AndroidHDR", "AndroidExport", "AndroidTransfer"]
+native = ["RustCore", "MotionLive", "PhotoFormat", "BatchEngine", "CoverCandidates", "AndroidExport", "AndroidTransfer"]
 sources = [str(ROOT / "apple" / "shared" / (name + ".swift")) for name in native]
 sources += [str(ROOT / "apple" / "macos" / "Sources" / (name + ".swift")) for name in ["ConversionSettings", "ConversionService", "WorkspaceModel", "DeliveryModels", "PhotoLibraryService"]]
+sources.append(str(ROOT / "apple/shared/tests/TestFixtures.swift"))
 sources.append(str(ROOT / "apple/macos/tests/WorkspaceModelTests.swift"))
 binary = ROOT / ".build/gui/workspace-tests"
 binary.parent.mkdir(parents=True, exist_ok=True)

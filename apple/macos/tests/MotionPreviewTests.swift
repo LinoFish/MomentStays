@@ -19,7 +19,7 @@ struct MotionPreviewTests {
             let stamp = (fixtureInfo["cover_us"] as! Int64)
             let still = Array(try Data(contentsOf: directory.appendingPathComponent("still.jpg")))
             let video = Array(try Data(contentsOf: directory.appendingPathComponent("clip.mp4")))
-            let bytes = try AndroidExport.assemble(still: still, video: video, options: AndroidOptions(), time: Int(stamp), frame: 12)
+            let bytes = try fixtureMotion(still: still, video: video, options: AndroidOptions(), time: Int(stamp), frame: 12)
             let source = directory.appendingPathComponent("motion.jpg")
             try Data(bytes).write(to: source)
             let session = try MotionPreviewSession.prepare(source: source, direction: "to-apple", token: StopToken())
@@ -40,7 +40,7 @@ struct MotionPreviewTests {
                 regularSource = source
                 for (label, timestamp) in [("missing", -1), ("outside", 99_000_000)] {
                     let candidate = directory.appendingPathComponent(label + ".jpg")
-                    try Data(AndroidExport.assemble(still: still, video: video, options: AndroidOptions(), time: timestamp, frame: 12)).write(to: candidate)
+                    try Data(fixtureMotion(still: still, video: video, options: AndroidOptions(), time: timestamp, frame: 12)).write(to: candidate)
                     let unknown = try MotionPreviewSession.prepare(source: candidate, direction: "to-apple", token: StopToken())
                     check(unknown.coverTime == nil && unknown.coverIssue != nil, label + " cover is never fabricated")
                     let unknownFrame = try unknown.frame(at: 0.5)

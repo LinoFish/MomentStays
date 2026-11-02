@@ -905,6 +905,112 @@ pub fn remux_to_mp4(data: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// [`remux_to_mp4`] on an already parsed source.
+/// ISO MP4 cannot reuse QuickTime's version-2 LPCM sample description.
+/// Convert only its description to ISO/IEC 23003-5 ipcm/fpcm; samples stay
+/// byte-identical. Unknown packing/layouts fail rather than guessing.
+fn mp4_sound_entry(d: &[u8], entry: &BoxRef) -> Result<Vec<u8>> {
+    let raw = &d[entry.start..entry.end];
+    if !entry.is(b"lpcm") {
+        return Ok(raw.to_vec());
+    }
+    if raw.len() != 72
+        || crate::binary::be(raw, 16, 2)? != 2
+        || crate::binary::be(raw, 36, 4)? != 72
+    {
+        return fail_as(ErrorKind::Unsupported, "不能无损转换此 QuickTime PCM 描述");
+    }
+    let rate = f64::from_be_bytes(raw[40..48].try_into().unwrap());
+    let channels = crate::binary::be(raw, 48, 4)?;
+    let bits = crate::binary::be(raw, 56, 4)?;
+    let flags = crate::binary::be(raw, 60, 4)?;
+    let float = flags & 1 != 0;
+    if !rate.is_finite()
+        || rate.fract() != 0.0
+        || !(1.0..=65535.0).contains(&rate)
+        || channels == 0
+        || channels > 65535
+        || flags & !15 != 0
+        || flags & 8 == 0
+        || (!float && (flags & 4 == 0 || ![8, 16, 24, 32].contains(&bits)))
+        || (float && ![32, 64].contains(&bits))
+        || crate::binary::be(raw, 64, 4)? != channels * (bits / 8)
+        || crate::binary::be(raw, 68, 4)? != 1
+    {
+        return fail_as(ErrorKind::Unsupported, "PCM 排布无法在不转码时安全写入 MP4");
+    }
+    let mut body = raw[8..16].to_vec();
+    body.extend([0; 8]); // version 0, revision and vendor
+    body.extend(u16b(channels as u16));
+    body.extend(u16b(bits as u16));
+    body.extend([0; 4]);
+    body.extend(u32b((rate as u32) << 16));
+    let little = u8::from(flags & 2 == 0);
+    body.extend(full(b"pcmC", 0, 0, &[little, bits as u8]));
+    Ok(bx(if float { b"fpcm" } else { b"ipcm" }, &body))
+}
+
+/// QuickTime visual entries may end in a four-byte zero terminator, which
+/// is not an ISO box. Keep all actual child boxes/decoder configuration intact.
+fn mp4_video_entry(d: &[u8], entry: &BoxRef) -> Result<Vec<u8>> {
+    let raw = &d[entry.start..entry.end];
+    if raw.len() < 86 || !matches!(&raw[4..8], b"avc1" | b"hvc1" | b"hev1") {
+        return Ok(raw.to_vec());
+    }
+    let end = match mp4::boxes(raw, 86, raw.len()) {
+        Ok(_) => raw.len(),
+        Err(_) if raw.ends_with(&[0; 4]) => {
+            mp4::boxes(raw, 86, raw.len() - 4)?;
+            raw.len() - 4
+        }
+        Err(e) => return Err(e),
+    };
+    let mut body = raw[8..end].to_vec();
+    body[8..24].fill(0); // ISO VisualSampleEntry predefined/reserved fields
+    Ok(bx(raw[4..8].try_into().unwrap(), &body))
+}
+
+fn iso_mp4_tracks(tracks: &mut [TrackParts]) -> Result<()> {
+    for track in tracks {
+        let mut h = vec![0; 4];
+        h.extend(track.handler.as_bytes());
+        h.extend([0; 12]);
+        h.extend(if track.handler == "soun" {
+            b"SoundHandler\0".as_slice()
+        } else {
+            b"VideoHandler\0".as_slice()
+        });
+        track.hdlr = full(b"hdlr", 0, 0, &h);
+        track.minf_others.retain(|b| &b[4..8] != b"hdlr");
+        for b in &mut track.minf_others {
+            if &b[4..8] == b"dinf" {
+                let mut entries = u32b(1).to_vec();
+                entries.extend(full(b"url ", 0, 1, &[]));
+                // Source sample ranges have already been resolved into this
+                // file by Movie::parse; output samples are self-contained.
+                *b = bx(b"dinf", &full(b"dref", 0, 0, &entries));
+            }
+        }
+        if track.handler == "soun" || track.handler == "vide" {
+            for b in &mut track.stbl_ordered {
+                if &b[4..8] != b"stsd" {
+                    continue;
+                }
+                let entries = mp4::boxes(b, 16, b.len())?;
+                let mut body = u32b(entries.len() as u32).to_vec();
+                for entry in entries {
+                    body.extend(if track.handler == "soun" {
+                        mp4_sound_entry(b, &entry)?
+                    } else {
+                        mp4_video_entry(b, &entry)?
+                    });
+                }
+                *b = full(b"stsd", 0, 0, &body);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn remux_mp4(data: &[u8], movie: &Movie) -> Result<Vec<u8>> {
     let count = |h: &str| {
         movie
@@ -916,11 +1022,13 @@ pub fn remux_mp4(data: &[u8], movie: &Movie) -> Result<Vec<u8>> {
     if count("vide") != 1 || count("soun") > 1 {
         return fail_as(ErrorKind::Unsupported, "实况视频轨道布局不受支持");
     }
-    let (tracks, max_track_id) = parse_tracks(data, movie, 0, true)?;
+    let (mut tracks, max_track_id) = parse_tracks(data, movie, 0, true)?;
+    iso_mp4_tracks(&mut tracks)?;
     let mut ftyp_payload = b"mp42".to_vec();
     ftyp_payload.extend(u32b(0));
     ftyp_payload.extend(b"mp42");
     ftyp_payload.extend(b"isom");
+    ftyp_payload.extend(b"mp41");
     let out = assemble(
         &tracks,
         max_track_id,
@@ -1075,6 +1183,23 @@ fn verify(
     Ok(())
 }
 
+/// Read declared audio sample entries without inspecting media payload bytes.
+pub fn audio_codecs(data: &[u8], movie: &Movie) -> Result<Vec<String>> {
+    let mut codecs = Vec::new();
+    for track in movie.tracks.iter().filter(|t| t.samples.handler == "soun") {
+        let mdia = only(data, &track.trak, b"mdia", "mdia")?;
+        let minf = only(data, &mdia, b"minf", "minf")?;
+        let stbl = only(data, &minf, b"stbl", "stbl")?;
+        let stsd = only(data, &stbl, b"stsd", "stsd")?;
+        for entry in mp4::boxes(data, stsd.payload + 8, stsd.end)? {
+            codecs.push(
+                String::from_utf8_lossy(&data[entry.start + 4..entry.start + 8]).into_owned(),
+            );
+        }
+    }
+    Ok(codecs)
+}
+
 /// Track kinds kept by remux, for callers that need a summary.
 pub fn kept_handlers(data: &[u8], video_index: usize) -> Result<Vec<String>> {
     let (tracks, _) = parse_tracks(data, &Movie::parse(data)?, video_index, true)?;
@@ -1094,4 +1219,78 @@ pub fn track_header(d: &[u8], trak: &BoxRef) -> Result<(u32, f64, f64)> {
     let tkhd = only(d, trak, b"tkhd", "tkhd")?;
     let (id, width, height, ..) = parse_tkhd(d, &tkhd)?;
     Ok((id, width as f64 / 65536.0, height as f64 / 65536.0))
+}
+
+#[cfg(test)]
+mod iso_pcm_tests {
+    use super::*;
+    fn pcm(flags: u32, bits: u32, channels: u32) -> Vec<u8> {
+        let mut raw = vec![0; 72];
+        raw[..4].copy_from_slice(&72u32.to_be_bytes());
+        raw[4..8].copy_from_slice(b"lpcm");
+        raw[14..16].copy_from_slice(&1u16.to_be_bytes());
+        raw[16..18].copy_from_slice(&2u16.to_be_bytes());
+        raw[36..40].copy_from_slice(&72u32.to_be_bytes());
+        raw[40..48].copy_from_slice(&48000f64.to_be_bytes());
+        for (at, v) in [
+            (48, channels),
+            (56, bits),
+            (60, flags),
+            (64, channels * (bits / 8)),
+            (68, 1),
+        ] {
+            raw[at..at + 4].copy_from_slice(&v.to_be_bytes());
+        }
+        raw
+    }
+    #[test]
+    fn quicktime_pcm_gets_iso_description_without_touching_samples() {
+        for (flags, bits, kind, endian) in [
+            (12, 16, b"ipcm", 1),
+            (14, 24, b"ipcm", 0),
+            (9, 32, b"fpcm", 1),
+        ] {
+            let raw = pcm(flags, bits, 1);
+            let entry = mp4::boxes(&raw, 0, raw.len()).unwrap().remove(0);
+            let out = mp4_sound_entry(&raw, &entry).unwrap();
+            assert_eq!(&out[4..8], kind);
+            assert_eq!(crate::binary::be(&out, 16, 2).unwrap(), 0);
+            assert_eq!(crate::binary::be(&out, 24, 2).unwrap(), 1);
+            assert_eq!(crate::binary::be(&out, 32, 4).unwrap(), 48000 << 16);
+            assert_eq!(&out[40..44], b"pcmC");
+            assert_eq!(&out[48..50], &[endian, bits as u8]);
+        }
+    }
+    #[test]
+    fn quicktime_visual_terminator_is_removed_but_decoder_config_is_identical() {
+        let mut payload = vec![0; 78];
+        payload[16] = 2;
+        let config = bx(b"hvcC", &[1, 2, 3]);
+        payload.extend(&config);
+        payload.extend([0; 4]);
+        let raw = bx(b"hvc1", &payload);
+        let entry = mp4::boxes(&raw, 0, raw.len()).unwrap().remove(0);
+        let out = mp4_video_entry(&raw, &entry).unwrap();
+        assert_eq!(out.len() + 4, raw.len());
+        assert_eq!(&out[16..32], &[0; 16]);
+        assert_eq!(&out[86..], config.as_slice());
+        let mut bad = raw.clone();
+        bad.truncate(bad.len() - 3);
+        let size = bad.len() as u32;
+        bad[..4].copy_from_slice(&size.to_be_bytes());
+        let entry = mp4::boxes(&bad, 0, bad.len()).unwrap().remove(0);
+        assert!(mp4_video_entry(&bad, &entry).is_err());
+    }
+    #[test]
+    fn unsupported_pcm_layout_does_not_silently_change_audio() {
+        for flags in [0, 4, 28, 44] {
+            let raw = pcm(flags, 16, 1);
+            let entry = mp4::boxes(&raw, 0, raw.len()).unwrap().remove(0);
+            assert!(mp4_sound_entry(&raw, &entry).is_err());
+        }
+        let mut raw = pcm(12, 16, 1);
+        raw[40..48].copy_from_slice(&f64::NAN.to_be_bytes());
+        let entry = mp4::boxes(&raw, 0, raw.len()).unwrap().remove(0);
+        assert!(mp4_sound_entry(&raw, &entry).is_err());
+    }
 }

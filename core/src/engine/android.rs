@@ -201,9 +201,10 @@ pub fn remux(mov: &[u8]) -> Result<(Vec<u8>, Value)> {
             })
         })
         .collect();
+    let audio_codecs = remux::audio_codecs(&mp4, &out)?;
     Ok((
         mp4,
-        json!({"tracks": tracks, "video_reencoded": false, "audio_reencoded": false}),
+        json!({"tracks": tracks, "audio_codecs": audio_codecs, "video_reencoded": false, "audio_reencoded": false}),
     ))
 }
 
@@ -394,6 +395,15 @@ pub fn convert(
         {
             return failure("已有荣耀输出使用旧版私有尾标，可能导致视频方向错误；请选择覆盖以修复");
         }
+        if previous["mp4_layout"].as_str() != Some("iso-sample-copy-v1") {
+            return failure("已有输出使用旧版视频封装，请选择覆盖后重新转换");
+        }
+        if config.container == "jpeg"
+            && ["google", "honor"].contains(&config.vendor.as_str())
+            && previous["xmp_profile"].as_str() != Some("scoped-native-v1")
+        {
+            return failure("已有输出使用旧版XMP写法，请选择覆盖后重新转换");
+        }
         let same_movie = match (
             previous["paired_video_source"].as_str(),
             previous["paired_video_sha256"].as_str(),
@@ -456,6 +466,14 @@ pub fn convert(
         "厂商封装已通过本地解析校验；不同手机固件识别与 HDR 显示仍需真机验证"
     }
     .to_string()];
+    if timing["audio_codecs"].as_array().is_some_and(|v| {
+        v.iter()
+            .any(|c| matches!(c.as_str(), Some("ipcm" | "fpcm")))
+    }) {
+        warnings.push(
+            "源视频音频为 PCM，部分安卓相册可能无法识别或播放；已保留音频，未自动转码或静音".into(),
+        );
+    }
     if config.vendor == "honor" {
         warnings.push("荣耀格式仅作备用，新款荣耀推荐选择 Google / 通用。此兼容性针对留刻导出的文件，不代表能识别 Google 相机原片".into());
     }
@@ -468,6 +486,8 @@ pub fn convert(
         "paired_video_sha256": video_hash,
         "options": options.json(),
         "identifier": paired.identifier,
+        "mp4_layout": "iso-sample-copy-v1",
+        "xmp_profile": if config.container == "jpeg" && ["google", "honor"].contains(&config.vendor.as_str()) { "scoped-native-v1" } else { "existing" },
         "motion_layout": if config.vendor == "honor" { "google-compatible" } else { config.vendor.as_str() },
         "output_files": {"motionphoto": name},
         "output_sha256": {name.clone(): sha256_hex(&result)},

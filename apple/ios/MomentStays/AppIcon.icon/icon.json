@@ -1,0 +1,44 @@
+{
+  "fill": {
+    "solid": "srgb:0.98039,0.98039,0.98431,1.00000"
+  },
+  "fill-specializations": [
+    {
+      "appearance": "dark",
+      "fill": {
+        "solid": "srgb:0.08235,0.10196,0.13333,1.00000"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "name": "ring",
+          "image-name": "ring.svg",
+          "glass": true
+        },
+        {
+          "name": "dot",
+          "image-name": "dot.svg",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.5
+      },
+      "specular": true
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

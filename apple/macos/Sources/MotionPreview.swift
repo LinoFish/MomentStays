@@ -47,12 +47,9 @@ final class MotionPreviewSession {
         var ownsFolder = true
         defer { if ownsFolder, let folder = folder { try? FileManager.default.removeItem(at: folder) } }
         let movie: URL
-        var request: [String: Any] = ["time_domain": timeDomain, "missing_time": "error"]
         if direction == "to-android" {
             let pair = try AndroidExport.pair(source, domain: timeDomain)
             movie = pair.movie
-            // Pair validation already resolves the source metadata to an actual media frame.
-            request["cover_frame_index"] = pair.frame
         } else {
             let photo = try PhotoFormat.parse(Array(Data(contentsOf: source)))
             try check(token)
@@ -60,8 +57,6 @@ final class MotionPreviewSession {
             try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: false)
             folder = cache; movie = cache.appendingPathComponent("source.mp4")
             try Data(photo.video).write(to: movie, options: .atomic)
-            if let timestamp = photo.timestamp { request["timestamp_us"] = timestamp }
-            if let frame = photo.coverFrame { request["cover_frame_index"] = frame }
         }
         try check(token)
         let asset = AVURLAsset(url: movie)
@@ -108,7 +103,6 @@ final class MotionPreviewSession {
         guard !frames.isEmpty else { throw Failure("视频没有可预览的画面") }
         var cover: Double?, issue: String?
         var candidateSession: CoverCandidateSession?, choices: [PreviewCoverCandidate] = [], candidateIssue: String?
-        #if !MOTIONLIVE_SWIFT_REFERENCE
         let resolved = try RustCore.engine(["mode":"preview-cover","input":source.path,"direction":direction,"time_domain":timeDomain],token:token)
         if let value = resolved["cover"] as? [String:Any] {
             issue = value["issue"] as? String
@@ -125,27 +119,6 @@ final class MotionPreviewSession {
         if !choices.isEmpty, let folder = folder {
             candidateSession = try CoverCandidateSession.prepare(video:Array(Data(contentsOf:movie)),folder:folder)
         }
-        #else
-        do {
-            let resolved = try sourceCoverTiming(request, video: info, selection: "primary", primaryInfo: { info })
-            cover = try offset(resolved.frameTime)
-        } catch { issue = error.localizedDescription }
-        if direction == "to-apple", let folder = folder, asset.tracks(withMediaType:.video).count > 1 {
-            do {
-                candidateSession = try CoverCandidateSession.prepare(video:Array(Data(contentsOf:movie)),folder:folder)
-                for candidate in candidateSession?.candidates ?? [] {
-                    do {
-                        let resolved = try sourceCoverTiming(["timestamp_us":candidate.timestampUs,"time_domain":"presentation"],
-                            video:info,selection:"primary",primaryInfo:{ info })
-                        choices.append(PreviewCoverCandidate(index:candidate.index,timestampUs:candidate.timestampUs,
-                            time:try offset(resolved.frameTime),issue:nil))
-                    } catch {
-                        choices.append(PreviewCoverCandidate(index:candidate.index,timestampUs:candidate.timestampUs,time:nil,issue:error.localizedDescription))
-                    }
-                }
-            } catch { candidateIssue = error.localizedDescription }
-        }
-        #endif
         try check(token)
         let session = MotionPreviewSession(composition: composition, duration: duration, cover: cover,
             issue: issue, frames: frames, temporaryFolder: folder,candidates:choices,

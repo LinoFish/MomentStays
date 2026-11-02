@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.6.0</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.6.1</strong>
 </p>
 
 # 留刻— Android Motion Photo ↔ Apple Live Photo Converter for macOS
@@ -22,6 +22,8 @@ Convert Android Motion Photos to Apple Live Photos — and convert Live Photos b
   <img src="https://img.shields.io/badge/License-GPL--3.0--only-blue" alt="License GPL-3.0-only">
 </p>
 
+> **Feedback welcome:** Tried it and something failed or looks wrong? [Open an issue](https://github.com/LinoFish/MomentStays/issues) — tell us the source device and format, the conversion direction and the app version, and strip sensitive information from any sample first. See [Feedback](#feedback) below.
+
 **Download:** get the latest DMG/ZIP from [Releases](https://github.com/LinoFish/MomentStays/releases), or build from source below.
 
 Move Motion Photos between Android and Apple Live Photos while keeping the moment you chose as the cover. Remux the original video and audio, preserve supported image and HDR data, and bring converted Live Photos into your Photos library.
@@ -29,6 +31,12 @@ Move Motion Photos between Android and Apple Live Photos while keeping the momen
 [Build & run](#build--run) · [Photos integration](#works-with-your-photos-library) · [Preservation details](#what-stays-with-your-photo) · [Documentation](docs/README.md)
 
 **License: [GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino
+
+## Feedback
+
+Feedback is welcome. If a conversion fails, or the result does not look right, please [open an issue](https://github.com/LinoFish/MomentStays/issues) and describe what happened: the source device and format, the conversion direction, the app version, what you expected, and what you got instead.
+
+If you can share a sample that reproduces the failure, please remove sensitive information first: use a photo that contains no personal content, and strip location and other private metadata before uploading. A minimal sample that still reproduces the problem is more useful than a full personal album.
 
 ## The moment stays
 
@@ -153,10 +161,10 @@ python3 scripts/check_publish.py
 
 ## Development
 
-The legacy Python CLI has been removed. Python is retained only for format references, regression tests, packaging and documentation tooling; the app runs independently of it.
+The Python converter is no longer maintained. The Rust engine (`core/`) and Swift UI/system bridge (`apple/shared/`) form the application; Python remains only for the macOS check scripts, packaging and documentation tooling. The app runs independently of it.
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
+cd core && cargo test --release && cd ..
 bash apple/macos/scripts/build_gui_tests.sh
 python3 apple/macos/scripts/check_gui_engine.py
 python3 apple/macos/scripts/check_reverse.py
@@ -170,13 +178,18 @@ bash apple/macos/scripts/build_app.sh --diagnostics
 python3 apple/macos/scripts/check_swiftui_ui.py
 ```
 
+The repository is split by platform. Each platform directory owns its UI, build scripts and tests; shared behavior lives in `core/`.
+
 | Area | Location |
 | --- | --- |
-| SwiftUI, task state, Photos and sharing | `apple/macos/Sources/` |
-| Parsing, HDR, timing, conversion, verification | `core/src/engine/`, `core/src/platform/`, `apple/shared/` |
-| Independent Python fixture readers for regression | `apple/macos/scripts/testkit/` |
-| Build scripts and regression drivers | `apple/macos/scripts/`, `apple/shared/tests/` |
-| App metadata and reproducible icon drawing | `apple/macos/packaging/` |
+| Cross-platform Rust core (parsing, remux, vendor writers, C ABI) | `core/` |
+| Swift bridge and system interfaces shared by macOS and iOS | `apple/shared/` |
+| macOS app: SwiftUI, task state, Photos and sharing | `apple/macos/Sources/` |
+| macOS build scripts, regression checks and test fixtures | `apple/macos/scripts/`, `apple/macos/tests/`, `apple/shared/tests/` |
+| macOS app metadata, DMG layout and icon drawing | `apple/macos/packaging/` |
+| iOS app, share extension and Swift packages (work in progress) | `apple/ios/` |
+| Windows and Android apps (planned) | `windows/`, `android/` |
+| Repository-wide tools (publication audit, website sync) | `scripts/` |
 | Project icon and README artwork | [Brand assets](docs/branding/README.md) |
 
 New to MomentStays? Start with the **[User Guide](docs/USER_GUIDE.md)** ([简体中文版](docs/USER_GUIDE.zh-CN.md)) — every feature explained, including auxiliary tracks and Photos library import.
@@ -214,7 +227,7 @@ Yes. MomentStays is GPL-3.0-only open source, runs entirely on your Mac, and nev
 Thank you to the projects, authors and maintainers whose code, tools, research and design workflows support MomentStays:
 
 - **System APIs and typography:** [Apple frameworks and SDK documentation](https://developer.apple.com/documentation/), [SF Symbols](https://developer.apple.com/sf-symbols/) and [system fonts](https://developer.apple.com/fonts/).
-- **Rust core code dependencies:** [RustCrypto](https://github.com/RustCrypto/hashes) (`sha2`, `md-5`), [roxmltree](https://github.com/RazrFalcon/roxmltree), [serde_json](https://github.com/serde-rs/json), and their complete locked transitive dependencies, listed with versions and licenses in the notices. The native app uses the Rust conversion engine with an isolated Apple system codec backend.
+- **Rust core code dependencies:** [RustCrypto](https://github.com/RustCrypto/hashes) (`sha2`, `md-5`), [serde_json](https://github.com/serde-rs/json), and their complete locked transitive dependencies, listed with versions and licenses in the notices. The Rust engine is statically linked into the macOS app.
 - **Motion Photo implementation references:** [MotionTrans](https://github.com/Huakira/MotionTrans), [Live Photo Box](https://github.com/LengxiQwQ/live-photo-box), [ExifTool](https://exiftool.org/), [motionphoto](https://github.com/doodspav/motionphoto).
 - **HDR, HEIC and compatibility research:** [OpenHarmony](https://github.com/openharmony/multimedia_image_framework), [libheif](https://github.com/strukturag/libheif), [libultrahdr](https://github.com/google/libultrahdr), [MotionPhotoSamples](https://github.com/NightMean/MotionPhotoSamples). Evaluated alternatives: [libmotionphoto](https://github.com/google/libmotionphoto), [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2), [LiveMux](https://github.com/ysya/LiveMux).
 - **Packaging, documentation and validation:** [ds_store](https://github.com/dmgbuild/ds_store), [mac_alias](https://github.com/dmgbuild/mac_alias), [dmgbuild](https://github.com/dmgbuild/dmgbuild), [Chromium](https://chromium.googlesource.com/chromium/src/+/main/chrome/installer/mac/generate_dsstore.py), [Python-Markdown](https://github.com/Python-Markdown/markdown), [importlib_metadata](https://github.com/python/importlib_metadata), [zipp](https://github.com/jaraco/zipp), [fontTools](https://github.com/fonttools/fonttools) and [Brotli](https://github.com/google/brotli).
@@ -222,7 +235,7 @@ Thank you to the projects, authors and maintainers whose code, tools, research a
 - **Website fonts:** [Noto Serif SC / Noto CJK](https://github.com/notofonts/noto-cjk), [Adobe / Source Han Serif](https://github.com/adobe-fonts/source-han-serif) and [Google Fonts](https://github.com/google/fonts); [SIL OFL 1.1](docs/branding/fonts/OFL.txt). See [font credits and full license](docs/branding/fonts/README.md).
 - **Specifications and interoperability:** [Android Motion Photo](https://developer.android.com/media/platform/motion-photo-format), [Apple developer documentation](https://developer.apple.com/documentation/)/[HIG](https://developer.apple.com/design/human-interface-guidelines/), [Adobe XMP](https://developer.adobe.com/xmp/), [W3C RDF](https://www.w3.org/RDF/)/[WCAG](https://www.w3.org/TR/WCAG22/), [ISO media](https://www.iso.org/standard/85596.html)/[gain-map formats](https://www.iso.org/standard/86775.html) and [LocalSend](https://github.com/localsend/localsend) sharing research.
 
-See the [complete classified third-party notices](THIRD_PARTY_NOTICES.md) for each role, all 23 locked Rust crates, toolchain credits, upstream license links and distribution scope. References, evaluated alternatives and Skills are identified separately from shipped dependencies.
+See the [complete classified third-party notices](THIRD_PARTY_NOTICES.md) for each role, all 28 locked Rust crates, toolchain credits, upstream license links and distribution scope. References, evaluated alternatives and Skills are identified separately from shipped dependencies.
 
 ## License
 

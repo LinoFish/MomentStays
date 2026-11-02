@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare separately built Swift-reference and integrated backend drivers.
+"""Compare an archived reference driver and the integrated backend driver.
 
 Drivers use apple/shared/tests/RustBridgeDriver.swift linked to each backend library.
 No media is persisted outside the temporary fixture directory.

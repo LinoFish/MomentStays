@@ -1,6 +1,6 @@
 #!/bin/bash
 # Exercise the production Rust engine and direct Apple codec backend.
-# Build native-tests first; MOTIONLIVE_SWIFT_REFERENCE=1 builds the reference.
+# Build the production native-tests driver first.
 set -o pipefail
 cd "$(dirname "$0")/../../.."
 [[ -x .build/gui/native-tests ]] || { echo 'Run apple/macos/scripts/build_gui_tests.sh first' >&2; exit 2; }

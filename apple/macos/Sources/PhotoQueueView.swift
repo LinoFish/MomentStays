@@ -1,5 +1,6 @@
 import SwiftUI
 import ImageIO
+import AppKit
 
 // File selection lives in the model so grid/list and window resizing keep it intact.
 struct PhotoQueueView: View {
@@ -8,6 +9,7 @@ struct PhotoQueueView: View {
     let short: Bool
     @Binding var scope: PhotoQueueScope
     @State private var prefersGrid = true
+    @StateObject private var scrollMemory = QueueScrollMemory()
     @State private var coverEditor: PhotoQueueItem?
 
     private var visibleItems: [PhotoQueueItem] { model.items.filter { scope.includes($0,settings:model.settings) } }
@@ -25,6 +27,7 @@ struct PhotoQueueView: View {
                     coverSheet(item,width:min(480,max(320,geometry.size.width - 32)))
                 }
                 .onAppear(perform:configureDiagnostics)
+                .onReceive(model.$queueScope.removeDuplicates()) { _ in scrollMemory.switching = true }
         }
     }
 
@@ -89,6 +92,7 @@ struct PhotoQueueView: View {
                     }
                     .padding(InterfaceStyle.Spacing.content)
                 }
+                .background(QueueScrollRestore(key:scope.rawValue + "-grid",memory:scrollMemory))
                 .accessibilityIdentifier("photo-queue")
             } else {
                 List(selection: $model.selection) {
@@ -100,6 +104,7 @@ struct PhotoQueueView: View {
                 }
                 .listStyle(.plain)
                 .environment(\.defaultMinListRowHeight, layout.twoLines ? 50 : 32)
+                .background(QueueScrollRestore(key:scope.rawValue + "-list",memory:scrollMemory))
                 .accessibilityIdentifier("photo-queue")
             }
             if visibleItems.isEmpty { emptyState }
@@ -427,6 +432,80 @@ private enum ThumbnailStore {
                 }
                 cache.setObject(image, forKey: url as NSURL, cost: image.bytesPerRow * image.height)
                 continuation.resume(returning: image)
+            }
+        }
+    }
+}
+
+// Keep native clip-view coordinates per filter and presentation. Tracking the
+// clip view preserves partially visible rows too (selection is not a scroll
+// anchor). Delayed restores are generation-bound, so rapid tab switches cannot
+// scroll a later tab or write its position into the previous one.
+private final class QueueScrollMemory: ObservableObject {
+    var positions: [String: NSPoint] = [:]
+    var switching = false
+}
+private struct QueueScrollRestore: NSViewRepresentable {
+    let key: String
+    let memory: QueueScrollMemory
+    func makeCoordinator() -> Coordinator { Coordinator(memory: memory) }
+    func makeNSView(context: Context) -> NSView { NSView() }
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.update(view, key: key)
+    }
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) { coordinator.detach() }
+    final class Coordinator {
+        let memory: QueueScrollMemory
+        weak var scroll: NSScrollView?
+        var observer: NSObjectProtocol?
+        var key: String?
+        var generation = 0
+        var restoring = false
+        init(memory: QueueScrollMemory) { self.memory = memory }
+        deinit { detach() }
+        func detach() {
+            if let observer = observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+        }
+        func find(_ view: NSView) -> NSScrollView? {
+            if let value = view as? NSScrollView { return value }
+            for child in view.subviews { if let value = find(child) { return value } }
+            return nil
+        }
+        func update(_ view: NSView, key next: String) {
+            guard key != next || scroll == nil else { return }
+            key = next; restoring = true; generation += 1
+            let revision = generation
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self = self, let view = view, self.generation == revision else { return }
+                var parent = view.superview
+                var found: NSScrollView?
+                while let candidate = parent, found == nil {
+                    found = self.find(candidate); parent = candidate.superview
+                }
+                guard let scroll = found else { self.restoring = false; self.memory.switching = false; return }
+                self.detach(); self.scroll = scroll
+                scroll.contentView.postsBoundsChangedNotifications = true
+                self.observer = NotificationCenter.default.addObserver(forName:NSView.boundsDidChangeNotification,
+                    object:scroll.contentView,queue:.main) { [weak self] _ in
+                    guard let self = self, !self.restoring, !self.memory.switching, let key = self.key, let scroll = self.scroll else { return }
+                    self.memory.positions[key] = scroll.contentView.bounds.origin
+                }
+                func restore() {
+                    guard self.generation == revision else { return }
+                    scroll.layoutSubtreeIfNeeded()
+                    let point = self.memory.positions[next] ?? .zero
+                    let bounds = scroll.documentView?.bounds ?? .zero
+                    let clip = scroll.contentView
+                    let clamped = NSPoint(x:max(0,min(point.x,bounds.width-clip.bounds.width)),
+                        y:max(0,min(point.y,bounds.height-clip.bounds.height)))
+                    clip.scroll(to:clamped); scroll.reflectScrolledClipView(clip)
+                }
+                restore()
+                DispatchQueue.main.asyncAfter(deadline:.now()+0.05) { [weak self] in
+                    guard let self = self, self.generation == revision else { return }
+                    restore(); self.restoring = false; self.memory.switching = false
+                }
             }
         }
     }

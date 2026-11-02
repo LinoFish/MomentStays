@@ -97,6 +97,48 @@ struct ConversionReport {
 
 // All mutations are main-queue confined. No NSWindow, photo picker, or file dialog
 // is owned here; a future iOS host supplies its own platform actions/presenter.
+enum PhotoQueueScope: String, CaseIterable, Identifiable {
+    case ready, completed, all, still, attention
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: return "全部"
+        case .ready: return "可转换"
+        case .still: return "静态照片"
+        case .completed: return "已转换"
+        case .attention: return "需检查"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .all: return "photo.on.rectangle"
+        case .ready: return "circle"
+        case .still: return "photo"
+        case .completed: return "checkmark.circle"
+        case .attention: return "exclamationmark.circle"
+        }
+    }
+    var emptyTitle: String {
+        switch self {
+        case .all: return "照片会显示在这里"
+        case .ready: return "暂无可转换照片"
+        case .still: return "当前来源中没有静态照片"
+        case .completed: return "暂无已转换结果"
+        case .attention: return "没有需要检查的照片"
+        }
+    }
+    func includes(_ item: PhotoQueueItem, settings: ConversionSettings = ConversionSettings()) -> Bool {
+        let category = item.category(settings:settings)
+        switch self {
+        case .all: return true
+        case .ready: return category == .ready
+        case .still: return category == .static
+        case .completed: return category == .converted
+        case .attention: return category == .inspect
+        }
+    }
+}
+
 final class WorkspaceModel: ObservableObject {
     @Published private(set) var settings = ConversionSettings()
     @Published private(set) var phase: TaskPhase = .idle
@@ -104,6 +146,12 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var sourceLabel = "尚未选择原片"
     @Published private(set) var output: URL?
     @Published private(set) var items: [PhotoQueueItem] = []
+    @Published private(set) var queueScope: PhotoQueueScope = .ready
+    private var followsConversionResults = false
+    func selectQueueScope(_ scope: PhotoQueueScope) {
+        if scope != queueScope { followsConversionResults = false }
+        queueScope = scope
+    }
     @Published var selection: String?
     @Published private(set) var status = "选择照片或文件夹，开始转换"
     @Published private(set) var notice: String?
@@ -370,6 +418,7 @@ final class WorkspaceModel: ObservableObject {
         invalidateCoverSelections(Set(coverVersions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) != $0.value ? $0.key : nil }))
         do { try NativeBatch.validateOutput(sources: sources, output: output) }
         catch { errorMessage = error.localizedDescription; return }
+        followsConversionResults = queueScope == .ready
         let capturedSettings = settings
         let job = ConversionJob(sources: sources, output: output, options: capturedSettings.options, scanRows: items.map(\.row))
         let id = begin(.converting, message: "正在准备转换…"), currentToken = token
@@ -404,6 +453,8 @@ final class WorkspaceModel: ObservableObject {
                 let report = ConversionReport(outcome); self.report = report
                 self.phase = outcome.cancelled ? .stopped : .completed
                 self.status = outcome.cancelled ? "任务已停止" : report.counts["failed", default: 0] > 0 ? "已完成，部分文件需要检查" : "转换完成"
+                if !outcome.cancelled && !currentToken.isCancelled && self.followsConversionResults { self.queueScope = .completed }
+                self.followsConversionResults = false
                 self.onConversionFinished(outcome, capturedSettings)
             case .failure(let error): self.fail(error, cancelled: currentToken.isCancelled)
             }

@@ -217,12 +217,7 @@ final class PhotoLibraryService {
                         let paired = try AndroidExport.pair(still)
                         guard paired.movie.standardizedFileURL == movie.standardizedFileURL else { throw Failure("配对视频不匹配") }
                     }
-                    #if !MOTIONLIVE_SWIFT_REFERENCE
                     _ = try RustCore.engine(["mode":"still-check","input":still.path])
-                    #else
-                    if PhotoHEIF.matches(Array(try Data(contentsOf: still))) { _ = try PhotoHEIF.layout(Array(Data(contentsOf: still))) }
-                    else { guard try MLJPEG.staticOnly(Array(Data(contentsOf: still))) == Array(Data(contentsOf: still)) else { throw Failure("静态图片仍含嵌入视频或额外载荷") } }
-                    #endif
                     var pending = LibraryImportRecord(key: file.key, state: "pending")
                     try store.save(pending)
                     let fallback = Self.fileMetadata(URL(fileURLWithPath:file.source))

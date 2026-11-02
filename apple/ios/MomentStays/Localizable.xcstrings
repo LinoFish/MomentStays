@@ -1,0 +1,1026 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "MomentStays": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留刻"
+          }
+        }
+      }
+    },
+    "Keep moving photos moving, on any phone.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "让会动的照片，在两种手机间都会动。"
+          }
+        }
+      }
+    },
+    "Live Photos and Motion Photos, together.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实况照片与安卓动态照片互转。"
+          }
+        }
+      }
+    },
+    "Choose from Photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从照片中选择"
+          }
+        }
+      }
+    },
+    "Choose from Files": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从「文件」中选择"
+          }
+        }
+      }
+    },
+    "Android → Live Photo": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安卓 → 实况照片"
+          }
+        }
+      }
+    },
+    "Live Photo → Android": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实况照片 → 安卓"
+          }
+        }
+      }
+    },
+    "Turn a Motion Photo from an Android friend into a Live Photo.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把安卓朋友发来的动态照片，变成 iPhone 上的实况照片。"
+          }
+        }
+      }
+    },
+    "Send a Live Photo to Android so it still moves there.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把你的实况照片发给安卓用户，对方看到的也会动。"
+          }
+        }
+      }
+    },
+    "Photos are processed on this iPhone and never uploaded.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "照片只在本机处理，不会上传。"
+          }
+        }
+      }
+    },
+    "You can also open a Motion Photo from Files.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "也可以在「文件」中打开动态照片。"
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关于"
+          }
+        }
+      }
+    },
+    "Reading photo…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在读取照片…"
+          }
+        }
+      }
+    },
+    "Couldn't open this file": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法打开这个文件"
+          }
+        }
+      }
+    },
+    "Couldn't open this file.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法打开这个文件。"
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
+    "Live Photo": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实况照片"
+          }
+        }
+      }
+    },
+    "Motion Photo": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "动态照片"
+          }
+        }
+      }
+    },
+    "This photo doesn't move. Choose a Live Photo.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这张照片不会动。请选择实况照片。"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "版本"
+          }
+        }
+      }
+    },
+    "Open source · GPL-3.0": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开源 · GPL-3.0"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        }
+      }
+    },
+    "What phone will they use?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对方用的是什么手机？"
+          }
+        }
+      }
+    },
+    "Not sure? Pick Google — most Android phones can play it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不确定就选 Google，大多数安卓手机都能播放。"
+          }
+        }
+      }
+    },
+    "The result will be a paired photo and video.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将存为照片和视频配对的实况照片。"
+          }
+        }
+      }
+    },
+    "Couldn't convert this photo": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转换没有完成"
+          }
+        }
+      }
+    },
+    "Convert": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转换"
+          }
+        }
+      }
+    },
+    "Converting…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在转换…"
+          }
+        }
+      }
+    },
+    "Try Again": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试"
+          }
+        }
+      }
+    },
+    "Conversion is not available in this build.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此版本暂不支持转换。"
+          }
+        }
+      }
+    },
+    "Your photo is ready": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转换好了"
+          }
+        }
+      }
+    },
+    "Converted to a Live Photo.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已转成实况照片。"
+          }
+        }
+      }
+    },
+    "Saved to Photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已存入照片"
+          }
+        }
+      }
+    },
+    "Save to Photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "存入照片"
+          }
+        }
+      }
+    },
+    "Touch and hold in Photos to play.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在「照片」中长按即可播放。"
+          }
+        }
+      }
+    },
+    "Share": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分享"
+          }
+        }
+      }
+    },
+    "Convert Another": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再转换一张"
+          }
+        }
+      }
+    },
+    "Couldn't save to Photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没能存入照片"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前往设置"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        }
+      }
+    },
+    "Couldn't save. Allow MomentStays to add photos in Settings.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没能存入照片，请在“设置”中允许留刻添加照片。"
+          }
+        }
+      }
+    },
+    "Made with AirBuild": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由 AirBuild 创建"
+          }
+        }
+      }
+    },
+    "Google (works on most)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google（通用）"
+          }
+        }
+      }
+    },
+    "Ready to play on %@. Share it as a file so it isn't flattened into a still.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已转成%@可播放的动态照片。请以文件形式分享，避免被压缩成静态图。"
+          }
+        }
+      }
+    },
+    "Choose Photo Source": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择照片来源"
+          }
+        }
+      }
+    },
+    "Find in Photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从照片中查找"
+          }
+        }
+      }
+    },
+    "Scan the photos you allow access to for Android Motion Photos.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描你允许访问的照片，查找安卓动态照片。"
+          }
+        }
+      }
+    },
+    "Only photos you've allowed access to were scanned.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅扫描了你允许访问的照片。"
+          }
+        }
+      }
+    },
+    "Manage Accessible Photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理可访问的照片"
+          }
+        }
+      }
+    },
+    "Looking for Motion Photos…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在查找动态照片…"
+          }
+        }
+      }
+    },
+    "Checked %lld of %lld photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检查 %lld / %lld 张"
+          }
+        }
+      }
+    },
+    "Stop Scan": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止扫描"
+          }
+        }
+      }
+    },
+    "Scan stopped": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描已停止"
+          }
+        }
+      }
+    },
+    "No Motion Photos found yet.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未找到动态照片。"
+          }
+        }
+      }
+    },
+    "Couldn't Complete the Scan": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法完成扫描"
+          }
+        }
+      }
+    },
+    "Can't access Photos, so your library can't be scanned. You can still choose from Files.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法访问照片，暂时不能扫描相册。你仍可以从文件中选择。"
+          }
+        }
+      }
+    },
+    "No Motion Photos Found": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到动态照片"
+          }
+        }
+      }
+    },
+    "Motion Photos Found": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找到的动态照片"
+          }
+        }
+      }
+    },
+    "Originals for %lld photos couldn't be read, so results may be incomplete.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有 %lld 张照片无法检查，结果可能不完整。"
+          }
+        }
+      }
+    },
+    "Some photos may lose their motion data when shared or compressed. Try the original file.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有些照片在分享或压缩后可能不再包含动态内容。试试原始文件。"
+          }
+        }
+      }
+    },
+    "Scan Again": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新扫描"
+          }
+        }
+      }
+    },
+    "Find Motion Photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查找动态照片"
+          }
+        }
+      }
+    },
+    "Can't Read the Original Photo": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取这张照片的原件"
+          }
+        }
+      }
+    },
+    "Couldn't find converted files.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法找到转换后的文件。"
+          }
+        }
+      }
+    },
+    "%lld photos couldn't be checked, so results may be incomplete.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有 %lld 张照片无法检查，结果可能不完整。"
+          }
+        }
+      }
+    },
+    "This file isn't a Motion Photo, so it can't be converted.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个文件不是动态照片，无法转换。"
+          }
+        }
+      }
+    },
+    "Only JPEG or HEIC Motion Photos are supported.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只支持 JPEG 或 HEIC 格式的动态照片。"
+          }
+        }
+      }
+    },
+    "Save to Files": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "存到“文件”"
+          }
+        }
+      }
+    },
+    "Allow access to this Live Photo in Settings, then try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在设置中允许访问这张实况照片，然后重试。"
+          }
+        }
+      }
+    },
+    "Can't read the original Live Photo and video. Make sure both are downloaded, then try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取实况照片和视频原件。请确认原件已下载后重试。"
+          }
+        }
+      }
+    },
+    "Live Photo preview unavailable": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法预览实况照片"
+          }
+        }
+      }
+    },
+    "Live Photo preview": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实况照片预览"
+          }
+        }
+      }
+    },
+    "Could not determine whether this is a Motion Photo. Try the original file.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法确认这是否是动态照片。请尝试原始文件。"
+          }
+        }
+      }
+    },
+    "Allow access to the selected Live Photo": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许访问所选实况照片"
+          }
+        }
+      }
+    },
+    "Manage Photo Access": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理照片访问权限"
+          }
+        }
+      }
+    },
+    "Add this Live Photo to the photos available to MomentStays, then select it again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请将这张实况照片添加到留刻可以访问的照片中，然后重新选择。"
+          }
+        }
+      }
+    },
+    "Allow access to the selected photo": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许访问所选照片"
+          }
+        }
+      }
+    },
+    "Add this photo to the photos available to MomentStays, then select it again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请将这些照片添加到留刻可访问的照片中，然后重新选择。"
+          }
+        }
+      }
+    },
+    "Allow access to this photo in Settings, then try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在设置中允许访问这张照片，然后重试。"
+          }
+        }
+      }
+    },
+    "Can't read the original photo or its video. Make sure the originals are downloaded, then try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取照片或视频的原始文件。请确保原始文件已下载，然后重试。"
+          }
+        }
+      }
+    },
+    "Choose Photos to Convert": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择要转换的照片"
+          }
+        }
+      }
+    },
+    "Select All": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全选"
+          }
+        }
+      }
+    },
+    "Select All Found": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全选已找到的"
+          }
+        }
+      }
+    },
+    "Deselect All": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消全选"
+          }
+        }
+      }
+    },
+    "Checking originals…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检查原始照片…"
+          }
+        }
+      }
+    },
+    "No Photos to Convert": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有可以转换的照片"
+          }
+        }
+      }
+    },
+    "Sharing or compression may remove motion data. Try the original files.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分享或压缩可能会让照片丢失动态内容。试试原始文件。"
+          }
+        }
+      }
+    },
+    "Converting": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在转换"
+          }
+        }
+      }
+    },
+    "Conversion Results": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转换结果"
+          }
+        }
+      }
+    },
+    "Waiting": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待"
+          }
+        }
+      }
+    },
+    "Failed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "失败"
+          }
+        }
+      }
+    },
+    "Not Converted": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未转换"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止"
+          }
+        }
+      }
+    },
+    "Stop converting?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止转换？"
+          }
+        }
+      }
+    },
+    "Stop Converting": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止转换"
+          }
+        }
+      }
+    },
+    "Continue Converting": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "继续转换"
+          }
+        }
+      }
+    },
+    "Leave Conversion Results?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离开转换结果？"
+          }
+        }
+      }
+    },
+    "Leave": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离开"
+          }
+        }
+      }
+    },
+    "Stay": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留下"
+          }
+        }
+      }
+    },
+    "Preview": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览"
+          }
+        }
+      }
+    },
+    "Selected": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已选中"
+          }
+        }
+      }
+    },
+    "Not Selected": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未选中"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

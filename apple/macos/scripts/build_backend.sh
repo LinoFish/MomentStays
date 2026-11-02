@@ -8,10 +8,10 @@ if [[ $# -gt 0 ]]; then
   exit 2
 fi
 source apple/macos/scripts/rust_bridge.sh
-sources=(apple/shared/RustCore.swift apple/shared/MotionLive.swift apple/shared/PhotoFormat.swift apple/shared/PhotoHEIF.swift apple/shared/PhotoHDR.swift apple/shared/BatchEngine.swift
-  apple/shared/CoverCandidates.swift apple/shared/HEIFMetadata.swift apple/shared/AndroidHDR.swift apple/shared/AndroidExport.swift apple/shared/AndroidTransfer.swift
+sources=(apple/shared/RustCore.swift apple/shared/MotionLive.swift apple/shared/PhotoFormat.swift apple/shared/BatchEngine.swift
+  apple/shared/CoverCandidates.swift apple/shared/AndroidExport.swift apple/shared/AndroidTransfer.swift
   apple/macos/Sources/ConversionSettings.swift apple/macos/Sources/DeliveryModels.swift apple/macos/Sources/PhotoLibraryService.swift)
-python3 - "${sources[@]}" apple/shared/tests/NativeDriver.swift <<'PY'
+python3 - "${sources[@]}" apple/shared/tests/TestFixtures.swift apple/shared/tests/NativeDriver.swift <<'PY'
 import hashlib,json,sys
 from pathlib import Path
 values={name:hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in sys.argv[1:]}
@@ -26,7 +26,7 @@ xcrun swiftc -parse-as-library -D MOTIONLIVE_LIBRARY -enable-testing -O -target 
   -emit-library -emit-module -module-name MomentStaysBackend \
   -emit-module-path "$build_dir/MomentStaysBackend.swiftmodule" \
   -Xlinker -install_name -Xlinker @rpath/libMomentStaysBackend.dylib \
-  "${sources[@]}" "${rust_bridge_flags[@]}" -o "$build_dir/libMomentStaysBackend.dylib"
+  "${sources[@]}" apple/shared/tests/TestFixtures.swift "${rust_bridge_flags[@]}" -o "$build_dir/libMomentStaysBackend.dylib"
 xcrun swiftc -parse-as-library -O -target x86_64-apple-macosx12.0 \
   -module-cache-path /private/tmp/motionlive-backend-swift-cache \
   -I "$build_dir" -L "$build_dir" -lMomentStaysBackend \

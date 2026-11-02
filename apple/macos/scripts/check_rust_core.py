@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Parity check: Rust core (core/) vs the Swift engine (apple/shared/).
+"""ABI parity check: Rust CLI vs the production Swift-to-Rust bridge.
 
-Diffs `momentstays-core inspect` against the Swift engine's `format` command
+Diffs `momentstays-core inspect` against the bridge's `format` command
 (accept/reject, error text, timestamp_us, ultra, coding_hash) on generated
 fixtures and on any real sample folder passed with `--samples`. macOS only: build
-the Swift driver first with apple/macos/scripts/build_backend.sh.
+the bridge driver first with apple/macos/scripts/build_backend.sh.
 
 Usage:
   python3 apple/macos/scripts/check_rust_core.py --swift .build/backend/native-tests [--samples DIR]

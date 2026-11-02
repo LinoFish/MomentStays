@@ -65,7 +65,13 @@ struct ScanBenchmark {
   let photo=try PhotoFormat.parse(Array(bytes))
   let outputs=(fm.enumerator(at:output,includingPropertiesForKeys:nil)?.allObjects as? [URL] ?? []).filter{$0.lastPathComponent.hasSuffix(".MP.jpg")}
   InputScanTests.check(outputs.count==2,"both inputs publish complete media")
-  for file in outputs { try AndroidTransfer.validate(photo,result:Array(Data(contentsOf:file))) }
+  for file in outputs {
+    let after = try PhotoFormat.parse(Array(Data(contentsOf:file)))
+    let sameCoding = try PhotoFormat.codingHash(after.still) == PhotoFormat.codingHash(photo.still)
+    let sameAuxiliary = try PhotoFormat.auxiliaryHashes(after.still) == PhotoFormat.auxiliaryHashes(photo.still)
+    InputScanTests.check(after.video == photo.video && after.timestamp == photo.timestamp && sameCoding && sameAuxiliary,
+      "output keeps source video, cover and image coding")
+  }
   let resumed=try NativeBatch.run(sources:[a,b],output:output,options:options,token:StopToken(),scanRows:merged){_ in}
   InputScanTests.check(resumed.counts["resumed"]==2 && resumed.counts["failed"]==0,"mixed input outputs resume through production safety checks")
   let finalHash=try NativeBatch.hashFile(input),firstBytes=try Data(contentsOf:a),secondBytes=try Data(contentsOf:b)

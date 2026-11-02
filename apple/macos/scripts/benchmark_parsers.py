@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare optimized, in-process Swift/Rust parsers on the local sample corpus.
+"""Measure Rust parsing through Swift ABI and directly, on the local corpus.
 
 Build the Swift backend first: bash apple/macos/scripts/build_backend.sh
 Then run: python3 apple/macos/scripts/benchmark_parsers.py
@@ -87,7 +87,7 @@ def main():
               'rejected':[{'path':r['path'],'swift':r['swift'].get('error'),'rust':r['rust'].get('error')} for r in rows if not r['accepted']],
               'aggregates':aggregates}
     (args.output / 'summary.json').write_text(json.dumps(result, indent=2))
-    lines = ['# Swift / Rust parser benchmark', '',
+    lines = ['# Rust parser ABI / direct benchmark', '',
              f"Run: {result['created']} · {result['platform']} · {result['machine']}", '',
              f"Inputs: {len(rows)}; accepted by both: {result['accepted']}; mismatches: {len(result['mismatches'])}.", '',
              'Optimized builds: Swift -O (backend and driver), Rust --release with LTO. Sequential single-process parsing of one in-memory file at a time.',

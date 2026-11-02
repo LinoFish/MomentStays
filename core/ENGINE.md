@@ -6,7 +6,7 @@ Swift engine's request keys, option JSON, manifest and report keys,
 written by the Swift app are resumed, verified and delivered unchanged.
 
 Byte and container work runs in Rust. Pixel and codec work goes through
-`engine::Native`, which the app implements with ImageIO/AVFoundation.
+`engine::Native`, implemented by the direct Rust Apple platform backend.
 
 ## Swift → Rust map
 
@@ -55,7 +55,8 @@ Production macOS calls `ms_core_engine` for batch/convert, all scan projections,
 Apple pairing, preview cover resolution, candidate preparation/export and the
 Photos still-data guard. The UI retains its incremental source/version cache,
 preview rendering, settings, Photos/system sharing services and report model.
-`MOTIONLIVE_SWIFT_REFERENCE` retains the prior engine for differential checks.
+The replaced Swift parser, writers, batch implementation and reference switch
+have been removed. Swift fixture generation is compiled only into test drivers.
 
 ## C ABI
 
@@ -69,7 +70,7 @@ The request is the driver JSON (`{"mode":"batch", …}`); the reply is read
 with `ms_core_bytes(r, 0, &len)` and released with `ms_core_free`.
 Declarations: `apple/shared/RustCore.h`.
 
-## Comparing with the Swift engine (macOS)
+## Production engine checks (macOS)
 
 ```sh
 apple/macos/scripts/build_gui_tests.sh
@@ -77,8 +78,8 @@ apple/macos/scripts/run_checks_with_rust.sh
 ```
 
 The driver now calls the same `RustCore.engine` and direct platform backend as
-the app. Only synthetic fixture generation remains Swift. Build with
-`MOTIONLIVE_SWIFT_REFERENCE=1` for the retained reference. The runner supports
+the app. Only synthetic fixture generation remains Swift, in
+`apple/shared/tests/TestFixtures.swift`. The runner supports
 macOS Bash 3.2 empty argument arrays and never swaps the running driver.
 Validation logs and limitations for the local integration are recorded outside
 git in `.build/rust-engine-integration/handoff.md`.
@@ -91,10 +92,10 @@ git in `.build/rust-engine-integration/handoff.md`.
   iPhone `mebx` form with a 1/600 s marker sample, so
   `cover_duration_seconds` is 1/600 instead of the frame duration. Edit
   lists are kept. Whether Photos pairs these files has not been tested.
-- **XMP serialization.** Rewritten packets are serialized with
-  ElementTree-style prefixes (`ns0`, …) and without `<?xpacket?>`
-  wrappers. Names, namespaces and values are unchanged; unchanged packets
-  stay byte-identical.
+- **XMP serialization.** Google/Honor JPEG outputs use scoped namespaces
+  and explicit closing tags matching the Honor-tested native profile. Other
+  writers keep their existing serialization. Unchanged packets stay byte-identical.
+  Old Google/Honor XMP profiles and MP4 layouts require explicit overwrite.
 - **Timelines.** Times are matched exactly (integer ticks); a cover exactly
   halfway between two frames is refused rather than resolved to the first.
 - **Scheduling.** The macOS host supplies its thermal/CPU worker limit. Rust

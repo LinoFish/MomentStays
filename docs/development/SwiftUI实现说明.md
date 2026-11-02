@@ -33,21 +33,21 @@ flowchart TD
 
 | 文件 | 职责 |
 | --- | --- |
-| `gui/ConversionSettings.swift` | 类型化设置、默认值、厂商和格式约束、引擎参数映射 |
-| `gui/WorkspaceModel.swift` | 主线程可观察状态、任务快照、稳定行标识、过期回调过滤、报告转换 |
-| `gui/ConversionService.swift` | 后台扫描／转换、主线程回调、可取消的覆盖决策等待 |
-| `gui/WorkspaceView.swift` | 操作栏、摘要、工作区、状态栏，依可用宽高调整布局 |
-| `gui/PhotoQueueView.swift` | 网格／列表、常驻分类、可选预览、选中详情与拖放入口 |
-| `gui/ExportSettingsView.swift` | 分组设置与 sheet 绑定 |
-| `gui/ReportView.swift` | 报告列表、筛选与可复制详情 |
-| `gui/InterfaceSupport.swift` | 平台动作接口、系统色、布局规则、状态标签 |
-| `gui/MacPlatformServices.swift` | macOS 原生弹窗、文件和图库选择、临时资源所有权、结果打开 |
-| `gui/App.swift` | AppKit 应用宿主、原生菜单、窗口关闭／退出保护 |
-| `gui/PhotosLibraryPicker.swift` | 按相册、方向和版本选择图库资源，下载和监测需启用 |
-| `gui/PhotoLibraryService.swift` | 原始资源读取、实况入库、相册关联和增量观察 |
-| `gui/DeliveryModels.swift` | 持久任务、校验摘要、去重、共享暂存和缓存保护 |
-| `gui/SystemSharingService.swift` | 完整文件 URL 的系统共享与交付状态 |
-| `gui/UISnapshotSupport.swift` | 仅诊断构建包含的虚构数据截图与连续缩放检查 |
+| `apple/macos/Sources/ConversionSettings.swift` | 类型化设置、默认值、厂商和格式约束、引擎参数映射 |
+| `apple/macos/Sources/WorkspaceModel.swift` | 主线程可观察状态、任务快照、稳定行标识、过期回调过滤、报告转换 |
+| `apple/macos/Sources/ConversionService.swift` | 后台扫描／转换、主线程回调、可取消的覆盖决策等待 |
+| `apple/macos/Sources/WorkspaceView.swift` | 操作栏、摘要、工作区、状态栏，依可用宽高调整布局 |
+| `apple/macos/Sources/PhotoQueueView.swift` | 网格／列表、常驻分类、可选预览、选中详情与拖放入口 |
+| `apple/macos/Sources/ExportSettingsView.swift` | 分组设置与 sheet 绑定 |
+| `apple/macos/Sources/ReportView.swift` | 报告列表、筛选与可复制详情 |
+| `apple/macos/Sources/InterfaceSupport.swift` | 平台动作接口、系统色、布局规则、状态标签 |
+| `apple/macos/Sources/MacPlatformServices.swift` | macOS 原生弹窗、文件和图库选择、临时资源所有权、结果打开 |
+| `apple/macos/Sources/App.swift` | AppKit 应用宿主、原生菜单、窗口关闭／退出保护 |
+| `apple/macos/Sources/PhotosLibraryPicker.swift` | 按相册、方向和版本选择图库资源，下载和监测需启用 |
+| `apple/macos/Sources/PhotoLibraryService.swift` | 原始资源读取、实况入库、相册关联和增量观察 |
+| `apple/macos/Sources/DeliveryModels.swift` | 持久任务、校验摘要、去重、共享暂存和缓存保护 |
+| `apple/macos/Sources/SystemSharingService.swift` | 完整文件 URL 的系统共享与交付状态 |
+| `apple/macos/Sources/UISnapshotSupport.swift` | 仅诊断构建包含的虚构数据截图与连续缩放检查 |
 
 同步媒体工作始终在后台执行。来源和参数在开始时形成快照，忙碌时禁止修改；每次操作持有独立 ID，旧任务回调不能覆盖新任务。停止先取消令牌，等待引擎清理，再允许新任务。覆盖决策等待可被令牌取消解除，不依赖弹窗一定返回。扫描分批回传，完整扫描完成后才可启动；`ConversionJob` 携带扫描快照，静态项跳过转换，媒体工作使用有数量和估算内存额度限制的工作池。扫描快照仅在批次内复用；来源清单或文件版本变化时必须重新检查。
 
@@ -63,25 +63,25 @@ iOS 仍需新建 target，提供平台文件导入／导出、security-scoped UR
 
 ```bash
 # 默认仅 Intel .app，无 ZIP / DMG
-bash scripts/build_app.sh
+bash apple/macos/scripts/build_app.sh
 
 # 用户请求安装包时，生成匹配版本和架构的 DMG / ZIP
-bash scripts/make_dmg.sh
+bash apple/macos/scripts/make_dmg.sh
 
 # 只有明确需要其他架构时使用
-bash scripts/build_app.sh --arm64
-bash scripts/build_app.sh --universal
+bash apple/macos/scripts/build_app.sh --arm64
+bash apple/macos/scripts/build_app.sh --universal
 
 # 状态、取消、参数快照、真实双向转换、覆盖决策和原片保护
-python3 scripts/check_workspace.py
+python3 apple/macos/scripts/check_workspace.py
 
 # 原生窗口的虚构数据检查，不访问照片图库
-bash scripts/build_app.sh --diagnostics
-python3 scripts/check_swiftui_ui.py
+bash apple/macos/scripts/build_app.sh --diagnostics
+python3 apple/macos/scripts/check_swiftui_ui.py
 
 # 引擎已有回归
-bash scripts/build_gui_tests.sh
-python3 scripts/check_gui_engine.py
+bash apple/macos/scripts/build_gui_tests.sh
+python3 apple/macos/scripts/check_gui_engine.py
 ```
 
 诊断包写入 `.build/gui/preview/MomentStays.app`，正式包写入 `dist/MomentStays.app`。诊断截图与几何数据位于 `.build/gui/ui-checks/`；正式包不编入示例注入和截图入口。系统图标打包、媒体编码和窗口服务需要正常 macOS 桌面访问权限。

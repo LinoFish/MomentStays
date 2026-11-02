@@ -7,7 +7,9 @@ struct WorkspaceView: View {
     let actions: WorkspaceActions
     var layoutObserver: ([String: CGRect]) -> Void = { _ in }
     @State private var outputDropTargeted = false
-    @State private var queueScope = PhotoQueueScope.ready
+    private var queueScope: Binding<PhotoQueueScope> {
+        Binding(get: { model.queueScope }, set: { model.selectQueueScope($0) })
+    }
     @State private var showingError = false
     @FocusState private var settingsFocused: Bool
 
@@ -17,7 +19,7 @@ struct WorkspaceView: View {
             VStack(spacing: 0) {
                 workspaceHeader(layout)
                 Divider()
-                PhotoQueueView(model:model,actions:actions,short:layout.short,scope:$queueScope)
+                PhotoQueueView(model:model,actions:actions,short:layout.short,scope:queueScope)
                     .frame(maxWidth:.infinity,maxHeight:.infinity)
                 Divider()
                 taskStatus(layout)
@@ -37,7 +39,7 @@ struct WorkspaceView: View {
         .onAppear {
             #if UI_DIAGNOSTICS
             if let index = CommandLine.arguments.firstIndex(of:"--ui-scope"), index + 1 < CommandLine.arguments.count,
-               let value = PhotoQueueScope(rawValue:CommandLine.arguments[index + 1]) { queueScope = value }
+               let value = PhotoQueueScope(rawValue:CommandLine.arguments[index + 1]) { model.selectQueueScope(value) }
             #endif
         }
         .alert("无法完成操作", isPresented: $showingError) {

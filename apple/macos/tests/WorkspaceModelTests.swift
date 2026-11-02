@@ -151,7 +151,7 @@ struct WorkspaceModelTests {
         try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
         let motion = folder.appendingPathComponent("motion.jpg"), still = folder.appendingPathComponent("static.jpg")
         let data = try Data(contentsOf:source), photo = try PhotoFormat.parse(Array(data))
-        let plainStill = try PhotoFormat.liveStill(photo.still,uuid:"",updateIdentifier:false)
+        let plainStill = try fixtureStill(photo.still,uuid:"",updateIdentifier:false)
         try data.write(to:motion); try Data(plainStill).write(to:still)
         var rows = try NativeBatch.scan(sources:[folder],token:StopToken()) { _,_ in }
         check(rows.count == 2 && rows.filter(\.confirmedStatic).count == 1,"scan explicitly distinguishes a complete static photo")
@@ -247,6 +247,33 @@ struct WorkspaceModelTests {
         library.appendSources([second],origins:[NativeBatch.normalized(second).path:edited])
         check(library.sources.count == 2,"different library versions remain independently selectable")
         check(!model.canStart,"unrelated workspace stays empty")
+    }
+
+    static func navigationChecks(source: URL, row: ScanRow, root: URL) throws {
+        try FileManager.default.createDirectory(at:root.appendingPathComponent("navigation-output"),withIntermediateDirectories:true)
+        let order = PhotoQueueScope.allCases
+        check(order.firstIndex(of:.completed) == order.firstIndex(of:.ready)! + 1, "completed tab immediately follows ready")
+        for (start, switches, cancelled, expected) in [
+            (PhotoQueueScope.ready, [PhotoQueueScope](), false, PhotoQueueScope.completed),
+            (.all, [], false, .all), (.completed, [], false, .completed),
+            (.ready, [.all,.ready], false, .ready), (.ready,[.attention],false,.attention),
+            (.ready,[.ready],false,.completed), (.ready,[],true,.ready)
+        ] {
+            let service = ControlledService()
+            // Each case owns a service so progress/completion stay deterministic.
+            let workspace = WorkspaceModel(service:service)
+            workspace.chooseSources([source]); service.scans[0].completion(.success([row]))
+            workspace.setOutput(root.appendingPathComponent("navigation-output"))
+            workspace.selectQueueScope(start); workspace.start()
+            check(service.runs.count == 1 && workspace.phase == .converting, "navigation starts a real model job")
+            let snapshot = service.runs[0].job.sources
+            for tab in switches { workspace.selectQueueScope(tab) }
+            check(workspace.phase == .converting && service.runs[0].job.sources == snapshot && service.scans.count == 1,
+                "browsing tabs keeps the active job and does not scan")
+            let outcome = BatchOutcome(counts:["converted":1],report:nil,reportData:["files":[]],cancelled:cancelled)
+            service.runs[0].completion(.success(outcome))
+            check(workspace.queueScope == expected, "completion follows only an untouched ready tab")
+        }
     }
 
     static func main() throws {
@@ -391,6 +418,7 @@ struct WorkspaceModelTests {
         workspace.finishLibraryImport(id: UUID(), urls: [], error: Failure("stale"), output: root)
         check(workspace.errorMessage == nil, "stale library callback ignored")
 
+        try navigationChecks(source:source,row:row,root:root)
         try deliveryChecks(root: root, workspace: workspace)
 
         let latch = OutputDecisionLatch(), token = StopToken(), done = DispatchSemaphore(value: 0)

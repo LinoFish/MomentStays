@@ -261,6 +261,11 @@ fn build_still(
     if standard.is_empty() && packets.iter().any(|p| p.guid.is_some()) {
         return fail("Extended XMP 缺少主包，无法安全重写");
     }
+    let source_scopes: Vec<_> = packets
+        .iter()
+        .map(|p| pyxml::namespace_uris(&p.root))
+        .collect();
+    let mut copied_scopes = Vec::new();
     let mut changed: HashSet<usize> = HashSet::new();
     for (i, p) in packets.iter_mut().enumerate() {
         if clean_packet(&mut p.root) {
@@ -285,6 +290,7 @@ fn build_still(
                     .filter(|c| c.ns == RDF && c.local == "Description")
                 {
                     rdf.children.push(d.clone());
+                    copied_scopes.push(source_scopes[*i].clone());
                 }
             }
         }
@@ -299,10 +305,25 @@ fn build_still(
         }
     } else {
         let mut payload = pymotion::XMP_HDR.to_vec();
-        payload.extend_from_slice(&pyxml::tostring(&doc));
+        payload.extend_from_slice(&if target == Vendor::Google {
+            pyxml::tostring_motion_xmp(&doc, &copied_scopes)
+        } else {
+            pyxml::tostring(&doc)
+        });
         insert = pyjpeg::app(0xE1, &payload)?;
     }
     let mut rewrites = pymotion::xmp_rewrites(&mut packets, &mut changed)?;
+    if target == Vendor::Google {
+        if let Some(first) = standard.first() {
+            let mut payload = pymotion::XMP_HDR.to_vec();
+            // Serialize after Extended-XMP GUID references have been updated.
+            payload.extend(pyxml::tostring_motion_xmp(
+                &packets[*first].root,
+                &copied_scopes,
+            ));
+            rewrites.insert(packets[*first].seg_start, pyjpeg::app(0xE1, &payload)?);
+        }
+    }
     for (k, v) in replacements {
         rewrites.insert(k, v);
     }

@@ -64,3 +64,6 @@ coverage.xml
 
 # Public brand artwork is the only raster asset tracked with the source.
 !/docs/branding/social-preview.png
+
+# App icon fallback is required in builds.
+!/apple/ios/MomentStays/Assets.xcassets/AppIcon.appiconset/AppIcon.png

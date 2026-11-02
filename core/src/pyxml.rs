@@ -805,3 +805,158 @@ pub fn tostring(root: &Element) -> Vec<u8> {
     write_element(root, &map, &mut out, true);
     out.into_bytes()
 }
+
+/// Namespaces used by a source packet, before its old motion declarations are
+/// removed. Scoped XMP output keeps these in copied RDF Descriptions.
+pub(crate) fn namespace_uris(root: &Element) -> Vec<String> {
+    let mut map = NsMap::new();
+    map.collect(root);
+    map.finish();
+    map.declarations.into_iter().map(|(_, uri)| uri).collect()
+}
+
+/// JPEG Motion Photo producer profile matching the working native writer:
+/// x/rdf bindings on their containers, property bindings on RDF Descriptions,
+/// and explicit end tags. Both profiles are valid XML, but Honor Gallery
+/// rejects the root-hoisted/self-closing profile for the tested Apple output.
+/// Keep `tostring` unchanged for generic XML and existing vendor formats.
+pub(crate) fn tostring_motion_xmp(root: &Element, copied_scopes: &[Vec<String>]) -> Vec<u8> {
+    use std::collections::HashSet;
+    const X: &str = "adobe:ns:meta/";
+    const R: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+    const C: &str = "http://ns.google.com/photos/1.0/camera/";
+    const D: &str = "http://ns.google.com/photos/1.0/container/";
+    const I: &str = "http://ns.google.com/photos/1.0/container/item/";
+    const H: &str = "http://ns.adobe.com/hdr-gain-map/1.0/";
+    struct Writer<'a> {
+        map: NsMap,
+        copied_scopes: &'a [Vec<String>],
+        description: usize,
+        out: String,
+    }
+    impl Writer<'_> {
+        fn bind(&mut self, uri: &str, bound: &mut HashSet<String>, force: bool) {
+            if uri.is_empty()
+                || uri == "http://www.w3.org/XML/1998/namespace"
+                || (!force && bound.contains(uri))
+            {
+                return;
+            }
+            self.out.push_str(" xmlns:");
+            self.out.push_str(&self.map.prefix(uri));
+            self.out.push_str("=\"");
+            escape_attr(uri, &mut self.out);
+            self.out.push('"');
+            bound.insert(uri.to_string());
+        }
+        fn element(&mut self, e: &Element, inherited: &HashSet<String>, depth: usize) {
+            let mut bound = inherited.clone();
+            self.out.push('<');
+            self.out.push_str(&qname(&e.ns, &e.local, &self.map));
+            if depth == 2 && e.ns == R && e.local == "Description" {
+                let primary = self.description == 0;
+                let mut uris = namespace_uris(e);
+                if !primary {
+                    if let Some(scope) = self.copied_scopes.get(self.description - 1) {
+                        for uri in scope {
+                            if !uris.contains(uri) {
+                                uris.push(uri.clone());
+                            }
+                        }
+                    }
+                }
+                self.description += 1;
+                // NSXML's producer order, including copied inherited bindings.
+                let priority: &[&str] = if primary {
+                    &[C, D, I, H]
+                } else {
+                    &[R, H, D, I, X]
+                };
+                for uri in priority {
+                    if uris.iter().any(|u| u == uri) {
+                        self.bind(uri, &mut bound, !primary);
+                    }
+                }
+                uris.sort_by_key(|uri| self.map.prefix(uri));
+                for uri in uris {
+                    if !priority.contains(&uri.as_str()) {
+                        self.bind(&uri, &mut bound, false);
+                    }
+                }
+            }
+            self.bind(&e.ns, &mut bound, false);
+            for (uri, _, _) in &e.attrib {
+                self.bind(uri, &mut bound, false);
+            }
+            for (ns, local, value) in &e.attrib {
+                self.out.push(' ');
+                self.out.push_str(&qname(ns, local, &self.map));
+                self.out.push_str("=\"");
+                escape_attr(value, &mut self.out);
+                self.out.push('"');
+            }
+            self.out.push('>');
+            if let Some(text) = &e.text {
+                escape_text(text, &mut self.out);
+            }
+            for child in &e.children {
+                self.element(child, &bound, depth + 1);
+            }
+            self.out.push_str("</");
+            self.out.push_str(&qname(&e.ns, &e.local, &self.map));
+            self.out.push('>');
+            if let Some(tail) = &e.tail {
+                escape_text(tail, &mut self.out);
+            }
+        }
+    }
+    let mut map = NsMap::new();
+    map.collect(root);
+    for scope in copied_scopes {
+        for uri in scope {
+            map.observe(uri);
+        }
+    }
+    map.finish();
+    let mut writer = Writer {
+        map,
+        copied_scopes,
+        description: 0,
+        out: "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>".into(),
+    };
+    writer.element(root, &HashSet::new(), 0);
+    writer.out.into_bytes()
+}
+
+#[cfg(test)]
+mod motion_xmp_profile_tests {
+    use super::*;
+    const XML: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" xmlns:Container="http://ns.google.com/photos/1.0/container/" xmlns:Item="http://ns.google.com/photos/1.0/container/item/"><rdf:RDF><rdf:Description GCamera:MotionPhoto="1"><Container:Directory><rdf:Seq><rdf:li rdf:parseType="Resource"><Container:Item Item:Semantic="Primary" Item:Mime="image/jpeg" Item:Length="0"/></rdf:li></rdf:Seq></Container:Directory></rdf:Description><rdf:Description/></rdf:RDF></x:xmpmeta>"#;
+    #[test]
+    fn motion_bindings_are_scoped_and_empty_elements_are_explicit() {
+        let root = parse(XML.as_bytes()).unwrap();
+        let scopes = vec![vec![
+            "adobe:ns:meta/".into(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".into(),
+        ]];
+        let bytes = tostring_motion_xmp(&root, &scopes);
+        let text = std::str::from_utf8(&bytes).unwrap();
+        assert!(text.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf="));
+        assert!(text.contains("<rdf:Description xmlns:GCamera="));
+        assert!(text.contains("Item:Length=\"0\"></Container:Item>"));
+        assert!(!text.contains("/>"));
+        assert_eq!(tostring(&root), tostring(&parse(&bytes).unwrap()));
+    }
+    #[test]
+    fn custom_namespace_text_attributes_and_inherited_copied_scope_survive() {
+        let xml=XML.replace("<rdf:Description/>",r#"<rdf:Description xmlns:c="urn:custom?a=1&amp;b=2" c:field="&quot;quoted&quot;"><c:child xml:lang="zh">保留 &amp; &lt;值&gt;</c:child></rdf:Description>"#);
+        let root = parse(xml.as_bytes()).unwrap();
+        let scopes = vec![vec!["urn:unused-copied".into()]];
+        let bytes = tostring_motion_xmp(&root, &scopes);
+        assert_eq!(tostring(&root), tostring(&parse(&bytes).unwrap()));
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(text.contains("urn:unused-copied"));
+        assert!(text.contains("urn:custom?a=1&amp;b=2"));
+        assert!(text.contains("xml:lang=\"zh\""));
+    }
+}

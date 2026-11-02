@@ -15,7 +15,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
-sources=(apple/shared/RustCore.swift apple/shared/MotionLive.swift apple/shared/PhotoFormat.swift apple/shared/PhotoHEIF.swift apple/shared/PhotoHDR.swift apple/shared/BatchEngine.swift apple/shared/CoverCandidates.swift apple/shared/HEIFMetadata.swift apple/shared/AndroidHDR.swift apple/shared/AndroidExport.swift apple/shared/AndroidTransfer.swift
+sources=(apple/shared/RustCore.swift apple/shared/MotionLive.swift apple/shared/PhotoFormat.swift apple/shared/BatchEngine.swift apple/shared/CoverCandidates.swift apple/shared/AndroidExport.swift apple/shared/AndroidTransfer.swift
   apple/macos/Sources/ConversionSettings.swift apple/macos/Sources/ConversionService.swift apple/macos/Sources/WorkspaceModel.swift apple/macos/Sources/DeliveryModels.swift apple/macos/Sources/PhotoLibraryService.swift apple/macos/Sources/SystemSharingService.swift
   apple/macos/Sources/InterfaceSupport.swift apple/macos/Sources/ExportSettingsView.swift apple/macos/Sources/MotionPreview.swift apple/macos/Sources/PhotoTimelineView.swift apple/macos/Sources/PhotoQueueView.swift apple/macos/Sources/WorkspaceView.swift apple/macos/Sources/ReportView.swift
   apple/macos/Sources/PhotosLibraryPicker.swift apple/macos/Sources/MacPlatformServices.swift apple/macos/Sources/UISnapshotSupport.swift apple/macos/Sources/AppIconAppearance.swift apple/macos/Sources/App.swift)

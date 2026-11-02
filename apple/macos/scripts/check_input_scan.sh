@@ -13,11 +13,11 @@ scan_binary="$PWD/.build/input-scan-fix/model-tests-fixed"
 if [[ "$scan_build" == 1 ]]; then
   source apple/macos/scripts/rust_bridge.sh x86_64
   scan_sources=()
-  for scan_name in RustCore MotionLive PhotoFormat PhotoHEIF PhotoHDR BatchEngine CoverCandidates HEIFMetadata AndroidHDR AndroidExport AndroidTransfer; do scan_sources+=("apple/shared/$scan_name.swift"); done
+  for scan_name in RustCore MotionLive PhotoFormat BatchEngine CoverCandidates AndroidExport AndroidTransfer; do scan_sources+=("apple/shared/$scan_name.swift"); done
   xcrun swiftc -parse-as-library -D MOTIONLIVE_LIBRARY -O -target x86_64-apple-macosx12.0 \
     -module-cache-path "$PWD/.build/input-scan-fix/module-cache" "${scan_sources[@]}" \
     apple/macos/Sources/ConversionSettings.swift apple/macos/Sources/ConversionService.swift apple/macos/Sources/WorkspaceModel.swift apple/macos/Sources/DeliveryModels.swift apple/macos/Sources/PhotoLibraryService.swift \
-    apple/macos/tests/InputScanTests.swift apple/macos/tests/InputScanBenchmark.swift "${rust_bridge_flags[@]}" -o "$scan_binary"
+    apple/shared/tests/TestFixtures.swift apple/macos/tests/InputScanTests.swift apple/macos/tests/InputScanBenchmark.swift "${rust_bridge_flags[@]}" -o "$scan_binary"
 fi
 scan_run=$(mktemp -d "$PWD/.build/input-scan-fix/check.XXXXXX")
 "$scan_binary" "$scan_run" --fixture "$scan_fixture"

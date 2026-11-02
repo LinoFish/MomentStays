@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.6.0</strong>
+  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.6.1</strong>
 </p>
 
 # 留刻（MomentStays）— 安卓动态照片转苹果实况照片（Live Photo）工具
@@ -24,6 +24,8 @@
   <img src="https://img.shields.io/badge/开源协议-GPL--3.0--only-blue" alt="开源协议 GPL-3.0-only">
 </p>
 
+> **欢迎反馈：** 试过之后发现失败或结果不对？请[提交 issue](https://github.com/LinoFish/MomentStays/issues)，说明来源设备与格式、转换方向和 App 版本，样片请先抹除敏感信息。详见下文[反馈](#反馈)。
+
 **下载：** 在 [Releases](https://github.com/LinoFish/MomentStays/releases) 获取最新 DMG/ZIP，也可以按下方说明从源码构建。
 
 在 Android 动态照片与 Apple Live Photo 之间转换，留住你选定的封面瞬间。复用原始音视频，保留支持的图像与 HDR 数据，并将转换后的实况照片直接送回系统图库。
@@ -31,6 +33,12 @@
 [构建与运行](#构建与运行) · [与系统图库互通](#与系统图库互通) · [保留哪些信息](#保留哪些信息) · [使用手册](docs/USER_GUIDE.zh-CN.md) · [项目文档](docs/README.md)
 
 **开源协议：[GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino
+
+## 反馈
+
+欢迎提交反馈。如果转换失败、或者结果不对，请[提交 issue](https://github.com/LinoFish/MomentStays/issues)，并说明：来源设备与格式、转换方向、App 版本、你期望的结果、实际得到的结果。
+
+如果能提供可复现失败的样片，请先抹除敏感信息：用不含个人内容的照片，并去掉位置等私人元数据再上传。能复现问题的最小样片，比一整套个人相册更有用。
 
 ## 留住原来的瞬间
 
@@ -155,10 +163,10 @@ python3 scripts/check_publish.py
 
 ## 开发
 
-旧 Python CLI 已移除。Python 仅保留用于格式参考、回归测试、打包和文档工具；App 运行不依赖 Python。
+Python 版转换器已不再维护。转换由 Rust 引擎（`core/`）承担，Swift（`apple/shared/`）保留 UI 所需系统服务与薄桥接；Python 只用于 macOS 回归检查脚本、打包和文档工具，App 运行不依赖 Python。
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
+cd core && cargo test --release && cd ..
 bash apple/macos/scripts/build_gui_tests.sh
 python3 apple/macos/scripts/check_gui_engine.py
 python3 apple/macos/scripts/check_reverse.py
@@ -172,13 +180,18 @@ bash apple/macos/scripts/build_app.sh --diagnostics
 python3 apple/macos/scripts/check_swiftui_ui.py
 ```
 
+仓库按平台划分。每个平台目录自带界面、构建脚本和测试；跨平台共享的逻辑放在 `core/`。
+
 | 范围 | 位置 |
 | --- | --- |
-| SwiftUI、任务状态、图库与共享 | `apple/macos/Sources/` |
-| 解析、HDR、时间、转换与校验 | `core/src/engine/`, `core/src/platform/`, `apple/shared/` |
-| 回归测试用独立 Python 样片读取器 | `apple/macos/scripts/testkit/` |
-| 构建与回归入口 | `apple/macos/scripts/`、`apple/shared/tests/` |
-| 应用属性与可复现图标绘制 | `apple/macos/packaging/` |
+| 跨平台 Rust 核心（解析、重封装、厂商写入、C ABI） | `core/` |
+| macOS 与 iOS 共用的 Swift 桥接与系统接口 | `apple/shared/` |
+| macOS App：SwiftUI、任务状态、图库与共享 | `apple/macos/Sources/` |
+| macOS 构建脚本、回归检查与测试数据 | `apple/macos/scripts/`、`apple/macos/tests/`、`apple/shared/tests/` |
+| macOS 应用属性、DMG 布局与图标绘制 | `apple/macos/packaging/` |
+| iOS App、分享扩展与 Swift 包（开发中） | `apple/ios/` |
+| Windows 与 Android App（规划中） | `windows/`、`android/` |
+| 仓库级工具（发布审计、网站同步） | `scripts/` |
 | 项目图标与 README 视觉素材 | [品牌素材](docs/branding/README.md) |
 
 进一步阅读：[实现说明](docs/development/SwiftUI实现说明.md)、[图库规范](docs/design/图库识别与自动入册规范.md)、[共享规范](docs/design/输出位置与系统共享规范.md)、[本地样片与隐私](docs/development/本地样片与隐私.md)。
@@ -218,7 +231,7 @@ Google 兼容的动态照片 JPEG、三星（包括 SEF 和已验证的 HEIC 布
 感谢以下项目、作者与维护者提供的代码、依赖、研究成果和设计工作流：
 
 - **系统 API 与原生素材**：[Apple 框架与 SDK 文档](https://developer.apple.com/documentation/)、[SF Symbols](https://developer.apple.com/sf-symbols/) 与[系统字体](https://developer.apple.com/fonts/)，用于原生界面、媒体处理、图库读写和系统交付。
-- **Rust 核心代码依赖**：[RustCrypto](https://github.com/RustCrypto/hashes)（`sha2`、`md-5`）、[roxmltree](https://github.com/RazrFalcon/roxmltree)、[serde_json](https://github.com/serde-rs/json)，以及锁定的全部传递依赖。原生 App 已接入 Rust 转换引擎，Apple 系统编解码后端独立隔离；完整 23 个 crate 的版本、许可证和上游链接见第三方说明。
+- **Rust 核心代码依赖**：[RustCrypto](https://github.com/RustCrypto/hashes)（`sha2`、`md-5`）、[serde_json](https://github.com/serde-rs/json)，以及锁定的全部传递依赖。Rust 引擎已静态链接到 macOS App；完整 28 个 crate 的版本、许可证和上游链接见第三方说明。
 - **动态照片实现参考**：[MotionTrans](https://github.com/Huakira/MotionTrans)（静态图像分离）、[Live Photo Box](https://github.com/LengxiQwQ/live-photo-box)（华为、OPPO、vivo 字段）、[ExifTool](https://exiftool.org/) 与 [motionphoto](https://github.com/doodspav/motionphoto)（三星 SEF/偏移结构）。
 - **HDR、HEIC 与兼容研究**：[OpenHarmony](https://github.com/openharmony/multimedia_image_framework)、[libheif](https://github.com/strukturag/libheif)、[libultrahdr](https://github.com/google/libultrahdr)、[MotionPhotoSamples](https://github.com/NightMean/MotionPhotoSamples)。另曾评估 [libmotionphoto](https://github.com/google/libmotionphoto)、[MotionPhoto2](https://github.com/PetrVys/MotionPhoto2)、[LiveMux](https://github.com/ysya/LiveMux) 的跨平台复用可行性，现有 App 未接入这些候选库。
 - **打包、文档与验证工具**：[ds_store](https://github.com/dmgbuild/ds_store)、[mac_alias](https://github.com/dmgbuild/mac_alias)（Finder 布局）；[dmgbuild](https://github.com/dmgbuild/dmgbuild)、[Chromium](https://chromium.googlesource.com/chromium/src/+/main/chrome/installer/mac/generate_dsstore.py)（安装包布局参考）；[Python-Markdown](https://github.com/Python-Markdown/markdown)、[importlib_metadata](https://github.com/python/importlib_metadata)、[zipp](https://github.com/jaraco/zipp)（手册生成）；[fontTools](https://github.com/fonttools/fonttools)、[Brotli](https://github.com/google/brotli)（字体来源核对）。
