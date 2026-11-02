@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.5.1</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.6.0</strong>
 </p>
 
 # 留刻— Android Motion Photo ↔ Apple Live Photo Converter for macOS
@@ -111,22 +111,22 @@ Building requires Xcode Command Line Tools. The default build produces a Univers
 ```bash
 git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
-bash scripts/build_app.sh
+bash apple/macos/scripts/build_app.sh
 open dist/留刻.app
 ```
 
 A built app requires no Python, FFmpeg, ExifTool, Homebrew, or additional runtime. To build only for Apple Silicon:
 
 ```bash
-bash scripts/build_app.sh --arm64
-bash scripts/build_app.sh --universal
+bash apple/macos/scripts/build_app.sh --arm64
+bash apple/macos/scripts/build_app.sh --universal
 ```
 
 To produce a DMG, ZIP, and checksum list from the built app:
 
 ```bash
-python3 -m pip install --target .build/dmg-tools -r packaging/dmg-requirements.txt
-bash scripts/make_dmg.sh
+python3 -m pip install --target .build/dmg-tools -r apple/macos/packaging/dmg-requirements.txt
+bash apple/macos/scripts/make_dmg.sh
 ```
 
 The DMG uses only the app icon, Applications link and a drag arrow. The user guide is available from the app; licenses are inside the app bundle. These Python tools are needed only for packaging; app users do not need them.
@@ -157,26 +157,26 @@ The legacy Python CLI has been removed. Python is retained only for format refer
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
-bash scripts/build_gui_tests.sh
-python3 scripts/check_gui_engine.py
-python3 scripts/check_reverse.py
-python3 scripts/check_workspace.py
+bash apple/macos/scripts/build_gui_tests.sh
+python3 apple/macos/scripts/check_gui_engine.py
+python3 apple/macos/scripts/check_reverse.py
+python3 apple/macos/scripts/check_workspace.py
 ```
 
 Native layout checks use fictional data and require an available macOS desktop:
 
 ```bash
-bash scripts/build_app.sh --diagnostics
-python3 scripts/check_swiftui_ui.py
+bash apple/macos/scripts/build_app.sh --diagnostics
+python3 apple/macos/scripts/check_swiftui_ui.py
 ```
 
 | Area | Location |
 | --- | --- |
-| SwiftUI, task state, Photos and sharing | `gui/` |
-| Parsing, HDR, timing, conversion, verification | `native/` |
-| Python format reference for regression and Rust parity | `motionlive/` |
-| Build scripts and regression drivers | `scripts/`, `tests/` |
-| App metadata and reproducible icon drawing | `packaging/` |
+| SwiftUI, task state, Photos and sharing | `apple/macos/Sources/` |
+| Parsing, HDR, timing, conversion, verification | `core/src/engine/`, `core/src/platform/`, `apple/shared/` |
+| Independent Python fixture readers for regression | `apple/macos/scripts/testkit/` |
+| Build scripts and regression drivers | `apple/macos/scripts/`, `apple/shared/tests/` |
+| App metadata and reproducible icon drawing | `apple/macos/packaging/` |
 | Project icon and README artwork | [Brand assets](docs/branding/README.md) |
 
 New to MomentStays? Start with the **[User Guide](docs/USER_GUIDE.md)** ([简体中文版](docs/USER_GUIDE.zh-CN.md)) — every feature explained, including auxiliary tracks and Photos library import.
@@ -214,7 +214,7 @@ Yes. MomentStays is GPL-3.0-only open source, runs entirely on your Mac, and nev
 Thank you to the projects, authors and maintainers whose code, tools, research and design workflows support MomentStays:
 
 - **System APIs and typography:** [Apple frameworks and SDK documentation](https://developer.apple.com/documentation/), [SF Symbols](https://developer.apple.com/sf-symbols/) and [system fonts](https://developer.apple.com/fonts/).
-- **Rust core code dependencies:** [RustCrypto](https://github.com/RustCrypto/hashes) (`sha2`, `md-5`), [roxmltree](https://github.com/RazrFalcon/roxmltree), [serde_json](https://github.com/serde-rs/json), and their complete locked transitive dependencies, listed with versions and licenses in the notices. The Rust core is experimental and separate from the native app.
+- **Rust core code dependencies:** [RustCrypto](https://github.com/RustCrypto/hashes) (`sha2`, `md-5`), [roxmltree](https://github.com/RazrFalcon/roxmltree), [serde_json](https://github.com/serde-rs/json), and their complete locked transitive dependencies, listed with versions and licenses in the notices. The native app uses the Rust conversion engine with an isolated Apple system codec backend.
 - **Motion Photo implementation references:** [MotionTrans](https://github.com/Huakira/MotionTrans), [Live Photo Box](https://github.com/LengxiQwQ/live-photo-box), [ExifTool](https://exiftool.org/), [motionphoto](https://github.com/doodspav/motionphoto).
 - **HDR, HEIC and compatibility research:** [OpenHarmony](https://github.com/openharmony/multimedia_image_framework), [libheif](https://github.com/strukturag/libheif), [libultrahdr](https://github.com/google/libultrahdr), [MotionPhotoSamples](https://github.com/NightMean/MotionPhotoSamples). Evaluated alternatives: [libmotionphoto](https://github.com/google/libmotionphoto), [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2), [LiveMux](https://github.com/ysya/LiveMux).
 - **Packaging, documentation and validation:** [ds_store](https://github.com/dmgbuild/ds_store), [mac_alias](https://github.com/dmgbuild/mac_alias), [dmgbuild](https://github.com/dmgbuild/dmgbuild), [Chromium](https://chromium.googlesource.com/chromium/src/+/main/chrome/installer/mac/generate_dsstore.py), [Python-Markdown](https://github.com/Python-Markdown/markdown), [importlib_metadata](https://github.com/python/importlib_metadata), [zipp](https://github.com/jaraco/zipp), [fontTools](https://github.com/fonttools/fonttools) and [Brotli](https://github.com/google/brotli).

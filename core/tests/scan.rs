@@ -91,7 +91,11 @@ fn tiff_with_make_model_endian(make: &str, model: &str, little: bool) -> Vec<u8>
         e.extend(u32(off));
         e
     };
-    let mut t = if little { b"II".to_vec() } else { b"MM".to_vec() };
+    let mut t = if little {
+        b"II".to_vec()
+    } else {
+        b"MM".to_vec()
+    };
     t.extend(u16(42));
     t.extend(u32(8));
     t.extend(u16(2));
@@ -117,13 +121,12 @@ fn jpeg_with_exif(tiff: &[u8]) -> Vec<u8> {
 /// `common::build_still`, minus mime/iref).
 fn heic_with_exif(exif: &[u8]) -> Vec<u8> {
     let hvc1 = b"fake-hvc1-coding-data-0123456789".to_vec();
-    let items: Vec<(u16, &str, Vec<u8>)> =
-        vec![(1, "hvc1", hvc1), (2, "Exif", exif.to_vec())];
+    let items: Vec<(u16, &str, Vec<u8>)> = vec![(1, "hvc1", hvc1), (2, "Exif", exif.to_vec())];
     let mut hdlr_body = vec![0u8; 4];
     hdlr_body.extend(b"pict");
     hdlr_body.extend([0u8; 4]);
     let hdlr = full("hdlr", 0, &hdlr_body);
-    let pitm = full("pitm", 0, &u16b(1).to_vec());
+    let pitm = full("pitm", 0, u16b(1).as_ref());
     let mut infe_boxes = Vec::new();
     for (id, ty, _) in &items {
         let mut body = u16b(*id).to_vec();
@@ -366,4 +369,22 @@ fn scan_row_motion_claim_without_video_is_error_not_static() {
     assert!(!row.confirmed_static);
     assert!(!row.detail.is_empty());
     assert_ne!(row.detail, "静态照片，不含动态内容，不参与转换");
+}
+
+/// Regression (found by the deep fuzz pass): a HEIC whose EXIF item is
+/// missing/unusable made `identify` recurse into itself until the stack
+/// overflowed, which aborts the whole process (scan of a folder included).
+#[test]
+fn heic_without_usable_exif_does_not_recurse() {
+    let text = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures-regress/heic-no-exif-scan-recursion.heic.b64"),
+    )
+    .unwrap();
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap();
+    let row = scan_row(&data);
+    assert!(!row.is_motion);
+    let _ = identify(&data, ""); // must simply return
 }

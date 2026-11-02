@@ -67,7 +67,7 @@ pub fn prepare_conversion(data: &[u8]) -> Result<ConversionCandidate> {
         warnings.push("最后一个 box 声明长度超出文件；仅修正长度字段，未补齐或删除媒体字节。媒体编码本身未解码验证".to_string());
     }
     let top = mp4::boxes(&bytes, 0, bytes.len())?;
-    if top.first().map_or(true, |b| !b.is(b"ftyp"))
+    if top.first().is_none_or(|b| !b.is(b"ftyp"))
         || top.iter().filter(|b| b.is(b"moov")).count() != 1
         || !top.iter().any(|b| b.is(b"mdat"))
     {

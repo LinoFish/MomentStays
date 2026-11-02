@@ -25,11 +25,16 @@ pub extern "C" fn momentstays_version() -> *const c_char {
 }
 
 /// Inspect a file's bytes and return the `inspect` JSON summary.
+///
+/// # Safety
+/// `data` must be NULL or point to `len` readable bytes; `out_json` must be
+/// NULL or point to a writable `char *`.
+///
 /// Returns 0 on success, nonzero on failure (NULL pointers, allocation
 /// failure, or a caught panic). The JSON string is heap-allocated;
 /// free it with `momentstays_free_string`.
 #[no_mangle]
-pub extern "C" fn momentstays_inspect(
+pub unsafe extern "C" fn momentstays_inspect(
     data: *const u8,
     len: usize,
     out_json: *mut *mut c_char,
@@ -55,13 +60,19 @@ pub extern "C" fn momentstays_inspect(
 }
 
 /// Free a string returned by `momentstays_inspect`. NULL is a no-op.
+///
+/// # Safety
+/// `s` must be NULL or a pointer returned by `momentstays_inspect` that has
+/// not been freed yet.
 #[no_mangle]
-pub extern "C" fn momentstays_free_string(s: *mut c_char) {
+pub unsafe extern "C" fn momentstays_free_string(s: *mut c_char) {
     if s.is_null() {
         return;
     }
     // SAFETY: `s` must be a string previously returned by
     // `momentstays_inspect` and not freed before; anything else is a
     // caller bug, like `free` on a foreign pointer.
-    unsafe { let _ = CString::from_raw(s); }
+    unsafe {
+        let _ = CString::from_raw(s);
+    }
 }

@@ -16,25 +16,12 @@
 //! one-tick-plus-1us tolerance). Negative presentation times are refused,
 //! like Swift's "no explicit edit-list handling" rule.
 
-use crate::mp4::{self, BoxRef};
-use crate::{fail, Result};
+use crate::mp4::{self, bx, full, BoxRef, Movie};
+use crate::{fail, fail_as, ErrorKind, Result};
 use std::collections::HashSet;
 
 /// Output movie timescale. Internal: part of the file format, not API.
 const MOVIE_TIMESCALE: u32 = 1_000_000;
-
-fn bx(t: &[u8; 4], payload: &[u8]) -> Vec<u8> {
-    let mut v = ((payload.len() + 8) as u32).to_be_bytes().to_vec();
-    v.extend(t);
-    v.extend(payload);
-    v
-}
-
-fn full(t: &[u8; 4], version: u8, flags: u32, payload: &[u8]) -> Vec<u8> {
-    let mut p = vec![version, ((flags >> 16) & 0xff) as u8, ((flags >> 8) & 0xff) as u8, (flags & 0xff) as u8];
-    p.extend(payload);
-    bx(t, &p)
-}
 
 fn u32b(v: u32) -> [u8; 4] {
     v.to_be_bytes()
@@ -49,7 +36,10 @@ fn children(d: &[u8], parent: &BoxRef) -> Result<Vec<BoxRef>> {
 }
 
 fn only(d: &[u8], parent: &BoxRef, t: &[u8; 4], what: &str) -> Result<BoxRef> {
-    let found: Vec<BoxRef> = children(d, parent)?.into_iter().filter(|b| b.is(t)).collect();
+    let found: Vec<BoxRef> = children(d, parent)?
+        .into_iter()
+        .filter(|b| b.is(t))
+        .collect();
     if found.len() != 1 {
         return fail(format!("重封装缺少唯一的{what}"));
     }
@@ -126,9 +116,9 @@ fn rescale_to_movie(span: u64, timescale: u32) -> Result<u32> {
     if timescale == 0 {
         return fail("重封装时间尺度无效");
     }
-    let v = (span * MOVIE_TIMESCALE as u64 + timescale as u64 / 2) / timescale as u64;
-    if v > u32::MAX as u64 {
-        return fail("重封装时长超出 MOV 版本 0 范围");
+    let v = (span as u128 * MOVIE_TIMESCALE as u128 + timescale as u128 / 2) / timescale as u128;
+    if v > u32::MAX as u128 {
+        return fail_as(ErrorKind::Unsupported, "重封装时长超出 MOV 版本 0 范围");
     }
     Ok(v as u32)
 }
@@ -137,14 +127,20 @@ fn rescale_to_movie(span: u64, timescale: u32) -> Result<u32> {
 /// has no edts box. Segment durations are rounded to nearest; media times
 /// and rates are copied verbatim (media time -1 marks an empty edit).
 fn maybe_edts(d: &[u8], trak: &BoxRef, movie_ts: usize) -> Result<Option<Vec<u8>>> {
-    let edts_list: Vec<BoxRef> = children(d, trak)?.into_iter().filter(|b| b.is(b"edts")).collect();
+    let edts_list: Vec<BoxRef> = children(d, trak)?
+        .into_iter()
+        .filter(|b| b.is(b"edts"))
+        .collect();
     if edts_list.is_empty() {
         return Ok(None);
     }
     if edts_list.len() > 1 {
         return fail("重封装重复出现 edts");
     }
-    let elst_list: Vec<BoxRef> = children(d, &edts_list[0])?.into_iter().filter(|b| b.is(b"elst")).collect();
+    let elst_list: Vec<BoxRef> = children(d, &edts_list[0])?
+        .into_iter()
+        .filter(|b| b.is(b"elst"))
+        .collect();
     if elst_list.len() != 1 {
         return fail("重封装编辑列表缺少唯一的 elst");
     }
@@ -157,7 +153,11 @@ fn maybe_edts(d: &[u8], trak: &BoxRef, movie_ts: usize) -> Result<Option<Vec<u8>
         | ((d[elst.payload + 2] as u32) << 8)
         | d[elst.payload + 3] as u32;
     let count = crate::binary::be(d, elst.payload + 4, 4)?;
-    let (record, at) = if version == 1 { (20usize, elst.payload + 8) } else { (12usize, elst.payload + 8) };
+    let (record, at) = if version == 1 {
+        (20usize, elst.payload + 8)
+    } else {
+        (12usize, elst.payload + 8)
+    };
     if count > (elst.end - at) / record {
         return fail("重封装 elst 被截断");
     }
@@ -188,34 +188,39 @@ fn maybe_edts(d: &[u8], trak: &BoxRef, movie_ts: usize) -> Result<Option<Vec<u8>
     Ok(Some(bx(b"edts", &elst_new)))
 }
 
-fn parse_tracks(d: &[u8], video_index: usize) -> Result<(Vec<TrackParts>, u32)> {
-    let tables = mp4::sample_tables(d)?;
-    let top = mp4::boxes(d, 0, d.len())?;
-    let moov = match top.iter().find(|b| b.is(b"moov")) {
-        Some(m) => m.clone(),
-        None => return fail("重封装缺少 moov"),
-    };
-    let traks: Vec<BoxRef> = children(d, &moov)?.into_iter().filter(|b| b.is(b"trak")).collect();
-    if traks.len() != tables.len() {
-        return fail("重封装轨道数与采样表不一致");
-    }
-    // Source movie timescale, needed to rescale edit-list segment durations.
-    let mvhd = only(d, &moov, b"mvhd", "mvhd")?;
-    let movie_ts = {
-        let v = d[mvhd.payload];
-        let at = if v == 1 { 20 } else { 12 };
-        if mvhd.end - mvhd.payload < at + 4 {
-            return fail("重封装 mvhd 被截断");
-        }
-        crate::binary::be(d, mvhd.payload + at, 4)?
-    };
-    if movie_ts == 0 {
-        return fail("重封装电影时间尺度无效");
-    }
+/// The tracks a remux keeps: video track `video_index` (among video tracks)
+/// and every audio track, in file order. Other tracks (Google mett, hint,
+/// text, still-image-time) are dropped.
+fn kept_tracks(movie: &Movie, video_index: usize, audio: bool) -> Vec<&mp4::Track> {
     let mut video_seen = 0usize;
+    movie
+        .tracks
+        .iter()
+        .filter(|t| match t.samples.handler.as_str() {
+            "vide" => {
+                video_seen += 1;
+                video_seen - 1 == video_index
+            }
+            "soun" => audio,
+            _ => false,
+        })
+        .collect()
+}
+
+fn parse_tracks(
+    d: &[u8],
+    movie: &Movie,
+    video_index: usize,
+    audio: bool,
+) -> Result<(Vec<TrackParts>, u32)> {
+    let movie_ts = movie.timescale as usize;
     let mut kept: Vec<TrackParts> = Vec::new();
     let mut max_track_id = 0u32;
-    for (trak, table) in traks.iter().zip(tables.iter()) {
+    if movie.video(video_index).is_err() {
+        return fail_as(ErrorKind::InvalidArgument, "视频没有所选的视频轨");
+    }
+    for track in kept_tracks(movie, video_index, audio) {
+        let (trak, table) = (&track.trak, &track.samples);
         let tkhd = only(d, trak, b"tkhd", "tkhd")?;
         let mdia = only(d, trak, b"mdia", "mdia")?;
         let mdhd = only(d, &mdia, b"mdhd", "mdhd")?;
@@ -226,21 +231,11 @@ fn parse_tracks(d: &[u8], video_index: usize) -> Result<(Vec<TrackParts>, u32)> 
             return fail("重封装轨道与采样表不一致");
         }
         let is_video = table.handler == "vide";
-        let is_audio = table.handler == "soun";
-        if is_video {
-            if video_seen != video_index {
-                video_seen += 1;
-                continue;
-            }
-            video_seen += 1;
-        } else if !is_audio {
-            continue;
-        }
         if is_video && table.samples.is_empty() {
             return fail("视频没有样本，无法重封装");
         }
         if table.samples.iter().any(|s| s.presentation_time < 0) {
-            return fail("视频含负时间样本，暂不无损重封装");
+            return fail_as(ErrorKind::Unsupported, "视频含负时间样本，暂不无损重封装");
         }
         let (track_id, width, height, layer, alt, volume, matrix) = parse_tkhd(d, &tkhd)?;
         max_track_id = max_track_id.max(track_id);
@@ -253,10 +248,7 @@ fn parse_tracks(d: &[u8], video_index: usize) -> Result<(Vec<TrackParts>, u32)> 
         lang.copy_from_slice(&d[mdhd.payload + lang_at..mdhd.payload + lang_at + 2]);
         // Edit list: rescale segment durations to MOVIE_TIMESCALE, keep
         // media times and rates verbatim.
-        let edts = match maybe_edts(d, trak, movie_ts)? {
-            Some(b) => Some(b),
-            None => None,
-        };
+        let edts = maybe_edts(d, trak, movie_ts)?;
         let mut minf_others = Vec::new();
         for c in children(d, &minf)? {
             if !c.is(b"stbl") {
@@ -347,7 +339,7 @@ fn tkhd_box(t: &TrackParts, duration_movie: u32) -> Vec<u8> {
 
 fn mdhd_box(t: &TrackParts, duration_track: u64) -> Result<Vec<u8>> {
     if duration_track > u32::MAX as u64 {
-        return fail("重封装时长超出 MOV 版本 0 范围");
+        return fail_as(ErrorKind::Unsupported, "重封装时长超出 MOV 版本 0 范围");
     }
     let mut p = Vec::new();
     p.extend(u32b(0));
@@ -367,7 +359,10 @@ fn stco_box(is64: bool, offsets: &[usize]) -> Result<Vec<u8>> {
             p.extend((*o as u64).to_be_bytes());
         } else {
             if *o > u32::MAX as usize {
-                return fail("重封装块偏移超出 32 位范围，请用 64 位源文件");
+                return fail_as(
+                    ErrorKind::Unsupported,
+                    "重封装块偏移超出 32 位范围，请用 64 位源文件",
+                );
             }
             p.extend(u32b(*o as u32));
         }
@@ -380,7 +375,7 @@ fn build_moov(
     chunk_offsets: &[Vec<usize>],
     movie_duration: u32,
     next_track_id: u32,
-    udta: Option<&[u8]>,
+    meta: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
     let mut moov_body = mvhd_box(movie_duration, next_track_id);
     for (t, offsets) in tracks.iter().zip(chunk_offsets.iter()) {
@@ -406,81 +401,166 @@ fn build_moov(
         trak_body.extend(bx(b"mdia", &mdia_body));
         moov_body.extend(bx(b"trak", &trak_body));
     }
-    if let Some(u) = udta {
+    if let Some(u) = meta {
         moov_body.extend(u);
     }
     Ok(bx(b"moov", &moov_body))
 }
 
-/// Movie-level QuickTime metadata carrying the Live Photo content identifier:
-/// moov/udta/meta/hdlr(mdta) + ilst/----/mean + name + data (UTF-8, type 1).
-/// Layout follows the QuickTime File Format metadata chapter and ffmpeg's
-/// `mov_read_custom` reader (mean/name/data full boxes, data locale 0).
-pub fn content_identifier_udta(uuid: &str) -> Vec<u8> {
+const CONTENT_IDENTIFIER_KEY: &[u8] = b"com.apple.quicktime.content.identifier";
+
+/// Movie-level QuickTime metadata carrying the Live Photo content identifier,
+/// in the form iPhone camera files and AVAssetWriter use (QuickTime File
+/// Format, "Metadata"): `moov/meta` holding `hdlr(mdta)`, a `keys` box with
+/// one `mdta` key, and an `ilst` whose item type is the 1-based key index
+/// with a UTF-8 (`data` type 1, locale 0) value. QuickTime's `meta` atom has
+/// no version/flags, unlike the ISO BMFF full box.
+pub fn content_identifier_meta(uuid: &str) -> Vec<u8> {
     let mut hdlr_body = u32b(0).to_vec();
     hdlr_body.extend(b"mdta");
     hdlr_body.extend([0u8; 12]);
     hdlr_body.push(0);
     let hdlr = full(b"hdlr", 0, 0, &hdlr_body);
-    let mean = full(b"mean", 0, 0, b"com.apple.quicktime.metadata");
-    let name = full(b"name", 0, 0, b"com.apple.quicktime.content.identifier");
+    let mut key = u32b(8 + CONTENT_IDENTIFIER_KEY.len() as u32).to_vec();
+    key.extend(b"mdta");
+    key.extend(CONTENT_IDENTIFIER_KEY);
+    let mut keys_body = u32b(1).to_vec();
+    keys_body.extend(key);
+    let keys = full(b"keys", 0, 0, &keys_body);
     let mut data_body = u32b(0).to_vec();
     data_body.extend(uuid.as_bytes());
     let data = full(b"data", 0, 1, &data_body);
-    let mut item = mean;
-    item.extend(name);
-    item.extend(data);
-    let ilst = bx(b"ilst", &bx(b"----", &item));
+    let item = bx(&1u32.to_be_bytes(), &data);
     let mut meta_body = hdlr;
-    meta_body.extend(ilst);
-    bx(b"udta", &full(b"meta", 0, 0, &meta_body))
+    meta_body.extend(keys);
+    meta_body.extend(bx(b"ilst", &item));
+    bx(b"meta", &meta_body)
 }
 
-/// Read the content identifier back from a MOV's udta/meta/ilst, if present.
-pub fn read_content_identifier(data: &[u8]) -> Result<Option<String>> {
-    let top = mp4::boxes(data, 0, data.len())?;
-    let moov = match top.iter().find(|b| b.is(b"moov")) {
-        Some(m) => m.clone(),
-        None => return Ok(None),
+/// Children of a `meta` box. QuickTime writes it without version/flags and
+/// ISO BMFF with; a zero first word can only be version/flags, because a
+/// child box of size 0 ("to end of file") cannot occur inside `moov`.
+fn meta_children(d: &[u8], meta: &BoxRef) -> Result<Vec<BoxRef>> {
+    let start = if meta.end - meta.payload >= 4 && d[meta.payload..meta.payload + 4] == [0; 4] {
+        meta.payload + 4
+    } else {
+        meta.payload
     };
-    let udta = match children(data, &moov)?.into_iter().find(|b| b.is(b"udta")) {
-        Some(u) => u,
-        None => return Ok(None),
+    mp4::boxes(d, start, meta.end)
+}
+
+/// UTF-8 value of a `data` atom (type indicator 1), or None for other types.
+fn utf8_data(d: &[u8], data: &BoxRef) -> Result<Option<String>> {
+    let body = &d[data.payload..data.end];
+    if body.len() < 8 || body[..4] != [0, 0, 0, 1] {
+        return Ok(None);
+    }
+    String::from_utf8(body[8..].to_vec())
+        .map(Some)
+        .map_err(|_| crate::Error::new("内容标识不是 UTF-8"))
+}
+
+/// Content identifier from QuickTime keyed metadata (`hdlr` + `keys` + `ilst`).
+fn keyed_identifier(d: &[u8], meta: &BoxRef) -> Result<Option<String>> {
+    let kids = meta_children(d, meta)?;
+    let (Some(keys), Some(ilst)) = (
+        kids.iter().find(|b| b.is(b"keys")),
+        kids.iter().find(|b| b.is(b"ilst")),
+    ) else {
+        return Ok(None);
     };
-    let meta = match children(data, &udta)?.into_iter().find(|b| b.is(b"meta")) {
-        Some(m) => m,
-        None => return Ok(None),
+    if keys.end - keys.payload < 8 {
+        return fail("QuickTime keys 被截断");
+    }
+    let count = crate::binary::be(d, keys.payload + 4, 4)?;
+    let mut at = keys.payload + 8;
+    let mut index = None;
+    for i in 0..count {
+        if keys.end - at < 8 {
+            return fail("QuickTime keys 被截断");
+        }
+        let size = crate::binary::be(d, at, 4)?;
+        if size < 8 || size > keys.end - at {
+            return fail("QuickTime keys 被截断");
+        }
+        if &d[at + 4..at + 8] == b"mdta" && &d[at + 8..at + size] == CONTENT_IDENTIFIER_KEY {
+            index = Some(i as u32 + 1);
+        }
+        at += size;
+    }
+    let Some(index) = index else {
+        return Ok(None);
     };
-    // `meta` is a full box: its children start after version/flags.
-    let ilst = match mp4::boxes(data, meta.payload + 4, meta.end)?.into_iter().find(|b| b.is(b"ilst")) {
-        Some(i) => i,
-        None => return Ok(None),
+    for item in children(d, ilst)? {
+        if d[item.start + 4..item.start + 8] != index.to_be_bytes() {
+            continue;
+        }
+        for c in children(d, &item)? {
+            if c.is(b"data") {
+                if let Some(v) = utf8_data(d, &c)? {
+                    return Ok(Some(v));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Content identifier from the `----` mean/name/data form this core wrote
+/// before it switched to keyed metadata (`moov/udta/meta/ilst`).
+fn freeform_identifier(d: &[u8], meta: &BoxRef) -> Result<Option<String>> {
+    let Some(ilst) = meta_children(d, meta)?.into_iter().find(|b| b.is(b"ilst")) else {
+        return Ok(None);
     };
-    for item in children(data, &ilst)? {
+    for item in children(d, &ilst)? {
         if !item.is(b"----") {
             continue;
         }
-        let mut mean = None;
-        let mut name = None;
-        let mut value = None;
-        for c in children(data, &item)? {
+        let (mut mean, mut name, mut value) = (None, None, None);
+        for c in children(d, &item)? {
             if c.end - c.payload < 4 {
                 continue;
             }
-            let body = &data[c.payload + 4..c.end];
+            let body = &d[c.payload + 4..c.end];
             if c.is(b"mean") {
-                mean = Some(body.to_vec());
+                mean = Some(body);
             } else if c.is(b"name") {
-                name = Some(body.to_vec());
-            } else if c.is(b"data") && body.len() >= 4 {
-                value = Some(body[4..].to_vec());
+                name = Some(body);
+            } else if c.is(b"data") {
+                value = utf8_data(d, &c)?;
             }
         }
-        if mean.as_deref() == Some(b"com.apple.quicktime.metadata".as_slice())
-            && name.as_deref() == Some(b"com.apple.quicktime.content.identifier".as_slice())
+        if mean == Some(b"com.apple.quicktime.metadata".as_slice())
+            && name == Some(CONTENT_IDENTIFIER_KEY)
         {
             if let Some(v) = value {
-                return Ok(Some(String::from_utf8(v).map_err(|_| crate::Error::new("内容标识不是 UTF-8"))?));
+                return Ok(Some(v));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Read the movie-level content identifier: keyed `moov/meta` first (iPhone,
+/// AVAssetWriter, this writer), then keyed or freeform `moov/udta/meta`.
+pub fn read_content_identifier(data: &[u8]) -> Result<Option<String>> {
+    let top = mp4::boxes(data, 0, data.len())?;
+    let Some(moov) = top.iter().find(|b| b.is(b"moov")) else {
+        return Ok(None);
+    };
+    let kids = children(data, moov)?;
+    for meta in kids.iter().filter(|b| b.is(b"meta")) {
+        if let Some(v) = keyed_identifier(data, meta)? {
+            return Ok(Some(v));
+        }
+    }
+    for udta in kids.iter().filter(|b| b.is(b"udta")) {
+        for meta in children(data, udta)?.iter().filter(|b| b.is(b"meta")) {
+            if let Some(v) = keyed_identifier(data, meta)? {
+                return Ok(Some(v));
+            }
+            if let Some(v) = freeform_identifier(data, meta)? {
+                return Ok(Some(v));
             }
         }
     }
@@ -510,14 +590,12 @@ const METT_TRACK_TIMESCALE: u32 = 600;
 /// (logseq demo, makzan file, and the first key of the osxphotos 3-key
 /// entry). Do not "improve" these bytes: they are copied, not designed.
 const METT_STSD_ENTRY: &[u8] = &[
-    0x00, 0x00, 0x00, 0x60, 0x6d, 0x65, 0x62, 0x78, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x6b, 0x65, 0x79, 0x73,
-    0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x30,
-    0x6b, 0x65, 0x79, 0x64, 0x6d, 0x64, 0x74, 0x61, 0x63, 0x6f, 0x6d, 0x2e,
-    0x61, 0x70, 0x70, 0x6c, 0x65, 0x2e, 0x71, 0x75, 0x69, 0x63, 0x6b, 0x74,
-    0x69, 0x6d, 0x65, 0x2e, 0x73, 0x74, 0x69, 0x6c, 0x6c, 0x2d, 0x69, 0x6d,
-    0x61, 0x67, 0x65, 0x2d, 0x74, 0x69, 0x6d, 0x65, 0x00, 0x00, 0x00, 0x10,
-    0x64, 0x74, 0x79, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41,
+    0x00, 0x00, 0x00, 0x60, 0x6d, 0x65, 0x62, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+    0x00, 0x00, 0x00, 0x50, 0x6b, 0x65, 0x79, 0x73, 0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x01,
+    0x00, 0x00, 0x00, 0x30, 0x6b, 0x65, 0x79, 0x64, 0x6d, 0x64, 0x74, 0x61, 0x63, 0x6f, 0x6d, 0x2e,
+    0x61, 0x70, 0x70, 0x6c, 0x65, 0x2e, 0x71, 0x75, 0x69, 0x63, 0x6b, 0x74, 0x69, 0x6d, 0x65, 0x2e,
+    0x73, 0x74, 0x69, 0x6c, 0x6c, 0x2d, 0x69, 0x6d, 0x61, 0x67, 0x65, 0x2d, 0x74, 0x69, 0x6d, 0x65,
+    0x00, 0x00, 0x00, 0x10, 0x64, 0x74, 0x79, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41,
 ];
 
 /// The single still-image-time sample: `[size 9][key 1][value 0xff]`.
@@ -525,9 +603,8 @@ const METT_SAMPLE: &[u8] = &[0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x01, 0xf
 
 /// The `gmhd`/`gmin` media header native meta tracks carry (verbatim).
 const METT_GMHD: &[u8] = &[
-    0x00, 0x00, 0x00, 0x20, 0x67, 0x6d, 0x68, 0x64, 0x00, 0x00, 0x00, 0x18,
-    0x67, 0x6d, 0x69, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x80, 0x00,
-    0x80, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x20, 0x67, 0x6d, 0x68, 0x64, 0x00, 0x00, 0x00, 0x18, 0x67, 0x6d, 0x69, 0x6e,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00,
 ];
 
 /// Build the synthetic still-image-time track for a cover at
@@ -539,7 +616,10 @@ const METT_GMHD: &[u8] = &[
 /// (no zero-length empty edit).
 fn mett_track_parts(track_id: u32, cover_time_us: i64) -> Result<TrackParts> {
     if cover_time_us < 0 || cover_time_us > u32::MAX as i64 {
-        return fail("封面时间超出 still-image-time 编辑列表范围");
+        return fail_as(
+            ErrorKind::Cover,
+            "封面时间超出 still-image-time 编辑列表范围",
+        );
     }
     let cover = cover_time_us as u32;
     let sample_span_movie = rescale_to_movie(1, METT_TRACK_TIMESCALE)?;
@@ -564,8 +644,18 @@ fn mett_track_parts(track_id: u32, cover_time_us: i64) -> Result<TrackParts> {
     stsd_body.extend(METT_STSD_ENTRY);
     let stsd = full(b"stsd", 0, 0, &stsd_body);
     let stts = full(b"stts", 0, 0, &[u32b(1), u32b(1), u32b(1)].concat());
-    let stsc = full(b"stsc", 0, 0, &[u32b(1), u32b(1), u32b(1), u32b(1)].concat());
-    let stsz = full(b"stsz", 0, 0, &[u32b(0), u32b(1), u32b(METT_SAMPLE.len() as u32)].concat());
+    let stsc = full(
+        b"stsc",
+        0,
+        0,
+        &[u32b(1), u32b(1), u32b(1), u32b(1)].concat(),
+    );
+    let stsz = full(
+        b"stsz",
+        0,
+        0,
+        &[u32b(0), u32b(1), u32b(METT_SAMPLE.len() as u32)].concat(),
+    );
     let stco = full(b"stco", 0, 0, &[u32b(1), u32b(0)].concat());
     let url = full(b"url ", 0, 1, &[]);
     let mut dref_body = u32b(1).to_vec();
@@ -577,7 +667,10 @@ fn mett_track_parts(track_id: u32, cover_time_us: i64) -> Result<TrackParts> {
     hdlr_body.push(0);
     let hdlr = full(b"hdlr", 0, 0, &hdlr_body);
     let mut matrix = [0u8; 36];
-    for (i, v) in [0x00010000u32, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000].iter().enumerate() {
+    for (i, v) in [0x00010000u32, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000]
+        .iter()
+        .enumerate()
+    {
         matrix[i * 4..i * 4 + 4].copy_from_slice(&v.to_be_bytes());
     }
     Ok(TrackParts {
@@ -616,18 +709,22 @@ fn mett_track_parts(track_id: u32, cover_time_us: i64) -> Result<TrackParts> {
 /// Remux an MP4 to a QuickTime MOV: chosen video track (0-based among video
 /// tracks) plus all audio tracks, samples copied verbatim.
 pub fn remux_to_mov(data: &[u8], video_index: usize) -> Result<Vec<u8>> {
-    remux_impl(data, video_index, None, None)
+    Ok(remux_mov(data, &Movie::parse(data)?, video_index, None, None)?.0)
 }
 
 /// Same as `remux_to_mov`, plus the movie-level content identifier
 /// (`com.apple.quicktime.content.identifier`, ROADMAP item 9b first half).
 /// No still-image-time track: use `remux_to_mov_with_identifier_and_mett`
 /// when the cover time is known.
-pub fn remux_to_mov_with_identifier(data: &[u8], video_index: usize, uuid: &str) -> Result<Vec<u8>> {
+pub fn remux_to_mov_with_identifier(
+    data: &[u8],
+    video_index: usize,
+    uuid: &str,
+) -> Result<Vec<u8>> {
     if uuid.is_empty() {
-        return fail("内容标识不能为空");
+        return fail_as(ErrorKind::InvalidArgument, "内容标识不能为空");
     }
-    remux_impl(data, video_index, Some(uuid), None)
+    Ok(remux_mov(data, &Movie::parse(data)?, video_index, Some(uuid), None)?.0)
 }
 
 /// Same as `remux_to_mov_with_identifier`, plus the native-form
@@ -641,19 +738,143 @@ pub fn remux_to_mov_with_identifier_and_mett(
     cover_time_us: i64,
 ) -> Result<Vec<u8>> {
     if uuid.is_empty() {
-        return fail("内容标识不能为空");
+        return fail_as(ErrorKind::InvalidArgument, "内容标识不能为空");
     }
-    remux_impl(data, video_index, Some(uuid), Some(cover_time_us))
+    Ok(remux_mov(
+        data,
+        &Movie::parse(data)?,
+        video_index,
+        Some(uuid),
+        Some(cover_time_us),
+    )?
+    .0)
 }
 
-fn remux_impl(
+/// The MOV remux behind the `remux_to_mov*` functions, on an already parsed
+/// source. Returns the output and its own parse, both already verified
+/// sample by sample against the source (like Swift `movie()`), so callers
+/// with more checks to run on the output need not parse it again.
+pub fn remux_mov(
     data: &[u8],
+    movie: &Movie,
     video_index: usize,
     identifier: Option<&str>,
     mett_cover_us: Option<i64>,
-) -> Result<Vec<u8>> {
-    let (mut tracks, mut max_track_id) = parse_tracks(data, video_index)?;
-    let udta = identifier.map(content_identifier_udta);
+) -> Result<(Vec<u8>, Movie)> {
+    remux_mov_with(data, movie, video_index, identifier, mett_cover_us, true)
+}
+
+/// [`remux_mov`] with a choice to drop the audio tracks (`audio: false`
+/// gives a silent movie of the one video track, like Swift
+/// `exportAuxiliary`).
+pub fn remux_mov_with(
+    data: &[u8],
+    movie: &Movie,
+    video_index: usize,
+    identifier: Option<&str>,
+    mett_cover_us: Option<i64>,
+    audio: bool,
+) -> Result<(Vec<u8>, Movie)> {
+    remux_mov_policy(
+        data,
+        movie,
+        video_index,
+        identifier,
+        mett_cover_us,
+        audio,
+        false,
+    )
+}
+
+/// App compatibility route: for a simple leading delay, AVAssetWriter used
+/// the media sample timeline. The generic remux APIs retain source edits.
+pub(crate) fn remux_mov_media(
+    data: &[u8],
+    movie: &Movie,
+    video_index: usize,
+    identifier: Option<&str>,
+    cover: i64,
+) -> Result<(Vec<u8>, Movie)> {
+    remux_mov_policy(
+        data,
+        movie,
+        video_index,
+        identifier,
+        Some(cover),
+        true,
+        true,
+    )
+}
+
+/// True only for untrimmed media starting at zero, optionally preceded by
+/// empty edits. Never discard a trim, repeat, rate change or interior gap.
+pub(crate) fn simple_media_timeline(data: &[u8], movie: &Movie, index: usize) -> Result<bool> {
+    for track in kept_tracks(movie, index, true) {
+        if let Some(edits) = mp4::edit_list(data, &track.trak)? {
+            let edts = children(data, &track.trak)?
+                .into_iter()
+                .find(|b| b.is(b"edts"))
+                .unwrap();
+            let elst = children(data, &edts)?
+                .into_iter()
+                .find(|b| b.is(b"elst"))
+                .unwrap();
+            let version = data[elst.payload];
+            if version > 1 {
+                return Ok(false);
+            }
+            let record = if version == 1 { 20 } else { 12 };
+            for i in 0..edits.len() {
+                let at = elst.payload + 8 + i * record + record - 4;
+                if data[at..at + 4] != [0, 1, 0, 0] {
+                    return Ok(false);
+                }
+            }
+
+            let real: Vec<_> = edits
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, start))| *start >= 0)
+                .collect();
+            if real.len() != 1 || real[0].0 + 1 != edits.len() || (real[0].1).1 != 0 {
+                return Ok(false);
+            }
+            let end = track
+                .samples
+                .samples
+                .iter()
+                .map(|s| s.presentation_time as i128 + s.duration as i128)
+                .max()
+                .unwrap_or(0);
+            if (real[0].1).0 as i128 * (track.samples.timescale as i128)
+                < end * (movie.timescale as i128)
+            {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+fn remux_mov_policy(
+    data: &[u8],
+    movie: &Movie,
+    video_index: usize,
+    identifier: Option<&str>,
+    mett_cover_us: Option<i64>,
+    audio: bool,
+    media: bool,
+) -> Result<(Vec<u8>, Movie)> {
+    let (mut tracks, mut max_track_id) = parse_tracks(data, movie, video_index, audio)?;
+    if media {
+        if !simple_media_timeline(data, movie, video_index)? {
+            return fail("编辑时间线不能安全规范化");
+        }
+        for track in &mut tracks {
+            track.edts = None;
+        }
+    }
+    let meta = identifier.map(content_identifier_meta);
     if let Some(cover) = mett_cover_us {
         tracks.push(mett_track_parts(max_track_id + 1, cover)?);
         max_track_id += 1;
@@ -661,7 +882,17 @@ fn remux_impl(
     let mut ftyp_payload = b"qt  ".to_vec();
     ftyp_payload.extend(u32b(0));
     ftyp_payload.extend(b"qt  ");
-    assemble(&tracks, max_track_id, udta, bx(b"ftyp", &ftyp_payload), data)
+    let out = assemble(
+        &tracks,
+        max_track_id,
+        meta,
+        bx(b"ftyp", &ftyp_payload),
+        data,
+    )?;
+    // The added still-image-time track is not a source track and is ignored.
+    let out_movie = Movie::parse(&out)?;
+    verify(data, movie, video_index, audio, &out, &out_movie)?;
+    Ok((out, out_movie))
 }
 
 /// MOV -> MP4 sample-copy remux (ROADMAP item 8, first half), mirroring
@@ -670,18 +901,35 @@ fn remux_impl(
 /// movie timescale 1_000_000, ftyp `mp42`. The edit list is copied, so
 /// playback timing matches the source; raw sample-table times are unchanged.
 pub fn remux_to_mp4(data: &[u8]) -> Result<Vec<u8>> {
-    let tables = mp4::sample_tables(data)?;
-    let n_video = tables.iter().filter(|t| t.handler == "vide").count();
-    let n_audio = tables.iter().filter(|t| t.handler == "soun").count();
-    if n_video != 1 || n_audio > 1 {
-        return fail("实况视频轨道布局不受支持");
+    remux_mp4(data, &Movie::parse(data)?)
+}
+
+/// [`remux_to_mp4`] on an already parsed source.
+pub fn remux_mp4(data: &[u8], movie: &Movie) -> Result<Vec<u8>> {
+    let count = |h: &str| {
+        movie
+            .tracks
+            .iter()
+            .filter(|t| t.samples.handler == h)
+            .count()
+    };
+    if count("vide") != 1 || count("soun") > 1 {
+        return fail_as(ErrorKind::Unsupported, "实况视频轨道布局不受支持");
     }
-    let (tracks, max_track_id) = parse_tracks(data, 0)?;
+    let (tracks, max_track_id) = parse_tracks(data, movie, 0, true)?;
     let mut ftyp_payload = b"mp42".to_vec();
     ftyp_payload.extend(u32b(0));
     ftyp_payload.extend(b"mp42");
     ftyp_payload.extend(b"isom");
-    assemble(&tracks, max_track_id, None, bx(b"ftyp", &ftyp_payload), data)
+    let out = assemble(
+        &tracks,
+        max_track_id,
+        None,
+        bx(b"ftyp", &ftyp_payload),
+        data,
+    )?;
+    verify(data, movie, 0, true, &out, &Movie::parse(&out)?)?;
+    Ok(out)
 }
 
 /// Shared two-pass assembly: build moov once with zero chunk offsets to
@@ -689,7 +937,7 @@ pub fn remux_to_mp4(data: &[u8]) -> Result<Vec<u8>> {
 fn assemble(
     tracks: &[TrackParts],
     max_track_id: u32,
-    udta: Option<Vec<u8>>,
+    meta: Option<Vec<u8>>,
     ftyp: Vec<u8>,
     source: &[u8],
 ) -> Result<Vec<u8>> {
@@ -702,74 +950,126 @@ fn assemble(
         .into_iter()
         .max()
         .unwrap_or(0);
-    let moov_len = build_moov(tracks, &zero, movie_duration, max_track_id + 1, udta.as_deref())?.len();
+    let moov_len = build_moov(
+        tracks,
+        &zero,
+        movie_duration,
+        max_track_id + 1,
+        meta.as_deref(),
+    )?
+    .len();
+    // Chunk offsets depend only on sample sizes, so compute them without
+    // copying any sample bytes (perf item 5): the old code first copied
+    // every sample into mdat_body, then bx() copied it again into the
+    // output, plus growth re-copies of the unreserved buffer.
     let mut chunk_offsets: Vec<Vec<usize>> = Vec::new();
-    let mut mdat_body: Vec<u8> = Vec::new();
+    let mut total_samples = 0usize;
     let mut at = ftyp.len() + moov_len + 8;
     for t in tracks {
         let mut offsets = Vec::new();
-        let mut cursor = 0usize;
         for range in &t.chunks {
             offsets.push(at);
             for s in &t.samples[range.clone()] {
-                if let Some(inline) = &t.inline_data {
-                    mdat_body.extend_from_slice(&inline[cursor..cursor + s.size]);
-                    cursor += s.size;
-                } else {
-                    mdat_body.extend_from_slice(&source[s.offset..s.offset + s.size]);
-                }
                 at += s.size;
+                total_samples += s.size;
             }
         }
         chunk_offsets.push(offsets);
     }
-    let moov = build_moov(tracks, &chunk_offsets, movie_duration, max_track_id + 1, udta.as_deref())?;
+    let moov = build_moov(
+        tracks,
+        &chunk_offsets,
+        movie_duration,
+        max_track_id + 1,
+        meta.as_deref(),
+    )?;
     debug_assert_eq!(moov.len(), moov_len);
+    // The mdat header and stco offsets are 32-bit: refuse instead of
+    // silently truncating the box size.
+    if total_samples
+        .checked_add(8)
+        .is_none_or(|n| n > u32::MAX as usize)
+    {
+        return fail_as(
+            ErrorKind::Unsupported,
+            "媒体数据超过 4 GB，无法写入 32 位 mdat",
+        );
+    }
     let mut out = ftyp;
     out.extend(moov);
-    out.extend(bx(b"mdat", &mdat_body));
+    // Single copy: reserve the exact sample payload once, then write the
+    // mdat header and every sample straight into the output, in the
+    // same track/chunk/sample order as before.
+    out.reserve(8 + total_samples);
+    out.extend_from_slice(&((total_samples + 8) as u32).to_be_bytes());
+    out.extend_from_slice(b"mdat");
+    for t in tracks {
+        let mut cursor = 0usize;
+        for range in &t.chunks {
+            for s in &t.samples[range.clone()] {
+                if let Some(inline) = &t.inline_data {
+                    out.extend_from_slice(&inline[cursor..cursor + s.size]);
+                    cursor += s.size;
+                } else {
+                    out.extend_from_slice(&source[s.offset..s.offset + s.size]);
+                }
+            }
+        }
+    }
     Ok(out)
 }
 
 /// Verify a remux like Swift `movie()`: per kept track, sample count, sizes,
-/// concatenated sample hash and presentation times must match exactly.
+/// sample bytes and presentation times must match exactly.
+/// Every public `remux_*` function already runs this on its output.
 pub fn check_remux(source: &[u8], output: &[u8], video_index: usize) -> Result<()> {
-    let (src_tracks, _) = parse_tracks(source, video_index)?;
+    verify(
+        source,
+        &Movie::parse(source)?,
+        video_index,
+        true,
+        output,
+        &Movie::parse(output)?,
+    )
+}
+
+fn verify(
+    src: &[u8],
+    src_movie: &Movie,
+    video_index: usize,
+    audio: bool,
+    out: &[u8],
+    out_movie: &Movie,
+) -> Result<()> {
+    let s_tracks = kept_tracks(src_movie, video_index, audio);
     // The output holds only the selected video track, so it is index 0 there.
-    let (out_tracks, _) = parse_tracks(output, 0)?;
-    if src_tracks.len() != out_tracks.len() {
-        return fail("重封装校验失败：轨道数不同");
+    let o_tracks = kept_tracks(out_movie, 0, audio);
+    if s_tracks.len() != o_tracks.len() {
+        return fail_as(ErrorKind::VerifyFailed, "重封装校验失败：轨道数不同");
     }
-    for (s, o) in src_tracks.iter().zip(out_tracks.iter()) {
+    for (s, o) in s_tracks.iter().zip(&o_tracks) {
+        let (s, o) = (&s.samples, &o.samples);
         if s.handler != o.handler || s.timescale != o.timescale {
-            return fail("重封装校验失败：轨道类型或时间尺度不同");
+            return fail_as(
+                ErrorKind::VerifyFailed,
+                "重封装校验失败：轨道类型或时间尺度不同",
+            );
         }
         if s.samples.len() != o.samples.len() {
-            return fail("重封装校验失败：样本数不同");
+            return fail_as(ErrorKind::VerifyFailed, "重封装校验失败：样本数不同");
         }
-        // Stream the hash over the samples: the old code collected
-        // every sample byte into one Vec first, doubling peak memory
-        // on large videos for no benefit (P2 zero-copy).
-        let hash = |samples: &[mp4::Sample], d: &[u8]| {
-            use sha2::Digest as _;
-            let mut h = sha2::Sha256::new();
-            for x in samples {
-                h.update(&d[x.offset..x.offset + x.size]);
+        for (a, b) in s.samples.iter().zip(&o.samples) {
+            if a.size != b.size {
+                return fail_as(ErrorKind::VerifyFailed, "重封装校验失败：样本大小不同");
             }
-            crate::hex(&h.finalize())
-        };
-        if hash(&s.samples, source) != hash(&o.samples, output) {
-            return fail("重封装校验失败：样本数据不同");
-        }
-        if s.samples.iter().map(|x| x.size).collect::<Vec<_>>()
-            != o.samples.iter().map(|x| x.size).collect::<Vec<_>>()
-        {
-            return fail("重封装校验失败：样本大小不同");
-        }
-        if s.samples.iter().map(|x| x.presentation_time).collect::<Vec<_>>()
-            != o.samples.iter().map(|x| x.presentation_time).collect::<Vec<_>>()
-        {
-            return fail("重封装校验失败：显示时间漂移");
+            if a.presentation_time != b.presentation_time {
+                return fail_as(ErrorKind::VerifyFailed, "重封装校验失败：显示时间漂移");
+            }
+            // Both files are in memory: compare the bytes themselves (exact,
+            // and several times faster than hashing each side).
+            if src[a.offset..a.offset + a.size] != out[b.offset..b.offset + b.size] {
+                return fail_as(ErrorKind::VerifyFailed, "重封装校验失败：样本数据不同");
+            }
         }
     }
     Ok(())
@@ -777,7 +1077,7 @@ pub fn check_remux(source: &[u8], output: &[u8], video_index: usize) -> Result<(
 
 /// Track kinds kept by remux, for callers that need a summary.
 pub fn kept_handlers(data: &[u8], video_index: usize) -> Result<Vec<String>> {
-    let (tracks, _) = parse_tracks(data, video_index)?;
+    let (tracks, _) = parse_tracks(data, &Movie::parse(data)?, video_index, true)?;
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for t in tracks {
@@ -786,4 +1086,12 @@ pub fn kept_handlers(data: &[u8], video_index: usize) -> Result<Vec<String>> {
         }
     }
     Ok(out)
+}
+
+/// Track id and display size (16.16 fixed point, as floats) from a track's
+/// `tkhd`, like AVFoundation's `trackID` and `naturalSize`.
+pub fn track_header(d: &[u8], trak: &BoxRef) -> Result<(u32, f64, f64)> {
+    let tkhd = only(d, trak, b"tkhd", "tkhd")?;
+    let (id, width, height, ..) = parse_tkhd(d, &tkhd)?;
+    Ok((id, width as f64 / 65536.0, height as f64 / 65536.0))
 }

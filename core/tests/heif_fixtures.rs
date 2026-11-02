@@ -11,16 +11,22 @@
 mod common;
 
 use base64::Engine;
-use common::{build_still_spec, bx, exif_item, motion_xmp, plain_xmp, sefd_box, sef_tail_mpv2, HeicItem, HeicStillSpec};
+use common::{
+    build_still_spec, bx, exif_item, motion_xmp, plain_xmp, sef_tail_mpv2, sefd_box, HeicItem,
+    HeicStillSpec,
+};
 use momentstays_core::format;
 use momentstays_core::heif;
 use momentstays_core::vendor;
 use std::fs;
 
 fn real_mp4() -> Vec<u8> {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64");
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures-samples/real.mp4.b64");
     let text = fs::read_to_string(path).unwrap();
-    base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap()
 }
 
 fn hvc1() -> Vec<u8> {
@@ -28,7 +34,17 @@ fn hvc1() -> Vec<u8> {
 }
 
 fn spec_v0() -> HeicStillSpec {
-    HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 0, offset_width: 4, length_width: 4, base_width: 0, base: 0, index_width: 0, with_iref: false }
+    HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 0,
+        offset_width: 4,
+        length_width: 4,
+        base_width: 0,
+        base: 0,
+        index_width: 0,
+        with_iref: false,
+    }
 }
 
 fn item_bytes(still: &[u8], ty: &str) -> Vec<u8> {
@@ -39,27 +55,87 @@ fn item_bytes(still: &[u8], ty: &str) -> Vec<u8> {
 
 #[test]
 fn iloc_v1_width8_mdat_multiextent() {
-    let spec = HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 1, offset_width: 8, length_width: 8, base_width: 0, base: 0, index_width: 0, with_iref: false };
+    let spec = HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 1,
+        offset_width: 8,
+        length_width: 8,
+        base_width: 0,
+        base: 0,
+        index_width: 0,
+        with_iref: false,
+    };
     let data = hvc1();
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: data.clone(), method: 0, extents: 2 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: plain_xmp(), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: data.clone(),
+            method: 0,
+            extents: 2,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: plain_xmp(),
+            method: 0,
+            extents: 1,
+        },
     ];
     let still = build_still_spec(&spec, &items);
-    assert_eq!(item_bytes(&still, "hvc1"), data, "multi-extent concatenation");
+    assert_eq!(
+        item_bytes(&still, "hvc1"),
+        data,
+        "multi-extent concatenation"
+    );
     assert_eq!(item_bytes(&still, "mime"), plain_xmp());
     heif::coding_hash(&still).unwrap();
 }
 
 #[test]
 fn iloc_v2_base4_mdat() {
-    let spec = HeicStillSpec { iinf_version: 1, infe_version: 3, iloc_version: 2, offset_width: 8, length_width: 8, base_width: 4, base: 32, index_width: 0, with_iref: false };
+    let spec = HeicStillSpec {
+        iinf_version: 1,
+        infe_version: 3,
+        iloc_version: 2,
+        offset_width: 8,
+        length_width: 8,
+        base_width: 4,
+        base: 32,
+        index_width: 0,
+        with_iref: false,
+    };
     let data = hvc1();
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: data.clone(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: plain_xmp(), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: data.clone(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: plain_xmp(),
+            method: 0,
+            extents: 1,
+        },
     ];
     let still = build_still_spec(&spec, &items);
     assert_eq!(item_bytes(&still, "hvc1"), data, "base offset applied");
@@ -70,12 +146,40 @@ fn iloc_v2_base4_mdat() {
 fn iloc_v1_idat_only() {
     // Note: idat needs iloc v1+ (v0 has no method field; method is
     // implicitly mdat there).
-    let spec = HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 1, offset_width: 4, length_width: 4, base_width: 0, base: 0, index_width: 0, with_iref: false };
+    let spec = HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 1,
+        offset_width: 4,
+        length_width: 4,
+        base_width: 0,
+        base: 0,
+        index_width: 0,
+        with_iref: false,
+    };
     let data = hvc1();
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: data.clone(), method: 1, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 1, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: plain_xmp(), method: 1, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: data.clone(),
+            method: 1,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 1,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: plain_xmp(),
+            method: 1,
+            extents: 1,
+        },
     ];
     let still = build_still_spec(&spec, &items);
     assert_eq!(item_bytes(&still, "hvc1"), data);
@@ -87,12 +191,40 @@ fn iloc_v1_idat_only() {
 
 #[test]
 fn mixed_mdat_idat() {
-    let spec = HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 1, offset_width: 4, length_width: 4, base_width: 0, base: 0, index_width: 0, with_iref: true };
+    let spec = HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 1,
+        offset_width: 4,
+        length_width: 4,
+        base_width: 0,
+        base: 0,
+        index_width: 0,
+        with_iref: true,
+    };
     let data = hvc1();
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: data.clone(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 1, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: plain_xmp(), method: 1, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: data.clone(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 1,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: plain_xmp(),
+            method: 1,
+            extents: 1,
+        },
     ];
     let still = build_still_spec(&spec, &items);
     assert_eq!(item_bytes(&still, "hvc1"), data);
@@ -102,10 +234,32 @@ fn mixed_mdat_idat() {
 
 #[test]
 fn iloc_v1_index_nonzero_rejected() {
-    let spec = HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 1, offset_width: 4, length_width: 4, base_width: 0, base: 0, index_width: 4, with_iref: false };
+    let spec = HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 1,
+        offset_width: 4,
+        length_width: 4,
+        base_width: 0,
+        base: 0,
+        index_width: 4,
+        with_iref: false,
+    };
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
     ];
     let still = build_still_spec(&spec, &items);
     let layout = heif::layout(&still).unwrap();
@@ -115,14 +269,35 @@ fn iloc_v1_index_nonzero_rejected() {
     assert_eq!(still[idx_at], 0, "index starts zero");
     let mut patched = still.clone();
     patched[idx_at] = 1;
-    assert!(heif::layout(&patched).is_err(), "nonzero extent index refused");
+    assert!(
+        heif::layout(&patched).is_err(),
+        "nonzero extent index refused"
+    );
 }
 
 fn motion_still() -> Vec<u8> {
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: motion_xmp(1_420_000), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: motion_xmp(1_420_000),
+            method: 0,
+            extents: 1,
+        },
     ];
     build_still_spec(&spec_v0(), &items)
 }
@@ -160,8 +335,20 @@ fn sefd_fixture_parses() {
     // Still with NO mime item, mirroring the real S20 file: the SEF
     // record, not XMP, declares the motion photo.
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
     ];
     let still = build_still_spec(&spec_v0(), &items);
     heif::layout(&still).unwrap();
@@ -169,7 +356,9 @@ fn sefd_fixture_parses() {
     let mut file = still.clone();
     file.extend(sefd_box(&video));
     // The SEF directory locates the video.
-    let loc = vendor::locate(&file, 0).expect("locate").expect("sef record");
+    let loc = vendor::locate(&file, 0)
+        .expect("locate")
+        .expect("sef record");
     assert_eq!(loc.format, "samsung-sef");
     assert_eq!(&file[loc.start..loc.end], video.as_slice());
     // sefd is the last top-level box and runs to EOF.
@@ -185,12 +374,36 @@ fn sefd_fixture_parses() {
 #[test]
 fn coding_hash_stable_under_exif_edits() {
     let base_items = |exif: Option<Vec<u8>>, mime: Vec<u8>| {
-        let mut items = vec![HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 }];
+        let mut items = vec![HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        }];
         if let Some(e) = exif {
-            items.push(HeicItem { id: 2, ty: "Exif", data: e, method: 0, extents: 1 });
-            items.push(HeicItem { id: 3, ty: "mime", data: mime, method: 0, extents: 1 });
+            items.push(HeicItem {
+                id: 2,
+                ty: "Exif",
+                data: e,
+                method: 0,
+                extents: 1,
+            });
+            items.push(HeicItem {
+                id: 3,
+                ty: "mime",
+                data: mime,
+                method: 0,
+                extents: 1,
+            });
         } else {
-            items.push(HeicItem { id: 2, ty: "mime", data: mime, method: 0, extents: 1 });
+            items.push(HeicItem {
+                id: 2,
+                ty: "mime",
+                data: mime,
+                method: 0,
+                extents: 1,
+            });
         }
         build_still_spec(&spec_v0(), &items)
     };
@@ -209,16 +422,42 @@ fn coding_hash_stable_under_exif_edits() {
     assert_eq!(heif::coding_hash(&d).unwrap(), ha);
 }
 
-
 #[test]
 fn sefd_rejects_conflicting_cover_timestamps() {
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: motion_xmp(123), method: 0, extents: 1 },
-        HeicItem { id: 4, ty: "mime", data: motion_xmp(456), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: motion_xmp(123),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 4,
+            ty: "mime",
+            data: motion_xmp(456),
+            method: 0,
+            extents: 1,
+        },
     ];
     let mut motion = build_still_spec(&spec_v0(), &items);
     motion.extend(sefd_box(&real_mp4()));
-    assert!(format::parse(&motion).is_err(), "ambiguous cover time must be rejected");
+    assert!(
+        format::parse(&motion).is_err(),
+        "ambiguous cover time must be rejected"
+    );
 }

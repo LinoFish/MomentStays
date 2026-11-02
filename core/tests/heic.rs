@@ -16,14 +16,21 @@ use momentstays_core::model::Vendor;
 use std::fs;
 
 fn real_mp4() -> Vec<u8> {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64");
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures-samples/real.mp4.b64");
     let text = fs::read_to_string(path).unwrap();
-    base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap()
 }
 
 fn mime_bytes(still: &[u8]) -> Vec<u8> {
     let layout = heif::layout(still).unwrap();
-    let item = layout.items.iter().find(|i| i.ty == "mime").expect("mime item");
+    let item = layout
+        .items
+        .iter()
+        .find(|i| i.ty == "mime")
+        .expect("mime item");
     heif::item_bytes(still, item)
 }
 
@@ -33,7 +40,11 @@ fn write_xmp_replaces_primary_mime() {
     let before = heif::coding_hash(&still).unwrap();
     let new_xmp = b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description GCamera:MotionPhoto=\"1\"/></rdf:RDF></x:xmpmeta>";
     let out = write_xmp(&still, new_xmp).expect("write");
-    assert_eq!(heif::coding_hash(&out).unwrap(), before, "coding hash unchanged");
+    assert_eq!(
+        heif::coding_hash(&out).unwrap(),
+        before,
+        "coding hash unchanged"
+    );
     assert_eq!(mime_bytes(&out), new_xmp, "mime replaced");
     // The rewritten file still parses as a clean still.
     heif::layout(&out).unwrap();
@@ -45,10 +56,17 @@ fn write_xmp_creates_mime_and_iref() {
     let before = heif::coding_hash(&still).unwrap();
     let new_xmp = b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description GCamera:MotionPhoto=\"1\"/></rdf:RDF></x:xmpmeta>";
     let out = write_xmp(&still, new_xmp).expect("write");
-    assert_eq!(heif::coding_hash(&out).unwrap(), before, "coding hash unchanged");
+    assert_eq!(
+        heif::coding_hash(&out).unwrap(),
+        before,
+        "coding hash unchanged"
+    );
     assert_eq!(mime_bytes(&out), new_xmp, "mime created");
     let layout = heif::layout(&out).unwrap();
-    assert!(layout.children.iter().any(|b| b.is(b"iref")), "iref created");
+    assert!(
+        layout.children.iter().any(|b| b.is(b"iref")),
+        "iref created"
+    );
 }
 
 #[test]
@@ -103,7 +121,10 @@ fn assemble_refuses_other_vendors_and_bad_inputs() {
     let still = build_still(true, true);
     let video = real_mp4();
     for vendor in [Vendor::Huawei, Vendor::Oppo, Vendor::Vivo] {
-        assert!(assemble_heic(&still, &video, vendor, 1_420_000).is_err(), "{vendor:?} refused");
+        assert!(
+            assemble_heic(&still, &video, vendor, 1_420_000).is_err(),
+            "{vendor:?} refused"
+        );
     }
     // A still that already carries video (mpvd) is refused.
     let mut with_video = still.clone();

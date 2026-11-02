@@ -12,7 +12,9 @@
 mod common;
 
 use base64::Engine;
-use common::{build_still, build_still_spec, exif_item, motion_xmp, sefd_box, HeicItem, HeicStillSpec};
+use common::{
+    build_still, build_still_spec, exif_item, motion_xmp, sefd_box, HeicItem, HeicStillSpec,
+};
 use momentstays_core::format;
 use momentstays_core::heif;
 use momentstays_core::heifwrite::{assemble_heic, live_still_heic};
@@ -24,9 +26,12 @@ fn hvc1() -> Vec<u8> {
 }
 
 fn real_mp4() -> Vec<u8> {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64");
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures-samples/real.mp4.b64");
     let text = fs::read_to_string(path).unwrap();
-    base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap()
 }
 
 /// Parse-back check for one hop: format, video bytes, still coding
@@ -35,7 +40,11 @@ fn check_hop(bytes: &[u8], format_want: &str, video: &[u8], coding_want: &str, t
     let back = format::parse(bytes).expect("parse back");
     assert_eq!(back.format, format_want);
     assert_eq!(back.video(bytes), video);
-    assert_eq!(heif::coding_hash(&back.still).unwrap(), coding_want, "still coding hash");
+    assert_eq!(
+        heif::coding_hash(&back.still).unwrap(),
+        coding_want,
+        "still coding hash"
+    );
     assert_eq!(back.timestamp, Some(time_want), "cover time");
 }
 
@@ -72,7 +81,13 @@ fn google_to_samsung() {
     let first = assemble_heic(&still, &video, Vendor::Google, 1_420_000).unwrap();
     check_hop(&first, "google-heic", &video, &coding, 1_420_000);
     let back = format::parse(&first).unwrap();
-    let second = assemble_heic(&back.still, back.video(&first), Vendor::Samsung, back.timestamp.unwrap()).unwrap();
+    let second = assemble_heic(
+        &back.still,
+        back.video(&first),
+        Vendor::Samsung,
+        back.timestamp.unwrap(),
+    )
+    .unwrap();
     check_hop(&second, "samsung-heic-sef", &video, &coding, 1_420_000);
 }
 
@@ -84,7 +99,13 @@ fn samsung_to_google() {
     let first = assemble_heic(&still, &video, Vendor::Samsung, 1_420_000).unwrap();
     check_hop(&first, "samsung-heic-sef", &video, &coding, 1_420_000);
     let back = format::parse(&first).unwrap();
-    let second = assemble_heic(&back.still, back.video(&first), Vendor::Google, back.timestamp.unwrap()).unwrap();
+    let second = assemble_heic(
+        &back.still,
+        back.video(&first),
+        Vendor::Google,
+        back.timestamp.unwrap(),
+    )
+    .unwrap();
     check_hop(&second, "google-heic", &video, &coding, 1_420_000);
 }
 
@@ -94,9 +115,18 @@ fn google_samsung_google_two_hop() {
     let video = real_mp4();
     let coding = heif::coding_hash(&still).unwrap();
     let mut current = assemble_heic(&still, &video, Vendor::Google, 2_500_000).unwrap();
-    for (vendor, want) in [(Vendor::Samsung, "samsung-heic-sef"), (Vendor::Google, "google-heic")] {
+    for (vendor, want) in [
+        (Vendor::Samsung, "samsung-heic-sef"),
+        (Vendor::Google, "google-heic"),
+    ] {
         let back = format::parse(&current).unwrap();
-        current = assemble_heic(&back.still, back.video(&current), vendor, back.timestamp.unwrap()).unwrap();
+        current = assemble_heic(
+            &back.still,
+            back.video(&current),
+            vendor,
+            back.timestamp.unwrap(),
+        )
+        .unwrap();
         check_hop(&current, want, &video, &coding, 2_500_000);
     }
 }
@@ -105,10 +135,32 @@ fn google_samsung_google_two_hop() {
 fn sefd_input_to_mpvd_output() {
     // Sefd-form input with NO mime item (like the real S20 file):
     // still + sefd{video} -> parse -> assemble Samsung mpvd.
-    let spec = HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 0, offset_width: 4, length_width: 4, base_width: 0, base: 0, index_width: 0, with_iref: false };
+    let spec = HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 0,
+        offset_width: 4,
+        length_width: 4,
+        base_width: 0,
+        base: 0,
+        index_width: 0,
+        with_iref: false,
+    };
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
     ];
     let still = build_still_spec(&spec, &items);
     let video = real_mp4();
@@ -120,7 +172,11 @@ fn sefd_input_to_mpvd_output() {
     assert_eq!(back.timestamp, None, "sefd input has no XMP timestamp");
     let coding = heif::coding_hash(&still).unwrap();
     let out = assemble_heic(&back.still, back.video(&input), Vendor::Samsung, 3_100_000).unwrap();
-    assert_eq!(top_types(&out).last().map(|s| s.as_str()), Some("mpvd"), "mpvd form out");
+    assert_eq!(
+        top_types(&out).last().map(|s| s.as_str()),
+        Some("mpvd"),
+        "mpvd form out"
+    );
     check_hop(&out, "samsung-heic-sef", &video, &coding, 3_100_000);
 }
 
@@ -133,7 +189,10 @@ fn live_still_then_assemble() {
     let coding = heif::coding_hash(&still).unwrap();
     let motion = assemble_heic(&still, &video, Vendor::Google, 1_420_000).unwrap();
     let cleaned = live_still_heic(&motion, "123E4567-E89B-12D3-A456-426614174000").unwrap();
-    assert!(format::parse(&cleaned).is_err(), "cleaned still is not motion");
+    assert!(
+        format::parse(&cleaned).is_err(),
+        "cleaned still is not motion"
+    );
     assert_eq!(heif::coding_hash(&cleaned).unwrap(), coding);
     let out = assemble_heic(&cleaned, &video, Vendor::Samsung, 1_420_000).unwrap();
     check_hop(&out, "samsung-heic-sef", &video, &coding, 1_420_000);
@@ -147,11 +206,39 @@ fn motion_xmp_survives_vendor_hops() {
     // to the primary (with_iref), otherwise the writer creates a
     // second mime item instead of replacing it and the parse-back
     // uniqueness gate correctly fails.
-    let spec = HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 0, offset_width: 4, length_width: 4, base_width: 0, base: 0, index_width: 0, with_iref: true };
+    let spec = HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 0,
+        offset_width: 4,
+        length_width: 4,
+        base_width: 0,
+        base: 0,
+        index_width: 0,
+        with_iref: true,
+    };
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: hvc1(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: motion_xmp(9_999_999), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: hvc1(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: motion_xmp(9_999_999),
+            method: 0,
+            extents: 1,
+        },
     ];
     let still = build_still_spec(&spec, &items);
     let video = real_mp4();
@@ -159,6 +246,12 @@ fn motion_xmp_survives_vendor_hops() {
     let out = assemble_heic(&still, &video, Vendor::Google, 9_999_999).unwrap();
     check_hop(&out, "google-heic", &video, &coding, 9_999_999);
     let back = format::parse(&out).unwrap();
-    let out2 = assemble_heic(&back.still, back.video(&out), Vendor::Samsung, back.timestamp.unwrap()).unwrap();
+    let out2 = assemble_heic(
+        &back.still,
+        back.video(&out),
+        Vendor::Samsung,
+        back.timestamp.unwrap(),
+    )
+    .unwrap();
     check_hop(&out2, "samsung-heic-sef", &video, &coding, 9_999_999);
 }

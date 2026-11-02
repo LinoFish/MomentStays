@@ -56,9 +56,12 @@ impl Rng {
 }
 
 fn real_mp4() -> Vec<u8> {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-samples/real.mp4.b64");
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures-samples/real.mp4.b64");
     let text = fs::read_to_string(path).unwrap();
-    base64::engine::general_purpose::STANDARD.decode(text.trim_ascii()).unwrap()
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim_ascii())
+        .unwrap()
 }
 
 fn seg(marker: u8, payload: &[u8]) -> Vec<u8> {
@@ -105,11 +108,39 @@ fn jpeg_seed() -> Vec<u8> {
 }
 
 fn heic_still_seed() -> Vec<u8> {
-    let spec = HeicStillSpec { iinf_version: 0, infe_version: 2, iloc_version: 0, offset_width: 4, length_width: 4, base_width: 0, base: 0, index_width: 0, with_iref: true };
+    let spec = HeicStillSpec {
+        iinf_version: 0,
+        infe_version: 2,
+        iloc_version: 0,
+        offset_width: 4,
+        length_width: 4,
+        base_width: 0,
+        base: 0,
+        index_width: 0,
+        with_iref: true,
+    };
     let items = vec![
-        HeicItem { id: 1, ty: "hvc1", data: b"fake-hvc1-coding-data-0123456789abcdef".to_vec(), method: 0, extents: 1 },
-        HeicItem { id: 2, ty: "Exif", data: exif_item(), method: 0, extents: 1 },
-        HeicItem { id: 3, ty: "mime", data: motion_xmp(1_420_000), method: 0, extents: 1 },
+        HeicItem {
+            id: 1,
+            ty: "hvc1",
+            data: b"fake-hvc1-coding-data-0123456789abcdef".to_vec(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 2,
+            ty: "Exif",
+            data: exif_item(),
+            method: 0,
+            extents: 1,
+        },
+        HeicItem {
+            id: 3,
+            ty: "mime",
+            data: motion_xmp(1_420_000),
+            method: 0,
+            extents: 1,
+        },
     ];
     build_still_spec(&spec, &items)
 }
@@ -187,13 +218,34 @@ fn mutate(rng: &mut Rng, seed: &[u8]) -> Vec<u8> {
 }
 
 fn hex_head(v: &[u8]) -> String {
-    v.iter().take(64).map(|b| format!("{b:02x}")).collect::<Vec<_>>().join("")
+    v.iter()
+        .take(64)
+        .map(|b| format!("{b:02x}"))
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+/// Iterations per target; `FUZZ_ITERS=50000 FUZZ_SEED=7 cargo test --release fuzz` runs a deeper pass.
+fn iters(default: usize) -> usize {
+    std::env::var("FUZZ_ITERS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 fn run_no_panic(target: &str, seed_name: &str, seed: &[u8], iters: usize) {
-    let mut rng = Rng(0x5eed_f00d_1234_5678);
+    let seed_xor: u64 = std::env::var("FUZZ_SEED")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let mut rng = Rng(0x5eed_f00d_1234_5678 ^ seed_xor.wrapping_mul(0x9E37_79B9_7F4A_7C15));
     for i in 0..iters {
         let input = mutate(&mut rng, seed);
+        // For crashes that cannot be caught (stack overflow, OOM kill): keep the
+        // current input on disk so the last file written is the culprit.
+        if let Ok(dir) = std::env::var("FUZZ_DUMP") {
+            let _ = std::fs::write(format!("{dir}/{target}-{seed_name}.last"), &input);
+        }
         let r = catch_unwind(AssertUnwindSafe(|| match target {
             "parse" => {
                 let _ = format::parse(&input);
@@ -213,10 +265,45 @@ fn run_no_panic(target: &str, seed_name: &str, seed: &[u8], iters: usize) {
             "remux_mov" => {
                 let _ = remux_to_mov(&input, 0);
             }
+            "model_write" => {
+                if let Ok(p) = format::parse(&input) {
+                    if let Ok(m) = momentstays_core::model::MotionModel::from_parsed(&p, &input) {
+                        use momentstays_core::model::{write, Vendor};
+                        for v in [
+                            Vendor::Google,
+                            Vendor::Samsung,
+                            Vendor::Huawei,
+                            Vendor::Oppo,
+                            Vendor::Vivo,
+                        ] {
+                            let _ = write(&m, v);
+                        }
+                    }
+                }
+            }
+            "xml" => {
+                let _ = momentstays_core::pyxml::parse(&input);
+            }
+            "scan_row" => {
+                let _ = momentstays_core::scan::scan_row(&input);
+            }
+            "mett" => {
+                let _ = momentstays_core::live2motion::mett_cover_time(&input);
+            }
+            "live_still_heic" => {
+                let _ = momentstays_core::heifwrite::live_still_heic(
+                    &input,
+                    "ABCDEF01-2345-6789-ABCD-EF0123456789",
+                );
+            }
             _ => unreachable!(),
         }));
         if r.is_err() {
-            panic!("fuzz panic: target={target} seed={seed_name} iter={i} len={} head={}", input.len(), hex_head(&input));
+            panic!(
+                "fuzz panic: target={target} seed={seed_name} iter={i} len={} head={}",
+                input.len(),
+                hex_head(&input)
+            );
         }
     }
 }
@@ -229,28 +316,64 @@ fn no_panic_on_mutations() {
     let mp4 = real_mp4();
     // Seeds must exercise the success paths, not just early errors.
     assert!(format::parse(&jpeg).is_ok(), "jpeg seed parses");
-    assert!(format::parse(&heic_motion).is_ok(), "heic motion seed parses");
+    assert!(
+        format::parse(&heic_motion).is_ok(),
+        "heic motion seed parses"
+    );
     assert!(heif::layout(&heic_still).is_ok(), "heic still seed layouts");
     assert!(pyjpeg::segments(&jpeg).is_ok(), "jpeg seed segments");
     assert!(mp4::sample_tables(&mp4).is_ok(), "mp4 seed sample tables");
-    run_no_panic("parse", "jpeg", &jpeg, 1500);
-    run_no_panic("parse", "heic-motion", &heic_motion, 1500);
-    run_no_panic("parse", "mp4", &mp4, 1500);
-    run_no_panic("segments", "jpeg", &jpeg, 1500);
-    run_no_panic("layout", "heic-still", &heic_still, 1500);
-    run_no_panic("tables", "mp4", &mp4, 1500);
-    run_no_panic("remux_mp4", "mp4", &mp4, 1500);
-    run_no_panic("remux_mov", "mp4", &mp4, 1500);
+    run_no_panic("parse", "jpeg", &jpeg, iters(1500));
+    run_no_panic("parse", "heic-motion", &heic_motion, iters(1500));
+    run_no_panic("parse", "mp4", &mp4, iters(1500));
+    run_no_panic("segments", "jpeg", &jpeg, iters(1500));
+    run_no_panic("layout", "heic-still", &heic_still, iters(1500));
+    run_no_panic("tables", "mp4", &mp4, iters(1500));
+    run_no_panic("remux_mp4", "mp4", &mp4, iters(1500));
+    run_no_panic("remux_mov", "mp4", &mp4, iters(1500));
+}
+
+/// Writers and scan/identify paths on mutated vendor files.
+#[test]
+fn no_panic_on_write_paths() {
+    let jpeg = jpeg_seed();
+    let heic_still = heic_still_seed();
+    let heic_motion = heic_motion_seed();
+    let mp4 = real_mp4();
+    let n = iters(1500);
+    run_no_panic("model_write", "jpeg", &jpeg, n);
+    run_no_panic("model_write", "heic-motion", &heic_motion, n);
+    let xml = br#"<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:a="urn:a" a:b="1&amp;2"><a:c><![CDATA[x]]><!-- y --></a:c><a:d xml:lang="en">&#x4E2D;</a:d></rdf:Description></rdf:RDF></x:xmpmeta>"#;
+    assert!(
+        momentstays_core::pyxml::parse(xml).is_ok(),
+        "xml seed parses"
+    );
+    run_no_panic("xml", "xmp", xml, n);
+    run_no_panic("scan_row", "jpeg", &jpeg, n);
+    run_no_panic("scan_row", "heic-motion", &heic_motion, n);
+    run_no_panic("mett", "mp4", &mp4, n);
+    run_no_panic("live_still_heic", "heic-still", &heic_still, n);
 }
 
 /// ffprobe packet counts per stream, but only when ffprobe reads the
 /// file completely cleanly (exit 0 and empty stderr). Returns None
 /// for anything else (rejected, errored, timed out, unavailable):
 /// those inputs are skipped, never asserted on.
-fn ffprobe_clean_packet_counts(path: &std::path::Path, err_path: &std::path::Path) -> Option<Vec<usize>> {
+fn ffprobe_clean_packet_counts(
+    path: &std::path::Path,
+    err_path: &std::path::Path,
+) -> Option<Vec<usize>> {
     let err_file = fs::File::create(err_path).ok()?;
     let mut child: Child = Command::new("ffprobe")
-        .args(["-v", "error", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0"])
+        .args([
+            "-v",
+            "error",
+            "-count_packets",
+            "-show_entries",
+            "stream=nb_read_packets",
+            "-of",
+            "csv=p=0",
+        ])
         .arg(path)
         .stdout(Stdio::piped())
         .stderr(err_file)
@@ -274,7 +397,10 @@ fn ffprobe_clean_packet_counts(path: &std::path::Path, err_path: &std::path::Pat
     if !status.success() {
         return None;
     }
-    if fs::read_to_string(err_path).map(|s| !s.trim().is_empty()).unwrap_or(true) {
+    if fs::read_to_string(err_path)
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(true)
+    {
         return None;
     }
     let mut out = String::new();
@@ -297,31 +423,91 @@ fn ffprobe_clean_packet_counts(path: &std::path::Path, err_path: &std::path::Pat
     Some(counts)
 }
 
+/// Damage after the needed content is still damage: the default walk and every
+/// reader built on it reject it, and only the explicit tolerant walk (used by
+/// `recovery`) reports it. Damage to needed tables fails either way.
+#[test]
+fn damaged_framing_is_rejected_by_default_and_reported_by_the_tolerant_walk() {
+    use mp4::{boxes_with_mode, BoxParseMode};
+    let mp4 = real_mp4();
+    let boxes = mp4::boxes(&mp4, 0, mp4.len()).unwrap();
+    assert!(mp4::sample_tables(&mp4).is_ok());
+    let mut damaged: Vec<(String, Vec<u8>)> = Vec::new();
+    for dust in [1usize, 7, 20] {
+        let mut v = mp4.clone();
+        v.extend(std::iter::repeat_n(0xAB, dust));
+        damaged.push((format!("{dust} trailing bytes"), v));
+    }
+    // Cut off the tail of the last box (the fuzz iter-18 shape).
+    let mut cut = mp4.clone();
+    cut.truncate(mp4.len() - 31);
+    damaged.push(("cut tail".into(), cut));
+    // An oversized length on the last box.
+    let mut bad = mp4.clone();
+    let last = boxes.last().unwrap().start;
+    bad[last..last + 4].copy_from_slice(&0xFFFF_FFFFu32.to_be_bytes());
+    damaged.push(("oversized final length".into(), bad));
+    for (name, input) in &damaged {
+        assert!(
+            mp4::boxes(input, 0, input.len()).is_err(),
+            "{name}: strict walk"
+        );
+        assert!(
+            mp4::sample_tables(input).is_err(),
+            "{name}: sample tables must not read a damaged container"
+        );
+        let walk = boxes_with_mode(input, 0, input.len(), BoxParseMode::Tolerant).unwrap();
+        assert!(!walk.complete, "{name}: tolerant walk flags the damage");
+    }
+    // Needed tables cut away: fails regardless of mode.
+    let mut deep = mp4.clone();
+    deep.truncate(1600);
+    assert!(mp4::sample_tables(&deep).is_err(), "cut into stbl fails");
+}
+
 #[test]
 fn mp4_mutations_agree_with_ffprobe() {
     // ffprobe absent -> skip, not fail: it is a differential oracle,
     // not part of the core.
-    if Command::new("ffprobe").arg("-version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_err() {
+    if Command::new("ffprobe")
+        .arg("-version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_err()
+    {
         eprintln!("ffprobe unavailable, skipping differential check");
         return;
     }
     let mp4 = real_mp4();
     // Sanity: the unmutated seed must agree exactly first.
-    let seed_counts: Vec<usize> = mp4::sample_tables(&mp4).unwrap().iter().map(|t| t.samples.len()).collect();
-    let seed_path = std::env::temp_dir().join(format!("momentstays-fuzz-seed-{}.mp4", std::process::id()));
-    let seed_err = std::env::temp_dir().join(format!("momentstays-fuzz-seed-{}.err", std::process::id()));
+    let seed_counts: Vec<usize> = mp4::sample_tables(&mp4)
+        .unwrap()
+        .iter()
+        .map(|t| t.samples.len())
+        .collect();
+    let seed_path =
+        std::env::temp_dir().join(format!("momentstays-fuzz-seed-{}.mp4", std::process::id()));
+    let seed_err =
+        std::env::temp_dir().join(format!("momentstays-fuzz-seed-{}.err", std::process::id()));
     fs::write(&seed_path, &mp4).unwrap();
     let probe_seed = ffprobe_clean_packet_counts(&seed_path, &seed_err);
     let _ = fs::remove_file(&seed_path);
     let _ = fs::remove_file(&seed_err);
-    assert_eq!(probe_seed.as_deref(), Some(seed_counts.as_slice()), "seed packet counts agree with ffprobe");
+    assert_eq!(
+        probe_seed.as_deref(),
+        Some(seed_counts.as_slice()),
+        "seed packet counts agree with ffprobe"
+    );
     let mut rng = Rng(0xd1ff_5eed_9876_5432);
     let mut checked = 0usize;
     let mut disagreements = Vec::new();
     for i in 0..25 {
         let input = mutate(&mut rng, &mp4);
-        let path = std::env::temp_dir().join(format!("momentstays-fuzz-{}-{i}.mp4", std::process::id()));
-        let err_path = std::env::temp_dir().join(format!("momentstays-fuzz-{}-{i}.err", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("momentstays-fuzz-{}-{i}.mp4", std::process::id()));
+        let err_path =
+            std::env::temp_dir().join(format!("momentstays-fuzz-{}-{i}.err", std::process::id()));
         if fs::write(&path, &input).is_err() {
             continue;
         }
@@ -343,10 +529,14 @@ fn mp4_mutations_agree_with_ffprobe() {
                     disagreements.push((i, got, want));
                 }
             }
-            // A strict structural rejection is intentional even if ffprobe
-            // tolerates damaged boxes. Compare packet counts only on accepted inputs.
-            Ok(Err(_)) => {},
-            Err(_) => panic!("fuzz panic: sample_tables on mp4 iter={i} len={} head={}", input.len(), hex_head(&input)),
+            // A strict structural rejection is intentional even when ffprobe
+            // tolerates the damaged boxes: compare counts on accepted inputs only.
+            Ok(Err(_)) => {}
+            Err(_) => panic!(
+                "fuzz panic: sample_tables on mp4 iter={i} len={} head={}",
+                input.len(),
+                hex_head(&input)
+            ),
         }
     }
     assert!(disagreements.is_empty(), "packet-count disagreements on clean ffprobe reads: {disagreements:?} (checked {checked} of 25)");

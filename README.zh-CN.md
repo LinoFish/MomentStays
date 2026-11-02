@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.5.1</strong>
+  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.6.0</strong>
 </p>
 
 # 留刻（MomentStays）— 安卓动态照片转苹果实况照片（Live Photo）工具
@@ -113,22 +113,22 @@
 ```bash
 git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
-bash scripts/build_app.sh
+bash apple/macos/scripts/build_app.sh
 open dist/留刻.app
 ```
 
 使用已构建的应用，无需 Python、FFmpeg、ExifTool、Homebrew 或额外运行时。仅构建 Apple Silicon 时可显式选择：
 
 ```bash
-bash scripts/build_app.sh --arm64
-bash scripts/build_app.sh --universal
+bash apple/macos/scripts/build_app.sh --arm64
+bash apple/macos/scripts/build_app.sh --universal
 ```
 
 需要安装包时，从已构建应用生成 DMG、ZIP 与校验和：
 
 ```bash
-python3 -m pip install --target .build/dmg-tools -r packaging/dmg-requirements.txt
-bash scripts/make_dmg.sh
+python3 -m pip install --target .build/dmg-tools -r apple/macos/packaging/dmg-requirements.txt
+bash apple/macos/scripts/make_dmg.sh
 ```
 
 DMG 仅显示应用、Applications 链接与拖拽箭头。手册从应用内打开，许可文件位于应用包内。Python 工具仅用于打包，使用应用无需安装。
@@ -159,26 +159,26 @@ python3 scripts/check_publish.py
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
-bash scripts/build_gui_tests.sh
-python3 scripts/check_gui_engine.py
-python3 scripts/check_reverse.py
-python3 scripts/check_workspace.py
+bash apple/macos/scripts/build_gui_tests.sh
+python3 apple/macos/scripts/check_gui_engine.py
+python3 apple/macos/scripts/check_reverse.py
+python3 apple/macos/scripts/check_workspace.py
 ```
 
 原生布局检查使用虚构数据，需要可用的 macOS 桌面环境：
 
 ```bash
-bash scripts/build_app.sh --diagnostics
-python3 scripts/check_swiftui_ui.py
+bash apple/macos/scripts/build_app.sh --diagnostics
+python3 apple/macos/scripts/check_swiftui_ui.py
 ```
 
 | 范围 | 位置 |
 | --- | --- |
-| SwiftUI、任务状态、图库与共享 | `gui/` |
-| 解析、HDR、时间、转换与校验 | `native/` |
-| 回归测试与 Rust 对照用 Python 格式参考 | `motionlive/` |
-| 构建与回归入口 | `scripts/`、`tests/` |
-| 应用属性与可复现图标绘制 | `packaging/` |
+| SwiftUI、任务状态、图库与共享 | `apple/macos/Sources/` |
+| 解析、HDR、时间、转换与校验 | `core/src/engine/`, `core/src/platform/`, `apple/shared/` |
+| 回归测试用独立 Python 样片读取器 | `apple/macos/scripts/testkit/` |
+| 构建与回归入口 | `apple/macos/scripts/`、`apple/shared/tests/` |
+| 应用属性与可复现图标绘制 | `apple/macos/packaging/` |
 | 项目图标与 README 视觉素材 | [品牌素材](docs/branding/README.md) |
 
 进一步阅读：[实现说明](docs/development/SwiftUI实现说明.md)、[图库规范](docs/design/图库识别与自动入册规范.md)、[共享规范](docs/design/输出位置与系统共享规范.md)、[本地样片与隐私](docs/development/本地样片与隐私.md)。
@@ -218,7 +218,7 @@ Google 兼容的动态照片 JPEG、三星（包括 SEF 和已验证的 HEIC 布
 感谢以下项目、作者与维护者提供的代码、依赖、研究成果和设计工作流：
 
 - **系统 API 与原生素材**：[Apple 框架与 SDK 文档](https://developer.apple.com/documentation/)、[SF Symbols](https://developer.apple.com/sf-symbols/) 与[系统字体](https://developer.apple.com/fonts/)，用于原生界面、媒体处理、图库读写和系统交付。
-- **Rust 核心代码依赖**：[RustCrypto](https://github.com/RustCrypto/hashes)（`sha2`、`md-5`）、[roxmltree](https://github.com/RazrFalcon/roxmltree)、[serde_json](https://github.com/serde-rs/json)，以及锁定的全部传递依赖。Rust 核心目前为独立实验模块；完整 23 个 crate 的版本、许可证和上游链接见第三方说明。
+- **Rust 核心代码依赖**：[RustCrypto](https://github.com/RustCrypto/hashes)（`sha2`、`md-5`）、[roxmltree](https://github.com/RazrFalcon/roxmltree)、[serde_json](https://github.com/serde-rs/json)，以及锁定的全部传递依赖。原生 App 已接入 Rust 转换引擎，Apple 系统编解码后端独立隔离；完整 23 个 crate 的版本、许可证和上游链接见第三方说明。
 - **动态照片实现参考**：[MotionTrans](https://github.com/Huakira/MotionTrans)（静态图像分离）、[Live Photo Box](https://github.com/LengxiQwQ/live-photo-box)（华为、OPPO、vivo 字段）、[ExifTool](https://exiftool.org/) 与 [motionphoto](https://github.com/doodspav/motionphoto)（三星 SEF/偏移结构）。
 - **HDR、HEIC 与兼容研究**：[OpenHarmony](https://github.com/openharmony/multimedia_image_framework)、[libheif](https://github.com/strukturag/libheif)、[libultrahdr](https://github.com/google/libultrahdr)、[MotionPhotoSamples](https://github.com/NightMean/MotionPhotoSamples)。另曾评估 [libmotionphoto](https://github.com/google/libmotionphoto)、[MotionPhoto2](https://github.com/PetrVys/MotionPhoto2)、[LiveMux](https://github.com/ysya/LiveMux) 的跨平台复用可行性，现有 App 未接入这些候选库。
 - **打包、文档与验证工具**：[ds_store](https://github.com/dmgbuild/ds_store)、[mac_alias](https://github.com/dmgbuild/mac_alias)（Finder 布局）；[dmgbuild](https://github.com/dmgbuild/dmgbuild)、[Chromium](https://chromium.googlesource.com/chromium/src/+/main/chrome/installer/mac/generate_dsstore.py)（安装包布局参考）；[Python-Markdown](https://github.com/Python-Markdown/markdown)、[importlib_metadata](https://github.com/python/importlib_metadata)、[zipp](https://github.com/jaraco/zipp)（手册生成）；[fontTools](https://github.com/fonttools/fonttools)、[Brotli](https://github.com/google/brotli)（字体来源核对）。
