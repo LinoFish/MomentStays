@@ -390,6 +390,13 @@ pub fn handle(
             }
             Ok(json!({"ok": true}))
         }
+        "manual-cover-frames" => crate::engine::manual::frames(&first()?, &path(req, "output")?),
+        "extract-to-apple" => {
+            let data = read(&first()?)?;
+            let photo = crate::engine::manual::parse(&data)?;
+            write(&path(req, "output")?, photo.video(&data))?;
+            Ok(json!({"format":photo.format}))
+        }
         "preview-cover" => preview_cover(req, &first()?),
         "fixture" => needs_native("生成测试素材（H.264 编码）"),
         _ => Err(Error::new("Unknown mode")),
@@ -421,7 +428,11 @@ fn preview_cover(req: &Value, source: &Path) -> Result<Value> {
             )
         } else {
             let data = read(source)?;
-            let photo = format::parse(&data)?;
+            let photo = if direction == "to-apple" {
+                crate::engine::manual::parse(&data)?
+            } else {
+                format::parse(&data)?
+            };
             let cover = match (photo.cover_frame, photo.timestamp) {
                 (Some(f), _) => Some(Cover::Frame(f)),
                 (None, Some(t)) => Some(Cover::Time(t)),

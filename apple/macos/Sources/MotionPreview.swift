@@ -11,6 +11,56 @@ struct PreviewCoverCandidate: Identifiable {
     var title: String { String(format:"高清候选 %d · %.3f s",index + 1,Double(timestampUs) / 1e6) }
 }
 
+// Cluster nearby choices so timeline controls remain operable at narrow widths.
+// A missing timestamp is disclosed in the label, never invented as a video time.
+struct CoverTimelineMarker: Identifiable {
+    let index: Int?
+    let time: Double?
+    let issue: String?
+    var id: String { index.map { "candidate-\($0)" } ?? "original" }
+    var shortTitle: String { index.map { "高清\($0 + 1)" } ?? "原片" }
+    var title: String {
+        let name = index.map { "高清候选 \($0 + 1)" } ?? "原始照片"
+        return name + (time.map { String(format:" · %.3f s",$0) } ?? " · 时间未确定")
+    }
+}
+
+struct CoverTimelineGroup: Identifiable {
+    static let controlWidth: CGFloat = 60
+    var markers: [CoverTimelineMarker]
+    var x: CGFloat
+    var id: String { markers.map(\.id).joined(separator:"|") }
+
+    static func layout(original: Double?, candidates: [PreviewCoverCandidate], duration: Double, width: CGFloat) -> [Self] {
+        guard duration.isFinite, duration > 0, width.isFinite, width > 0 else { return [] }
+        let inset = min(controlWidth / 2,width / 2)
+        var values = [CoverTimelineMarker(index:nil,time:original,issue:nil)]
+        for candidate in candidates {
+            values.append(CoverTimelineMarker(index:candidate.index,time:candidate.time,issue:candidate.issue))
+        }
+        let usableWidth: CGFloat = max(0,width - 2 * inset)
+        var positioned: [(marker:CoverTimelineMarker,x:CGFloat)] = []
+        for marker in values {
+            var time = marker.time ?? 0
+            if !time.isFinite { time = 0 }
+            let fraction: Double = min(1,max(0,time / duration))
+            let x: CGFloat = inset + CGFloat(fraction) * usableWidth
+            positioned.append((marker:marker,x:x))
+        }
+        positioned.sort { lhs,rhs in
+            if lhs.x == rhs.x { return lhs.marker.id < rhs.marker.id }
+            return lhs.x < rhs.x
+        }
+        var groups: [Self] = []
+        for (marker,x) in positioned {
+            if let last = groups.last, x - last.x < controlWidth + 4 {
+                groups[groups.count - 1].markers.append(marker)
+            } else { groups.append(Self(markers:[marker],x:x)) }
+        }
+        return groups
+    }
+}
+
 // A session owns only its extracted preview cache. Originals and paired MOVs are read-only.
 final class MotionPreviewSession {
     let duration: Double
@@ -51,12 +101,16 @@ final class MotionPreviewSession {
             let pair = try AndroidExport.pair(source, domain: timeDomain)
             movie = pair.movie
         } else {
-            let photo = try PhotoFormat.parse(Array(Data(contentsOf: source)))
             try check(token)
             let cache = FileManager.default.temporaryDirectory.appendingPathComponent("MomentStays-preview-" + UUID().uuidString)
             try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: false)
             folder = cache; movie = cache.appendingPathComponent("source.mp4")
-            try Data(photo.video).write(to: movie, options: .atomic)
+            if direction == "to-apple" {
+                _ = try RustCore.engine(["mode":"extract-to-apple","input":source.path,"output":movie.path],token:token)
+            } else {
+                let photo = try PhotoFormat.parse(Array(Data(contentsOf:source)))
+                try Data(photo.video).write(to:movie,options:.atomic)
+            }
         }
         try check(token)
         let asset = AVURLAsset(url: movie)
@@ -166,5 +220,6 @@ enum MotionPreviewDiagnostics {
     static var hovering = false
     static var candidateCount = 0
     static var candidateImageLoaded = false
+    static var candidateStatus = ""
 }
 #endif

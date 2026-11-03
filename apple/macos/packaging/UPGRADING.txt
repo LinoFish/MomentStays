@@ -1,0 +1,15 @@
+MomentStays upgrade
+
+Quit the previous 留刻.app before opening MomentStays.app. Drag MomentStays.app into Applications. The physical package name and macOS application identity have changed; the installer does not delete or replace a differently named old app. After checking your existing results in MomentStays, you may remove the old app yourself.
+
+Existing local task history and caches stay in ~/Library/Application Support/Motion-Live. Preferences missing in the new identity are copied once from app.motionlive.converter, with a migration record; the old domain is retained. Photos access may need to be granted again for the new identity. No existing photo-library items are moved or removed.
+
+For legacy Huawei input, choose a main-video frame manually. The original camera still is retained. Original source, EXIF, private block and trailer archives stay with the output and its manifest; Photos receives only JPEG/MOV and does not retain Huawei private features.
+
+升级说明
+
+先退出旧版“留刻.app”，再将 MomentStays.app 拖入 Applications。物理包名及 macOS 应用标识已变化；安装包不会删除或替换名称不同的旧 App。核对原有结果可用后，可自行移除旧 App。
+
+本地任务与缓存继续使用 ~/Library/Application Support/Motion-Live。新偏好域中缺少的设置会从 app.motionlive.converter 非破坏复制一次并记录迁移信息，旧偏好域保留。新标识可能需要重新授予照片权限；不会移动或删除已有相册项目。
+
+旧华为输入须人工选择主视频帧，保留原相机静态照片。原片、EXIF、私有块及尾标备份与清单留在输出目录；相册仅接收 JPEG/MOV，不保存华为私有功能。

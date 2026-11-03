@@ -14,7 +14,7 @@ enum SourceMenuDiagnostics {
 }
 #endif
 
-// Use a system menu anchored to the prominent add button, including for Command-O.
+// Adding the first photos is prominent; subsequent additions are secondary.
 struct SourceMenuButton: NSViewRepresentable {
     @Binding var requested: Bool
     let disabled: Bool
@@ -64,9 +64,14 @@ struct SourceMenuButton: NSViewRepresentable {
     func updateNSView(_ button: NSButton, context: Context) {
         button.isEnabled = !disabled
         button.title = title
+        let foreground = hasSources ? NSColor.controlTextColor : InterfaceStyle.nativeAccentForeground
+        button.bezelColor = hasSources ? nil : InterfaceStyle.nativeAccent
+        button.contentTintColor = foreground
+        button.image = NSImage(systemSymbolName:"plus",accessibilityDescription:nil)?
+            .withSymbolConfiguration(.init(paletteColors:[foreground]))
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingMiddle
         button.attributedTitle = NSAttributedString(string:title,attributes:[
-            .foregroundColor:InterfaceStyle.nativeAccentForeground,
+            .foregroundColor:foreground,
             .font:NSFont.systemFont(ofSize:NSFont.systemFontSize),.paragraphStyle:paragraph
         ])
         button.toolTip = details.isEmpty ? "添加照片、文件夹或系统照片图库" : details + "\n点击继续添加照片、文件夹或图库照片"
@@ -379,6 +384,9 @@ struct LayoutFramesKey: PreferenceKey {
 }
 
 extension View {
+    func subtleAnimation<Value: Equatable>(_ value: Value, duration: Double = 0.16) -> some View {
+        modifier(SubtleAnimation(value:value,duration:duration))
+    }
     @ViewBuilder func dismissOnEscape(_ action: @escaping () -> Void) -> some View {
         #if os(macOS)
         onExitCommand(perform: action)
@@ -398,6 +406,25 @@ extension View {
     }
 }
 
+enum InterfaceMotion {
+    static func reduced(_ system: Bool) -> Bool {
+        #if UI_DIAGNOSTICS
+        return system || CommandLine.arguments.contains("--ui-reduce-motion")
+        #else
+        return system
+        #endif
+    }
+}
+
+private struct SubtleAnimation<Value: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let value: Value
+    let duration: Double
+    func body(content: Content) -> some View {
+        content.animation(InterfaceMotion.reduced(reduceMotion) ? nil : .easeInOut(duration:duration),value:value)
+    }
+}
+
 // Width is measured inside the queue, after the inspector has taken its space.
 struct QueueLayout {
     let width: CGFloat
@@ -405,10 +432,7 @@ struct QueueLayout {
     var showsCover: Bool { width >= 800 }
 }
 
-// Scope affects only the presentation; conversions always use the complete source job.
 // Uses the same official artwork as the Dock icon and the GitHub/website brand assets.
-/// 面向用户的名称统一为留刻；bundle ID 和可执行文件名保持兼容。
-enum AppName { static let display = "留刻" }
 
 struct MomentStaysBrandIcon: View {
     @Environment(\.colorScheme) private var colorScheme

@@ -138,7 +138,21 @@ pub fn scan_file(
     };
     let mut row = match data {
         Ok(data) => {
-            let r = scan::scan_row(data);
+            let mut r = scan::scan_row(data);
+            if !r.is_motion {
+                if let Ok(photo) = crate::engine::manual::parse(data) {
+                    if photo.format == crate::engine::manual::FORMAT
+                        && native.image_decodes(&photo.still) != Some(false)
+                    {
+                        r.is_motion = true;
+                        r.confirmed_static = false;
+                        r.cover = crate::engine::manual::COVER.into();
+                        r.hdr = "SDR".into();
+                        r.manufacturer = "华为".into();
+                        r.detail = "旧式华为动态照片；原封面时间未确定，请人工选择主视频帧；保留原静态照片及原始附属数据".into();
+                    }
+                }
+            }
             let mut row = ScanRow {
                 source: file.to_path_buf(),
                 relative: relative.to_string(),

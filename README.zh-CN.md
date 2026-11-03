@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.6.1</strong>
+  <strong>macOS 12+ · 原生 SwiftUI · 本地处理 · 版本 1.7.0</strong>
 </p>
 
 # 留刻（MomentStays）— 安卓动态照片转苹果实况照片（Live Photo）工具
@@ -25,6 +25,8 @@
 </p>
 
 > **欢迎反馈：** 试过之后发现失败或结果不对？请[提交 issue](https://github.com/LinoFish/MomentStays/issues)，说明来源设备与格式、转换方向和 App 版本，样片请先抹除敏感信息。详见下文[反馈](#反馈)。
+
+旧40字节华为格式须人工选择主视频帧，保留相机静态照片及可逆原始备份。升级改名与标识迁移见[升级说明](apple/macos/packaging/UPGRADING.txt)。
 
 **下载：** 在 [Releases](https://github.com/LinoFish/MomentStays/releases) 获取最新 DMG/ZIP，也可以按下方说明从源码构建。
 
@@ -122,7 +124,7 @@
 git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
 bash apple/macos/scripts/build_app.sh
-open dist/留刻.app
+open dist/MomentStays.app
 ```
 
 使用已构建的应用，无需 Python、FFmpeg、ExifTool、Homebrew 或额外运行时。仅构建 Apple Silicon 时可显式选择：

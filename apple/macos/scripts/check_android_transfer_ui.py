@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 ROOT = Path(__file__).resolve().parents[3]
-APP=ROOT/'.build/gui/preview/留刻.app/Contents/MacOS/MomentStays'
+APP=ROOT/'.build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays'
 OUT=ROOT/'.build/gui/android-transfer-ui'
 OUT.mkdir(parents=True,exist_ok=True)
 cases=[('narrow',720,628,[]),('wide',1440,700,[]),('settings',720,628,['--ui-expand-settings']),('share',720,628,['--ui-destination','folderAndShare','--ui-output-menu']),('source',720,628,['--ui-source-menu']),('old-forward',720,628,[]),('old-reverse',1040,628,[])]

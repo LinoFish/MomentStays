@@ -113,6 +113,8 @@ struct ConversionSettings: Equatable, Codable {
     var repairAuxiliaryDuration = false
     // Optional for compatibility with task histories saved before cover selection.
     var coverSelections: [String:Int]?
+    var manualMidpoints: [String:Bool]?
+    var manualCovers: [String:ManualCoverChoice]?
     var candidateDelivery: CandidateDelivery?
 
     func coverIndex(for source: URL) -> Int? { direction == .toApple ? coverSelections?[NativeBatch.normalized(source).path] : nil }
@@ -140,6 +142,7 @@ struct ConversionSettings: Equatable, Codable {
             timeDomain: timeDomain.rawValue, videoTrack: track.rawValue, outputMode: exportMode.rawValue,
             repairAuxiliaryDuration: repairAuxiliaryDuration, exportDataFiles: exportDataFiles)
         result.direction = direction.rawValue
+        result.manualCovers = direction == .toApple ? manualCovers ?? [:] : [:]
         result.coverSelections = exportMode == .auxiliaryOnly ? [:] : coverSelections ?? [:]
         result.candidateDelivery = (candidateDelivery ?? .staticPhotos).rawValue
         result.android = AndroidOptions(vendor: vendor.rawValue, container: container.rawValue,
@@ -164,5 +167,33 @@ struct ConversionSettings: Equatable, Codable {
         if destination.importsPhotos { return "转换并导入图库" }
         if destination.shares { return "转换并共享" }
         return direction.exportsAndroid ? "导出到安卓" : exportMode == .auxiliaryOnly ? "导出辅助轨" : "开始转换"
+    }
+}
+
+enum AppName {
+    static func display(languages: [String]) -> String {
+        languages.first?.lowercased().hasPrefix("zh") == true ? "留刻" : "MomentStays"
+    }
+    static var display: String { display(languages:Bundle.main.preferredLocalizations) }
+}
+
+// Preserve the legacy preference domain, copy only keys absent from the new
+// identity, and retain the existing Motion-Live task/cache root without moving it.
+enum AppIdentityMigration {
+    static func merged(previous:[String:Any], current:[String:Any], oldID:String) -> [String:Any] {
+        let marker = "MomentStaysIdentityMigration1"
+        guard current[marker] == nil else { return current }
+        var result = current
+        let keys = previous.keys.filter { current[$0] == nil }.sorted()
+        for key in keys { result[key] = previous[key] }
+        result[marker] = ["from":oldID,"date":ISO8601DateFormatter().string(from:Date()),"copiedKeys":keys] as [String:Any]
+        return result
+    }
+    static func migrate(defaults: UserDefaults = .standard, oldID: String = "app.motionlive.converter", newID: String = "com.linofish.momentstays") {
+        let marker = "MomentStaysIdentityMigration1"
+        let current = defaults.persistentDomain(forName:newID) ?? [:]
+        guard current[marker] == nil else { return }
+        let previous = defaults.persistentDomain(forName:oldID) ?? [:]
+        defaults.setPersistentDomain(merged(previous:previous,current:current,oldID:oldID),forName:newID)
     }
 }

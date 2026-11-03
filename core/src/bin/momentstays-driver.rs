@@ -5,8 +5,10 @@
 //! engine and their outputs can be diffed.
 //!
 //! Steps that need the host's codecs (decoding a gain map or a video
-//! frame, re-encoding a still, generating fixtures) report
-//! "需要原生处理：…" here; in the app they run through `engine::Native`.
+//! frame, re-encoding a still) use `platform::SystemNative`, like the
+//! production engine. Unsupported platform codecs and test-only fixture
+//! generation still report "需要原生处理：…"; NoEvents does not implement
+//! App UI decisions or PhotoKit delivery.
 
 use momentstays_core::engine::request::{handle, NoEvents};
 use momentstays_core::engine::{sorted, StopToken};

@@ -5,12 +5,12 @@ mkdir -p .build/gui dist
 architectures=(x86_64 arm64)
 definitions=(-D MOTIONLIVE_LIBRARY)
 optimization=(-O -whole-module-optimization)
-app="dist/留刻.app"
+app="dist/MomentStays.app"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --universal) architectures=(x86_64 arm64); shift ;;
     --arm64) architectures=(arm64); shift ;;
-    --diagnostics) definitions+=(-D UI_DIAGNOSTICS); optimization=(-Onone); app=".build/gui/preview/留刻.app"; shift ;;
+    --diagnostics) definitions+=(-D UI_DIAGNOSTICS); optimization=(-Onone); app=".build/gui/preview/MomentStays.app"; shift ;;
     --help) echo "Usage: $0 [--universal | --arm64] [--diagnostics] (default: Universal .app)"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
@@ -39,8 +39,11 @@ else
   xcrun lipo -create "${binaries[@]}" -output "$app/Contents/MacOS/MomentStays"
 fi
 cp apple/macos/packaging/Info.plist "$app/Contents/Info.plist"
-rm -rf "$app/Contents/Resources/zh-Hans.lproj"
-cp -R apple/macos/packaging/zh-Hans.lproj "$app/Contents/Resources/zh-Hans.lproj"
+for language in zh-Hans zh-Hant zh; do
+  rm -rf "$app/Contents/Resources/$language.lproj"
+  cp -R "apple/macos/packaging/$language.lproj" "$app/Contents/Resources/$language.lproj"
+done
+cp apple/macos/packaging/UPGRADING.txt "$app/Contents/Resources/UPGRADING.txt"
 cp apple/macos/packaging/使用说明.txt "$app/Contents/Resources/使用说明.txt"
 cp LICENSE COPYRIGHT THIRD_PARTY_NOTICES.md "$app/Contents/Resources/"
 xcrun swiftc -module-cache-path /private/tmp/motionlive-swift-cache apple/macos/packaging/Icon.swift -o .build/gui/make-icon

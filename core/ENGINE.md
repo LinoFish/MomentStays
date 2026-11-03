@@ -106,3 +106,16 @@ git in `.build/rust-engine-integration/handoff.md`.
   natural sort, and a fixed list of package extensions.
 - **Error texts** from parsing and I/O are the Rust core's (parsing has
   gone through Rust since `ms_core` op 0).
+
+
+## Source-bound legacy Huawei manual covers
+
+Only the Android → Apple engine scan/extract/preview/batch routes accept the validated legacy 40-byte Huawei layout. The global format parser and Android transfer routes remain strict. Opaque gaps are limited to the experimentally validated 5420-byte ctrace footer layout (LE payload length 5408 and `ctrace\0\0`); this is not a general specification of its contents.
+
+`manual-cover-frames` takes `input` and an `output` MP4 preview path. It returns `source_sha256`, `source_version` (device/inode/size/mtime-ns/ctime-ns), `track_index: 0`, and presentation-sorted `frames` containing `frame_index`, `media_us`, and edit-list mapped `presented_us`. These values come from real samples, never nominal FPS.
+
+A batch accepts either one `manual_cover` or a normalized-source-path keyed `manual_covers` map. Each selection contains `source_sha256`, `source_version`, `track_index`, and `frame_index`. Source version, SHA, primary-track identity and frame range are rechecked before conversion/resume; missing choices, midpoint policies and auxiliary candidate indexes cannot authorize a legacy conversion. `cover_candidate_index` remains a different operation that replaces the still from the auxiliary track.
+
+Legacy conversion preserves the camera still coding, writes `selected-user-frame` timing provenance, and archives the complete original source, original EXIF segments, private gap and trailer as hash-protected `legacy_*` output roles. These attachments and the required manifest are retained even when optional JSON export is disabled. Missing/tampered attachments reject verify/resume; publication and overwrite remain atomic and cancellation-safe. Photos receives only JPEG/MOV; App sharing packages the complete result as a ZIP.
+
+The JSON `momentstays-driver` calls the same `engine::request` with `platform::SystemNative` (native codec availability depends on OS). `momentstays-convert` offers lower-level convenience commands and is not the App batch/manifest/delivery state machine. Python remains a packaging/fixture/test harness tool, not the App conversion runtime.

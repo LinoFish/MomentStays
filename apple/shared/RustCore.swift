@@ -161,6 +161,8 @@ extension RustCore {
         req["export_data_files"] = options.exportDataFiles
         if let index = options.coverIndex { req["cover_candidate_index"] = index }
         req["cover_selections"] = options.coverSelections
+        req["manual_covers"] = options.manualCovers.mapValues { $0.json }
+        if let choice = options.manualCover { req["manual_cover"] = choice.json }
         req["candidate_delivery"] = options.candidateDelivery
         req["vendor"] = options.android.vendor
         req["container"] = options.android.container

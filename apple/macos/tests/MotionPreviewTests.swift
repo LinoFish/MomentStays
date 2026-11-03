@@ -8,6 +8,17 @@ struct MotionPreviewTests {
         checks += 1
     }
     static func main() throws {
+        let close = [PreviewCoverCandidate(index:0,timestampUs:2_500_000,time:2.5,issue:nil),
+                     PreviewCoverCandidate(index:1,timestampUs:2_500_001,time:2.500001,issue:nil),
+                     PreviewCoverCandidate(index:2,timestampUs:9_000_000,time:9,issue:nil)]
+        let grouped = CoverTimelineGroup.layout(original:2.5,candidates:close,duration:10,width:320)
+        check(grouped.flatMap(\.markers).count == 4,"nearby cover choices remain available")
+        check(grouped.allSatisfy { $0.x >= 30 && $0.x <= 290 },"cover controls stay inside the track at both edges")
+        check(zip(grouped,grouped.dropFirst()).allSatisfy { $1.x - $0.x >= 64 },"cover groups never overlap")
+        let unknown = CoverTimelineGroup.layout(original:nil,candidates:[PreviewCoverCandidate(index:0,timestampUs:0,time:nil,issue:"unavailable")],duration:3,width:180)
+        check(unknown.flatMap(\.markers).allSatisfy { $0.time == nil },"unknown cover times are never fabricated")
+        check(unknown.flatMap(\.markers).first(where:{ $0.index == 0 })?.issue == "unavailable","unavailable candidate keeps its reason")
+        check(CoverTimelineGroup.layout(original:0,candidates:close,duration:0,width:320).isEmpty,"unloaded duration has no fabricated timeline markers")
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("motion-preview-tests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: root) }

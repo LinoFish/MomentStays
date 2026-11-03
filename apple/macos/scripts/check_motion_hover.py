@@ -8,7 +8,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 from testkit.fixtures import motion
 
-APP = ROOT / '.build/gui/preview/留刻.app/Contents/MacOS/MomentStays'
+APP = ROOT / '.build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays'
 DRIVER = ROOT / '.build/gui/native-tests'
 OUT = ROOT / '.build/gui/ui-checks'
 OUT.mkdir(parents=True, exist_ok=True)

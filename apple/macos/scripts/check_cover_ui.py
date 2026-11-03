@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 from check_cover_candidates import call, dual
 from testkit.fixtures import motion
 
-APP = ROOT / '.build/gui/preview/留刻.app/Contents/MacOS/MomentStays'
+APP = ROOT / '.build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays'
 OUTPUT = ROOT / '.build/gui/cover-ui'
 OUTPUT.mkdir(parents=True,exist_ok=True)
 
@@ -18,7 +18,14 @@ with tempfile.TemporaryDirectory(prefix='cover-ui-') as temporary:
     info = call(dict(mode='fixture',folder=str(folder)))
     source = folder / 'dual.jpg'
     source.write_bytes(motion((folder/'still.jpg').read_bytes(),str(info['cover_us']),movie=dual((folder/'clip.mp4').read_bytes())))
-    for name, delivery, width, flags in [('mixed','static',1120,[]),('all-live','livephoto',1120,[]),('compact','livephoto',390,['--ui-expand-settings'])]:
+    cases = [('mixed','static',1120,[]),('all-live','livephoto',1120,[]),
+             ('compact','livephoto',390,['--ui-expand-settings']),
+             ('cover-editor','static',1120,['--ui-cover-editor']),
+             ('cover-editor-dark','static',1120,['--ui-cover-editor','--ui-appearance','dark']),
+             ('cover-editor-original','static',1120,['--ui-cover-editor','--ui-restore-original']),
+             ('selected-grid','static',760,['--ui-check-first']),
+             ('cover-button-click','static',760,['--ui-check-first','--ui-click-cover'])]
+    for name, delivery, width, flags in cases:
         path = OUTPUT / (name + '.png')
         cover_flags = ['--ui-cover-index','0'] if width >= 960 else []
         result = subprocess.run([str(APP),'--ui-snapshot',str(path),'--ui-width',str(width),'--ui-height','700',
@@ -26,11 +33,31 @@ with tempfile.TemporaryDirectory(prefix='cover-ui-') as temporary:
         assert result.returncode == 0,(result.stdout,result.stderr)
         metrics = json.loads(Path(str(path)+'.json').read_text())
         if width >= 960:
-            assert metrics['candidate_count']==1 and metrics['candidate_image_loaded'],metrics
-            assert abs(metrics['preview_cover']-.2)<2e-6,metrics
-        else:
+            assert metrics['candidate_count']==1,metrics
+            if '--ui-restore-original' in flags:
+                assert not metrics['candidate_image_loaded'],metrics
+                assert abs(metrics['preview_cover'] - info['cover_us'] / 1e6)<2e-6,metrics
+                assert metrics['candidate_status']=='更换封面不影响动态视频',metrics
+            else:
+                assert metrics['candidate_image_loaded'],metrics
+                assert abs(metrics['preview_cover']-.2)<2e-6,metrics
+        elif '--ui-expand-settings' in flags:
             assert metrics['settings_sheet_visible'],metrics
+        if '--ui-cover-editor' in flags or '--ui-click-cover' in flags:
+            assert metrics['settings_sheet_visible'] and 0 < metrics['sheet_width'] <= metrics['frame_width'],metrics
+        if '--ui-check-first' in flags:
+            assert metrics['explicit_selection'] and metrics['selected_count']==1,metrics
+        if name == 'selected-grid':
+            cards = [(key,frame) for key,frame in metrics['frames'].items() if key.startswith('photo-card-')]
+            assert cards,metrics
+            for key,frame in cards:
+                source_id = key.removeprefix('photo-card-')
+                image = metrics['frames']['photo-image-' + source_id]
+                button = metrics['frames']['photo-cover-' + source_id]
+                assert 165 <= frame['height'] <= 180 and 180 <= frame['width'] <= 260,(key,frame)
+                assert button['y'] + button['height'] <= image['y'] + image['height'] + 1,(button,image)
+                assert button['x'] + button['width'] <= image['x'] + image['width'] + 1,(button,image)
         assert metrics['primary_visible'] and metrics['queue_visible'],metrics
         assert path.stat().st_size>1000
         assert 'Unable to simultaneously satisfy constraints' not in result.stderr,result.stderr
-        print('PASS',name,'candidate preview and cover time' if width >= 960 else 'compact export settings',metrics['preview_cover'],flush=True)
+        print('PASS',name,'candidate preview and cover time' if width >= 960 else 'compact settings' if '--ui-expand-settings' in flags else 'compact card layout and selection',metrics['preview_cover'],flush=True)

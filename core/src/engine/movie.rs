@@ -181,6 +181,7 @@ pub fn movie(source: &[u8], req: &MovieRequest) -> Result<(Vec<u8>, Value)> {
         } else if let Some(us) = req.timestamp_us.filter(|us| *us >= 0) {
             let policy = match req.timestamp_source {
                 Some("high-res-candidate") => "selected-high-res-candidate",
+                Some("user-frame") => "selected-user-frame",
                 Some("video-metadata") => "source-video-metadata",
                 _ => "source-xmp",
             };

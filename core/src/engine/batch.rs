@@ -166,14 +166,16 @@ pub fn publish(
     overwrite: bool,
     export_data_files: bool,
 ) -> Result<()> {
-    verify(stage.path())?;
+    let verified = verify(stage.path())?;
     if hash_file(source)? != source_hash {
         return failure("转换期间原片发生变化，未发布结果");
     }
     if token.is_cancelled() {
         return failure("已停止；当前暂存结果未发布");
     }
-    if !export_data_files {
+    if !export_data_files
+        && verified["source_format"].as_str() != Some(crate::engine::manual::FORMAT)
+    {
         let m = stage.path().join(MANIFEST);
         std::fs::remove_file(&m).map_err(|e| io_error(&m, e))?;
     }
@@ -235,7 +237,53 @@ pub fn verify(folder: &Path) -> Result<Value> {
     } else {
         default_names()
     };
-    let keys: HashSet<&str> = names.keys().map(String::as_str).collect();
+    let legacy = manifest["source_format"].as_str() == Some(crate::engine::manual::FORMAT);
+    let legacy_names: BTreeMap<String, String> = names
+        .iter()
+        .filter(|(r, _)| r.starts_with("legacy_"))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    if legacy {
+        for (role, name) in [
+            ("legacy_original", "source-original.bin"),
+            ("legacy_private", "source-private.bin"),
+            ("legacy_tail", "source-tail.bin"),
+        ] {
+            if names.get(role).map(String::as_str) != Some(name) {
+                return failure("旧华为原始附属数据清单缺失");
+            }
+        }
+        if !manifest["manual_cover"].is_object()
+            || hashes.get("source-original.bin").map(String::as_str)
+                != manifest["source_sha256"].as_str()
+        {
+            return failure("旧华为原片备份或人工策略校验失败");
+        }
+        for (r, n) in &legacy_names {
+            let expected = match r.as_str() {
+                "legacy_original" => "source-original.bin".to_string(),
+                "legacy_private" => "source-private.bin".to_string(),
+                "legacy_tail" => "source-tail.bin".to_string(),
+                _ => {
+                    let i = r
+                        .strip_prefix("legacy_exif_")
+                        .and_then(|v| v.parse::<usize>().ok())
+                        .ok_or_else(invalid)?;
+                    format!("source-exif-{i}.bin")
+                }
+            };
+            if n != &expected {
+                return Err(invalid());
+            }
+        }
+    } else if !legacy_names.is_empty() {
+        return Err(invalid());
+    }
+    let keys: HashSet<&str> = names
+        .keys()
+        .filter(|k| !k.starts_with("legacy_"))
+        .map(String::as_str)
+        .collect();
     let extra: HashSet<&str> = keys
         .iter()
         .copied()
@@ -280,7 +328,9 @@ pub fn verify(folder: &Path) -> Result<Value> {
     for (role, name) in &names {
         let ext = extension(Path::new(name));
         let image = role == "still" || role == "motionphoto" || is_candidate_photo_role(role);
-        let ok = if image {
+        let ok = if role.starts_with("legacy_") {
+            legacy && ext == "bin"
+        } else if image {
             paths::PHOTO_EXTENSIONS.contains(&ext.as_str())
         } else {
             ext == "mov"
@@ -430,6 +480,12 @@ pub fn convert(
     {
         options.cover_index = Some(*i);
     }
+    if let Some(c) = options
+        .manual_covers
+        .get(&*paths::normalized(source).to_string_lossy())
+    {
+        options.manual_cover = Some(c.clone());
+    }
     let options = &options;
     let modes = [
         "livephoto",
@@ -454,13 +510,32 @@ pub fn convert(
         return failure("候选照片的交付格式无效");
     }
     let source_hash = timings.measure("source_hash", || hash_file(source))?;
+    let data = timings.measure("source_read", || read(source))?;
+    let photo = timings.measure("source_parse", || crate::engine::manual::parse(&data))?;
+    let legacy = photo.format == crate::engine::manual::FORMAT;
+    if legacy && native.image_decodes(&photo.still) == Some(false) {
+        return failure("旧华为静态照片损坏，人工选择不能修复输入");
+    }
+    let manual = match &options.manual_cover {
+        Some(selection) => Some(crate::engine::manual::resolve(&data, source, selection)?),
+        None if legacy => {
+            return failure("旧式华为封面未确定；请人工选择主视频帧，不使用原双数字或中点猜测")
+        }
+        None => None,
+    };
+    if legacy
+        && (options.video_track != "primary"
+            || options.output_mode != "livephoto"
+            || options.cover_index.is_some())
+    {
+        return failure("旧式华为人工选帧仅支持主视频与原静态照片 Live Photo；不使用辅助轨候选");
+    }
     if !overwrite && target.exists() {
         return resume(source, target, options, token, &source_hash);
     }
-    let data = timings.measure("source_read", || read(source))?;
-    let photo = timings.measure("source_parse", || format::parse(&data))?;
     if options.output_mode != "auxiliary-only"
         && options.cover_index.is_none()
+        && manual.is_none()
         && photo.timestamp.is_none()
         && photo.cover_frame.is_none()
         && options.missing_time == "error"
@@ -602,7 +677,7 @@ pub fn convert(
     if options.cover_index.is_none() && !is_heic && !photo.ultra && honor.is_none() {
         hdr.insert("status".into(), json!("unchanged"));
         hdr.insert("reason".into(), json!("旧版 HDR 转换已关闭"));
-        if options.legacy_hdr {
+        if options.legacy_hdr && !legacy {
             if let Err(e) = convert_legacy_hdr(native, &mut image, &mut hdr) {
                 warnings.push(e.0);
                 hdr.insert(
@@ -638,7 +713,11 @@ pub fn convert(
 
     let mut request = movie_request(&live, &identifier, options);
     let candidate_time;
-    if let (Some(index), Some(sess)) = (options.cover_index, &session) {
+    if let Some(cover) = &manual {
+        request.timestamp_us = Some(cover.marker_us);
+        request.time_domain = "presentation";
+        request.timestamp_source = Some("user-frame");
+    } else if let (Some(index), Some(sess)) = (options.cover_index, &session) {
         candidate_time = sess.candidate(index)?.timestamp_us;
         request.timestamp_us = Some(candidate_time);
         request.time_domain = "presentation";
@@ -745,6 +824,10 @@ pub fn convert(
             }
         }
     }
+    if legacy {
+        names.extend(crate::engine::manual::archive(&data, &photo, stage.path())?);
+        warnings.push("人工定位动态封面，原相机静态照片保留；原EXIF、私有块和尾标在输出目录附属数据中，相册仅接收JPEG/MOV".into());
+    }
     let _ = crate::engine::copy_mtime(source, &still_path);
     let _ = crate::engine::copy_mtime(source, &mov_path);
     let mut hashes = BTreeMap::new();
@@ -765,6 +848,12 @@ pub fn convert(
         "auxiliary_sha256": format::auxiliary_hashes(&live)?,
         "output_sha256": names_json(&hashes),
     });
+    if let Some(selection) = &options.manual_cover {
+        manifest["manual_cover"] = selection.json();
+        manifest["original_cover_status"] = json!("unknown");
+        manifest["preservation"] =
+            json!({"archive":"source-original.bin","source_sha256":source_hash,"reversible":true});
+    }
     if let Some(a) = &auxiliary {
         manifest["auxiliary_video"] = a.clone();
     }
@@ -906,7 +995,9 @@ fn resume(
     }
     let stored = string_map(&manifest["output_files"]).unwrap_or_default();
     let wanted = expected_names(source, options);
-    let names_match = if options.output_mode == "livephoto+candidates" {
+    let names_match = if manifest["source_format"].as_str() == Some(crate::engine::manual::FORMAT)
+        || options.output_mode == "livephoto+candidates"
+    {
         wanted.iter().all(|(k, v)| stored.get(k) == Some(v))
     } else {
         stored == wanted

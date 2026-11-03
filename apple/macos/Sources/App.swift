@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppIdentityMigration.migrate()
         if startupArgument("--direction") == "to-android" { model.updateSettings { $0.direction = .toAndroid } }
         if startupArgument("--direction") == "android-to-android" { model.updateSettings { $0.direction = .androidToAndroid } }
         buildMenu()

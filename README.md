@@ -7,10 +7,10 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.6.1</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.7.0</strong>
 </p>
 
-# 留刻— Android Motion Photo ↔ Apple Live Photo Converter for macOS
+# MomentStays — Android Motion Photo ↔ Apple Live Photo Converter for macOS
 
 Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. MomentStays preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos — JPEG, plus validated Samsung HEIC layouts.
 
@@ -23,6 +23,8 @@ Convert Android Motion Photos to Apple Live Photos — and convert Live Photos b
 </p>
 
 > **Feedback welcome:** Tried it and something failed or looks wrong? [Open an issue](https://github.com/LinoFish/MomentStays/issues) — tell us the source device and format, the conversion direction and the app version, and strip sensitive information from any sample first. See [Feedback](#feedback) below.
+
+Legacy Huawei 40-byte trailers require manual main-video frame selection; the camera still and reversible source archives are retained. See [upgrade and identity migration](apple/macos/packaging/UPGRADING.txt).
 
 **Download:** get the latest DMG/ZIP from [Releases](https://github.com/LinoFish/MomentStays/releases), or build from source below.
 
@@ -120,7 +122,7 @@ Building requires Xcode Command Line Tools. The default build produces a Univers
 git clone https://github.com/LinoFish/MomentStays.git
 cd MomentStays
 bash apple/macos/scripts/build_app.sh
-open dist/留刻.app
+open dist/MomentStays.app
 ```
 
 A built app requires no Python, FFmpeg, ExifTool, Homebrew, or additional runtime. To build only for Apple Silicon:

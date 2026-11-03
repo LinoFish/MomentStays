@@ -10,14 +10,15 @@
 //! Byte and container work is done here. Pixel and codec work (decoding a
 //! gain map, re-encoding a JPEG, decoding a video frame, ImageIO checks)
 //! goes through [`Native`], implemented by the host (ImageIO/AVFoundation
-//! on Apple). [`NoNative`] refuses those steps with a clear message, which
-//! is what the standalone `momentstays-driver` uses.
+//! on Apple). [`NoNative`] refuses those steps with a clear message, while the standalone JSON driver uses `platform::SystemNative` with the
+//! codecs available on its platform.
 
 pub mod android;
 pub mod batch;
 pub mod cabi;
 pub mod candidates;
 pub mod movie;
+pub mod manual;
 pub mod options;
 pub mod paths;
 pub mod request;

@@ -9,6 +9,7 @@ final class UISnapshotSupport {
     var frames: [String: CGRect] = [:]
     private(set) var finished = false
     private var checks: [[String: Any]] = []
+    private var interactions: [String] = []
     private var reportWindow: NSWindow?
     private var libraryPicker: PhotosLibraryPicker?
     private var recentFrames: [String: CGRect] = [:]
@@ -44,7 +45,13 @@ final class UISnapshotSupport {
         }
         if CommandLine.arguments.contains("--ui-preview") || CommandLine.arguments.contains("--ui-hover-preview") || argument("--ui-cover-index") != nil { model.previewVisible = true }
         if CommandLine.arguments.contains("--ui-select-first") { model.selection = model.items.first?.id }
+        if CommandLine.arguments.contains("--ui-check-first"), let item = model.items.first { model.toggleSelection(item) }
         if CommandLine.arguments.contains("--ui-detail") { model.detailExpanded = true }
+        if CommandLine.arguments.contains("--ui-sharing-preview") { model.sharing = true }
+        if CommandLine.arguments.contains("--ui-monitoring-preview") { model.libraryMonitoring = true }
+        if let phase = argument("--ui-task-phase").flatMap(TaskPhase.init(rawValue:)) {
+            model.configurePreviewTask(phase,interactive:CommandLine.arguments.contains("--ui-interactive-task"))
+        }
     }
     func start() {
         guard let path = argument("--ui-snapshot") else { return }
@@ -60,7 +67,30 @@ final class UISnapshotSupport {
             if CommandLine.arguments.contains("--ui-expand-settings") { self.model.settingsPresented = true }
             if CommandLine.arguments.contains("--ui-library-preview") { self.showLibraryPreview() }
             if CommandLine.arguments.contains("--ui-recent-preview") { self.showRecentPreview() }
-            if CommandLine.arguments.contains("--ui-resize-check") {
+            if CommandLine.arguments.contains("--ui-finish-task") { self.model.configurePreviewTask(.completed,interactive:false) }
+            if CommandLine.arguments.contains("--ui-click-stop"), let frame = self.frames["primary-action"] {
+                self.click(frame)
+            }
+            if CommandLine.arguments.contains("--ui-hdr-hover"), let content = self.window.contentView,
+               let badge = self.descendants(content).first(where:{ $0.identifier?.rawValue.hasPrefix("photo-hdr-hover-") == true }) {
+                badge.mouseEntered(with:NSEvent())
+                if CommandLine.arguments.contains("--ui-hdr-hover-exit") {
+                    DispatchQueue.main.asyncAfter(deadline:.now() + 0.2) { badge.mouseExited(with:NSEvent()) }
+                }
+            }
+            if CommandLine.arguments.contains("--ui-click-cover"), let item = self.model.items.first,
+               let frame = self.frames["photo-cover-" + item.id], let content = self.window.contentView {
+                let point = NSPoint(x:frame.midX,y:content.bounds.height - frame.midY)
+                for type in [NSEvent.EventType.leftMouseDown,.leftMouseUp] {
+                    if let event = NSEvent.mouseEvent(with:type,location:point,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,
+                        windowNumber:self.window.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:0) { NSApp.sendEvent(event) }
+                }
+            }
+            if CommandLine.arguments.contains("--ui-animation-exercise") {
+                self.exerciseInteractions(path:path)
+            } else if CommandLine.arguments.contains("--ui-completion-expiry") {
+                DispatchQueue.main.asyncAfter(deadline:.now() + 3.9) { self.finishSnapshot(path) }
+            } else if CommandLine.arguments.contains("--ui-resize-check") {
                 self.model.selection = self.model.items.first?.id
                 self.model.updateSettings { $0.exportDataFiles = false }
                 self.resizeSequence([(390, 540), (640, 600), (959, 640), (960, 640), (1280, 540), (480, 600)], path: path)
@@ -70,8 +100,31 @@ final class UISnapshotSupport {
         }
     }
     private func candidatePreview(path: String, remaining: Int = 100) {
-        if MotionPreviewDiagnostics.candidateImageLoaded || remaining == 0 { finishSnapshot(path); return }
+        if MotionPreviewDiagnostics.candidateImageLoaded || remaining == 0 {
+            if MotionPreviewDiagnostics.candidateImageLoaded, CommandLine.arguments.contains("--ui-restore-original"), let item = model.items.first {
+                model.selectCover(nil,for:item.source)
+            }
+            finishSnapshot(path); return
+        }
         DispatchQueue.main.asyncAfter(deadline:.now()+0.1) { self.candidatePreview(path:path,remaining:remaining - 1) }
+    }
+    private func click(_ frame: CGRect) {
+        guard let content = window.contentView else { return }
+        let point = NSPoint(x:frame.midX,y:content.bounds.height - frame.midY)
+        let timestamp = ProcessInfo.processInfo.systemUptime
+        guard let down = NSEvent.mouseEvent(with:.leftMouseDown,location:point,modifierFlags:[],timestamp:timestamp,
+            windowNumber:window.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:0),
+            let up = NSEvent.mouseEvent(with:.leftMouseUp,location:point,modifierFlags:[],timestamp:timestamp + 0.01,
+            windowNumber:window.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:0) else { return }
+        // Native buttons track mouse-up inside mouseDown; queue it before entering that loop.
+        NSApp.postEvent(up,atStart:false)
+        NSApp.sendEvent(down)
+    }
+    private func exerciseInteractions(path: String, step: Int = 0) {
+        let controls = ["preview-button","file-detail-button","scope-button-completed","scope-button-ready","preview-button","file-detail-button"]
+        guard step < controls.count else { finishSnapshot(path); return }
+        if let frame = frames[controls[step]] { click(frame); interactions.append(controls[step]) }
+        DispatchQueue.main.asyncAfter(deadline:.now() + 0.3) { self.exerciseInteractions(path:path,step:step + 1) }
     }
     private func hoverPreview(path: String, remaining: Int = 60, sent: Bool = false) {
         if MotionPreviewDiagnostics.duration != nil, let content = window.contentView,
@@ -158,6 +211,12 @@ final class UISnapshotSupport {
             "preview_hovering": MotionPreviewDiagnostics.hovering,
             "candidate_count": MotionPreviewDiagnostics.candidateCount,
             "candidate_image_loaded": MotionPreviewDiagnostics.candidateImageLoaded,
+            "candidate_status": MotionPreviewDiagnostics.candidateStatus,
+            "hdr_badges":HDRBadgeDiagnostics.badges,
+            "selected_count": model.selectedIDs.count, "explicit_selection": model.hasExplicitSelection,
+            "task_phase":model.phase.rawValue,"can_stop":model.canStop,"task_progress":model.progress.map { $0 as Any } ?? NSNull(),
+            "motion_reduced":InterfaceMotion.reduced(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion),
+            "preview_visible":model.previewVisible,"detail_expanded":model.detailExpanded,"interaction_checks":interactions,
             "row_count": model.items.count, "inspector_visible": frames["inspector"] != nil,
             "settings_sheet_visible": window.attachedSheet != nil,
             "sheet_width": window.attachedSheet?.frame.width ?? 0,

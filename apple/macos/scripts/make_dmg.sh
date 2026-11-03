@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
-app="dist/留刻.app"
+app="dist/MomentStays.app"
 test -d "$app"
 version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Contents/Info.plist")
 archs=$(xcrun lipo -archs "$app/Contents/MacOS/MomentStays")
@@ -11,7 +11,7 @@ case "$archs" in
   *x86_64*arm64*|*arm64*x86_64*) platform=universal ;;
   *) echo "Unsupported architectures: $archs" >&2; exit 2 ;;
 esac
-name="留刻-$version-$platform"
+name="MomentStays-$version-$platform"
 codesign --verify --deep --strict "$app"
 mkdir -p .build/gui
 export PYTHONPATH="$PWD/.build/dmg-tools${PYTHONPATH:+:$PYTHONPATH}"
@@ -28,11 +28,11 @@ cleanup() {
 }
 trap cleanup EXIT
 mkdir -p "$staging/.background"
-ditto "$app" "$staging/留刻.app"
+ditto "$app" "$staging/MomentStays.app"
 ln -s /Applications "$staging/Applications"
 xcrun swiftc -module-cache-path /private/tmp/motionlive-swift-cache apple/macos/packaging/DmgBackground.swift -o .build/gui/dmg-background
 .build/gui/dmg-background "$staging/.background/installer.png"
-hdiutil create -volname "留刻 $version" -fs HFS+ -srcfolder "$staging" -ov -format UDRW "$work/installer-rw.dmg"
+hdiutil create -volname "MomentStays $version" -fs HFS+ -srcfolder "$staging" -ov -format UDRW "$work/installer-rw.dmg"
 hdiutil attach -readwrite -noverify -noautoopen -nobrowse -plist "$work/installer-rw.dmg" > "$work/attach.plist"
 dmg_mount=$(python3 - "$work/attach.plist" <<'PY'
 import plistlib,sys

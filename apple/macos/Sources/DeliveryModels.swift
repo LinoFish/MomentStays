@@ -18,7 +18,7 @@ struct DeliveredFile: Codable, Equatable {
     var origin: LibraryOrigin?
     var hashes: [String: String] = [:]
     func verify() throws {
-        for file in files {
+        for file in Set(files).union(hashes.keys) {
             guard let expected = hashes[file], try NativeBatch.hashFile(URL(fileURLWithPath: file)) == expected else {
                 throw Failure("输出文件已改变或缺少校验记录，请重新转换：" + URL(fileURLWithPath: file).lastPathComponent)
             }
@@ -128,6 +128,7 @@ final class DeliveryStore {
     }
     static func key(source: URL, origin: LibraryOrigin?, settings: ConversionSettings) throws -> String {
         var options = settings.options; options.coverIndex = settings.coverIndex(for:source)
+        options.manualCover = settings.manualCovers?[NativeBatch.normalized(source).path]
         var values = options.json
         values["delivery_revision"] = "1.3.0"
         if let origin = origin {
@@ -156,8 +157,15 @@ final class DeliveryStore {
             guard files.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else { throw Failure("转换输出不完整，未交付：\(input.lastPathComponent)") }
             let origin = bySource[NativeBatch.normalized(input).path]
             let baseKey = try key(source:input,origin:origin,settings:settings)
+            var verifiedFiles = files
+            if settings.manualCovers?[NativeBatch.normalized(input).path] != nil {
+                _ = try RustCore.engine(["mode":"verify","input":folder.path])
+                let names = entry["output_files"] as? [String:String] ?? [:]
+                verifiedFiles += names.filter { $0.key.hasPrefix("legacy_") }.values.map { folder.appendingPathComponent($0) }
+                verifiedFiles.append(folder.appendingPathComponent("manifest.json"))
+            }
             var result = [DeliveredFile(source:source,folder:path,files:files.map(\.path),key:baseKey,origin:origin,
-                hashes:try Dictionary(uniqueKeysWithValues:files.map { ($0.path,try NativeBatch.hashFile($0)) }))]
+                hashes:try Dictionary(uniqueKeysWithValues:verifiedFiles.map { ($0.path,try NativeBatch.hashFile($0)) }))]
             if settings.direction == .toApple && settings.exportMode == .withCandidates {
                 let names = entry["output_files"] as? [String:String] ?? [:]
                 for role in names.keys.sorted() where NativeBatch.isCandidatePhotoRole(role) {
@@ -180,7 +188,36 @@ final class DeliveryStore {
             guard token?.isCancelled != true else { throw Failure("共享准备已停止；文件保留") }
             try result.verify()
         }
-        for file in task.results.flatMap(\.files) {
+        // A legacy result is shared as one complete archive, so its source
+        // backups and manifest cannot be separated by filename collision handling.
+        let archived = task.results.filter { $0.hashes.keys.contains(where:{ URL(fileURLWithPath:$0).lastPathComponent == "source-original.bin" }) }
+        for item in archived {
+            let work = taskFolder(task.id).appendingPathComponent("Share-" + UUID().uuidString,isDirectory:true)
+            let bundleName = URL(fileURLWithPath:item.source).deletingPathExtension().lastPathComponent + ".livephoto"
+            let bundle = work.appendingPathComponent(bundleName,isDirectory:true)
+            try FileManager.default.createDirectory(at:bundle,withIntermediateDirectories:true)
+            defer { try? FileManager.default.removeItem(at:work) }
+            for (path,hash) in item.hashes {
+                let source = URL(fileURLWithPath:path)
+                guard NativeBatch.normalized(source.deletingLastPathComponent()) == NativeBatch.normalized(URL(fileURLWithPath:item.folder)) else { throw Failure("附属数据路径无效") }
+                let target = bundle.appendingPathComponent(source.lastPathComponent)
+                try FileManager.default.copyItem(at:source,to:target)
+                guard try NativeBatch.hashFile(target) == hash else { throw Failure("附属数据共享副本校验失败") }
+            }
+            var name = bundleName + ".zip", index = 1
+            while names.contains(name.lowercased()) { index += 1; name = bundleName + " (\(index)).zip" }
+            names.insert(name.lowercased())
+            let temporary = work.appendingPathComponent("result.zip")
+            let process = Process(); process.executableURL = URL(fileURLWithPath:"/usr/bin/ditto")
+            process.arguments = ["-c","-k","--keepParent",bundle.path,temporary.path]
+            try process.run(); process.waitUntilExit()
+            guard process.terminationStatus == 0, token?.isCancelled != true else { throw Failure("完整结果共享准备未完成；原输出保留") }
+            let target = folder.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath:target.path) { try FileManager.default.removeItem(at:target) }
+            try FileManager.default.moveItem(at:temporary,to:target); result.append(target)
+        }
+        let normal = task.results.filter { item in !archived.contains(where:{ $0.key == item.key }) }
+        for file in normal.flatMap(\.files) {
             guard token?.isCancelled != true else { throw Failure("共享准备已停止；文件保留") }
             let source = URL(fileURLWithPath: file), ext = source.pathExtension
             var stem = source.deletingPathExtension().lastPathComponent

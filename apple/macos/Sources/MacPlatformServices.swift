@@ -34,6 +34,14 @@ final class MacPlatformServices: NSObject {
     init(model: WorkspaceModel) {
         self.model = model
         super.init()
+        model.prepareConversion = { [weak self] settings, output in
+            guard let self = self else { throw Failure("窗口已关闭") }
+            var task = DeliveryTask(settings:settings,output:output.path)
+            if settings.destination.usesCache { task.output = self.deliveryStore.taskFolder(task.id).appendingPathComponent("Converted").path }
+            try self.deliveryStore.save(task)
+            self.activeTask = task; self.model.deliverySummary = ""; self.model.shareReady = false
+            return URL(fileURLWithPath:task.output)
+        }
         model.onConversionFinished = { [weak self] outcome, settings in self?.converted(outcome, settings: settings) }
         model.$phase.receive(on: DispatchQueue.main).sink { [weak self] phase in
             if !phase.isBusy { self?.drainLibraryUpdates() }
@@ -149,17 +157,12 @@ final class MacPlatformServices: NSObject {
     func start() {
         guard window?.attachedSheet == nil, model.canStart, !model.sharing else { return }
         batchDecision = nil
-        do {
-            var task = DeliveryTask(settings: model.settings, output: model.output?.path ?? deliveryStore.root.path)
-            if task.settings.destination.usesCache { task.output = deliveryStore.taskFolder(task.id).appendingPathComponent("Converted").path }
-            try deliveryStore.save(task)
-            activeTask = task; model.deliverySummary = ""; model.shareReady = false
-            model.start(outputOverride: URL(fileURLWithPath: task.output))
-        } catch { model.errorMessage = error.localizedDescription }
+        model.start(outputOverride:model.output ?? deliveryStore.root)
     }
 
     private func converted(_ outcome: BatchOutcome, settings: ConversionSettings) {
         guard var task = activeTask else { return }; activeTask = nil
+        task.settings = settings
         let capturedOrigins = origins
         let token = model.beginDelivery("正在校验和保存交付记录…")
         if outcome.cancelled { token.cancel() }

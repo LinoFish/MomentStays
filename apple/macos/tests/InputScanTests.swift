@@ -54,7 +54,7 @@ private final class PendingInspections: ConversionServing {
         model.appendSources([e]);check(projection.token.isCancelled && service.requests.last!.direction == .androidToAndroid,"addition after fast direction change uses latest projection")
         projection.finish(.success([ar]));service.requests.last!.finish(.success([ar,br,cr,dr,row(e)]))
         check(model.items.count==5,"late old direction cannot drop appended rows")
-        check(model.settings.coverSelections?[a.path]==1,"unchanged source keeps its manual cover across direction changes")
+        check(model.settings.coverSelections?[a.path]==nil,"incompatible direction invalidates the previous manual cover")
         try Data([9]).write(to:a);try fm.removeItem(at:b)
         let f=root.appendingPathComponent("f.jpg");try Data([0]).write(to:f)
         model.appendSources([f]);check(!model.items.contains{$0.source==a || $0.source==b},"changed/deleted sources invalidate old rows immediately")
@@ -72,7 +72,7 @@ private final class PendingInspections: ConversionServing {
         let destination=root.deletingLastPathComponent().appendingPathComponent(root.lastPathComponent+"-output")
         try fm.createDirectory(at:destination,withIntermediateDirectories:true);startModel.setOutput(destination)
         try Data([7]).write(to:a);startModel.start()
-        check(startService.jobs.count==1 && startService.jobs[0].options.coverSelections[a.path]==nil,"conversion cannot reuse a manual cover if source changes after inspection")
+        check(startService.jobs.isEmpty && startModel.notice != nil,"conversion requires rescan if source changes after inspection")
         if CommandLine.arguments.count>3 && CommandLine.arguments[2]=="--fixture" {
             try ScanBenchmark.productionChecks(root:root.appendingPathComponent("real"),input:URL(fileURLWithPath:CommandLine.arguments[3]))
         }

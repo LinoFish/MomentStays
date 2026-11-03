@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-APP = ROOT / ".build/gui/preview/留刻.app/Contents/MacOS/MomentStays"
+APP = ROOT / ".build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays"
 OUTPUT = ROOT / ".build/gui/ui-checks"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 cases = [
@@ -86,7 +86,10 @@ for name, width, height, flags in cases:
     if name == "clear-busy":
         assert metrics["row_count"] == 24 and not metrics["clear_enabled"] and not metrics["source_button_enabled"],metrics
     expected_color = metrics["system_accent_color"]
-    assert len(metrics["source_button_color"]) == len(expected_color) == 3 and all(abs(actual - expected) < 0.005 for actual, expected in zip(metrics["source_button_color"], expected_color)), (name, "system orange accent mismatch", metrics)
+    if empty:
+        assert len(metrics["source_button_color"]) == len(expected_color) == 3 and all(abs(actual - expected) < 0.005 for actual, expected in zip(metrics["source_button_color"], expected_color)), (name,"empty-state import accent mismatch",metrics)
+    else:
+        assert not metrics["source_button_color"], (name,"adding more photos should be secondary to conversion",metrics)
     assert abs(metrics["frames"]["add-button"]["height"] - metrics["frames"]["settings-button"]["height"]) < 2, (name, "source button size mismatch", metrics)
     if name == "source-menu":
         assert metrics["source_menu_opened"] and metrics["source_menu_titles"] == ["继续添加照片或文件夹…", "继续从系统图库添加…"], metrics

@@ -2,6 +2,14 @@ import Foundation
 import CryptoKit
 import Darwin
 
+struct ManualCoverChoice: Codable, Equatable {
+    let source_sha256: String
+    let source_version: String
+    let track_index: Int
+    let frame_index: Int
+    var json: [String:Any] { ["source_sha256":source_sha256,"source_version":source_version,"track_index":track_index,"frame_index":frame_index] }
+}
+
 struct ConversionOptions {
     var direction = "to-apple"
     var android = AndroidOptions()
@@ -15,6 +23,8 @@ struct ConversionOptions {
     var coverIndex: Int?
     var coverSelections: [String:Int] = [:]
     var candidateDelivery = "static"
+    var manualCover: ManualCoverChoice?
+    var manualCovers: [String:ManualCoverChoice] = [:]
     var json: [String:Any] {
         if direction == "android-to-android" { return ["direction":direction,"target":"honor","layout":AndroidTransfer.revision,"vendor":"google","container":"jpeg","export_data_files":exportDataFiles] }
         if direction == "to-android" { return ["direction":direction,"android":android.json,"time_domain":timeDomain,"export_data_files":exportDataFiles] }
@@ -22,6 +32,7 @@ struct ConversionOptions {
             "video_track":videoTrack,"output_mode":outputMode,"repair_auxiliary_duration":outputMode != "livephoto" && repairAuxiliaryDuration,"export_data_files":exportDataFiles]
         if let index = coverIndex { result["cover_candidate_index"] = index }
         if outputMode == "livephoto+candidates" && candidateDelivery != "static" { result["candidate_delivery"] = candidateDelivery }
+        if let choice = manualCover { result["manual_cover"] = choice.json }
         return result
     }
 }
@@ -233,5 +244,14 @@ enum NativeBatch {
                     progress: @escaping (BatchProgress)->Void) throws -> BatchOutcome {
         return try RustCore.run(sources:sources,output:output,options:options,token:token,scanRows:scanRows,
             concurrency:concurrency,existing:existingOutput,progress:progress)
+    }
+}
+
+
+extension SourceVersion {
+    var manualSignature: String {
+        let modifiedNS = Int64(modified.tv_sec) * 1_000_000_000 + Int64(modified.tv_nsec)
+        let changedNS = Int64(changed.tv_sec) * 1_000_000_000 + Int64(changed.tv_nsec)
+        return "\(UInt32(bitPattern:device)):\(inode):\(size):\(modifiedNS):\(changedNS)"
     }
 }

@@ -20,9 +20,8 @@ struct WorkspaceView: View {
                 workspaceHeader(layout)
                 Divider()
                 PhotoQueueView(model:model,actions:actions,short:layout.short,scope:queueScope)
+                    .environment(\.workspaceTaskFeedback,AnyView(WorkspaceTaskFeedback(model:model,actions:actions,showError:{ showingError = true })))
                     .frame(maxWidth:.infinity,maxHeight:.infinity)
-                Divider()
-                taskStatus(layout)
             }
             .padding(.top,28)
             .background(InterfaceStyle.canvas)
@@ -101,16 +100,29 @@ struct WorkspaceView: View {
         }.frame(maxWidth:220).disabled(model.isBusy || model.sharing)
     }
     private var moreOptions: some View {
-        HStack(spacing:12) {
+        HStack(spacing:8) {
             Button("导出设置…") { model.settingsPresented = true }
                 .focused($settingsFocused).accessibilityIdentifier("settings-button").recordLayout("settings-button")
-            Link(destination:UserGuide.url(for:locale)) { Image(systemName:"questionmark.circle").foregroundColor(InterfaceStyle.accent) }
-                .help(UserGuide.title(for:locale)).accessibilityLabel(UserGuide.title(for:locale)).accessibilityIdentifier("user-guide-button")
-        }.disabled(model.isBusy || model.sharing)
+                .disabled(model.isBusy || model.sharing)
+            Menu {
+                Button("最近结果…",action:actions.recentResults).disabled(model.isBusy || model.sharing)
+                Button("打开输出文件夹",action:actions.openOutput).disabled(!model.canOpenOutput).help(model.outputOpenHelp)
+                if model.report != nil { Button("转换报告…",action:actions.showReport).disabled(model.isBusy) }
+                if model.shareReady { Button("共享结果…",action:actions.shareResults).disabled(model.isBusy || model.sharing) }
+                if model.errorMessage?.isEmpty == false { Button("查看错误原因…") { showingError = true } }
+                if model.libraryMonitoring { Button("停止图库监测",action:actions.toggleLibraryMonitoring) }
+                Divider()
+                Link(UserGuide.title(for:locale),destination:UserGuide.url(for:locale))
+            } label: { Image(systemName:"ellipsis.circle") }
+                .menuStyle(.borderlessButton).fixedSize()
+                .help("结果与更多操作").accessibilityLabel("结果与更多操作")
+                .recordLayout("workspace-more-menu")
+            primaryAction.frame(width:96)
+        }.fixedSize()
     }
     private func workspaceHeader(_ layout: WorkspaceLayout) -> some View {
         Group {
-            if layout.size.width >= 1200 {
+            if layout.size.width >= 1440 {
                 HStack(spacing:12) {
                     addButton
                     directionPicker.frame(width:380)
@@ -123,7 +135,7 @@ struct WorkspaceView: View {
             } else {
                 VStack(alignment:.leading,spacing:8) {
                     HStack(spacing:16) {
-                        directionPicker.frame(maxWidth:440)
+                        directionPicker.frame(minWidth:280,maxWidth:440)
                         Spacer(minLength:0)
                         moreOptions
                     }
@@ -137,7 +149,6 @@ struct WorkspaceView: View {
                 }
             }
         }
-        .disabled(!model.canSwitchDirection)
         .padding(.horizontal,layout.margin).padding(.vertical,8).recordLayout("command-bar")
     }
 
@@ -146,6 +157,7 @@ struct WorkspaceView: View {
             ForEach(ConversionDirection.allCases,id:\.self) { Text($0.title).tag($0) }
         }
         .pickerStyle(.segmented).labelsHidden()
+        .disabled(!model.canSwitchDirection)
         .accessibilityIdentifier("conversion-direction").recordLayout("conversion-directions")
     }
 
@@ -158,7 +170,7 @@ struct WorkspaceView: View {
             .accessibilityIdentifier("stop-button")
         } else {
             Button(model.settings.actionTitle, action: actions.start)
-                .help("转换所有已选择的来源；分类只筛选显示")
+                .help("未指定选择时转换全部可转换照片；指定后仅转换选中项（含其他标签）")
                 .buttonStyle(.borderedProminent).tint(InterfaceStyle.accent).foregroundColor(InterfaceStyle.accentForeground)
                 .disabled(!model.canStart || model.sharing)
                 .recordLayout("primary-action").accessibilityIdentifier("convert-button")
@@ -177,91 +189,122 @@ struct WorkspaceView: View {
         }
     }
 
-    private var showsTaskFeedback: Bool {
-        model.isBusy || model.sharing || model.phase == .stopped || model.phase == .failed ||
-            model.notice != nil || model.errorMessage?.isEmpty == false
-    }
+}
 
-    private var statusLine: some View {
-        VStack(alignment:.leading,spacing:3) {
-            if model.isBusy || model.sharing || model.phase == .stopped || model.notice != nil ||
-                (model.phase == .failed && model.errorMessage?.isEmpty != false) {
-                HStack(spacing:8) {
-                    Label(model.notice ?? (model.sharing ? "正在共享…" : model.status),systemImage:"info.circle")
-                        .foregroundColor(.secondary).lineLimit(1)
-                        .help(model.notice ?? model.status)
-                    if model.isBusy, let progress = model.progress {
-                        Text("\(Int((min(1,max(0,progress)) * 100).rounded()))%")
-                            .monospacedDigit().foregroundColor(.secondary).fixedSize()
-                    }
-                }
-            }
-            if let error = model.errorMessage, !error.isEmpty {
-                Label(error,systemImage:"exclamationmark.circle")
-                    .foregroundColor(.red).lineLimit(1).help(error)
-            }
-        }.font(.callout).recordLayout("task-feedback")
-    }
+private struct WorkspaceTaskFeedbackKey: EnvironmentKey {
+    static let defaultValue = AnyView(EmptyView())
+}
 
-    @ViewBuilder private var secondaryActions: some View {
-        if !model.isBusy {
-            Button("最近结果…", action: actions.recentResults).disabled(model.sharing)
+extension EnvironmentValues {
+    var workspaceTaskFeedback: AnyView {
+        get { self[WorkspaceTaskFeedbackKey.self] }
+        set { self[WorkspaceTaskFeedbackKey.self] = newValue }
+    }
+}
+
+private struct WorkspaceTaskFeedback: View {
+    @ObservedObject var model: WorkspaceModel
+    let actions: WorkspaceActions
+    let showError: () -> Void
+    @State private var completionVisible = false
+    @State private var completionGeneration = UUID()
+
+    private var hasError: Bool { model.errorMessage?.isEmpty == false }
+    private var hasFailures: Bool { (model.report?.counts["failed"] ?? 0) > 0 }
+    private var visible: Bool {
+        model.isBusy || model.sharing || hasError || hasFailures || completionVisible ||
+        model.phase == .stopped || model.phase == .failed || model.notice != nil ||
+        model.libraryMonitoring || !model.deliverySummary.isEmpty || !model.librarySummary.isEmpty
+    }
+    private var busy: Bool { model.isBusy || model.sharing }
+    private var message: String {
+        if hasError { return model.errorMessage ?? "任务未完成" }
+        if busy { return model.sharing ? "正在共享…" : model.status }
+        if let notice = model.notice { return notice }
+        if hasFailures { return "已完成，部分照片需要检查" }
+        if !model.deliverySummary.isEmpty { return model.deliverySummary }
+        if model.phase == .stopped || model.phase == .failed { return model.status }
+        if completionVisible { return model.report?.summary ?? model.status }
+        if model.libraryMonitoring { return "正在监测图库" }
+        return model.librarySummary
+    }
+    private var secondaryMessage: String {
+        if model.sharing { return "正在处理共享内容" }
+        if !model.currentFile.isEmpty { return model.currentFile }
+        switch model.phase {
+        case .scanning: return "正在识别照片"
+        case .stopping: return "正在结束当前处理"
+        case .awaitingDecision: return "请确认已有输出的处理方式"
+        case .delivering: return "正在保存转换结果"
+        case .library: return "正在读取图库资源"
+        default: return "正在准备照片"
         }
-        Button("打开输出文件夹", action: actions.openOutput)
-            .disabled(!model.canOpenOutput).help(model.outputOpenHelp)
+    }
+    private var statusSymbol: String {
+        if hasError || hasFailures { return "exclamationmark.circle" }
+        if busy { return "arrow.triangle.2.circlepath" }
+        if model.phase == .completed { return "checkmark.circle" }
+        if model.phase == .stopped { return "stop.circle" }
+        return "info.circle"
     }
 
-    private func taskStatus(_ layout: WorkspaceLayout) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if model.isBusy {
-                if let progress = model.progress { ProgressView(value: progress).progressViewStyle(.linear) }
-                else { ProgressView().progressViewStyle(.linear) }
-            }
-            if layout.stackedFooter {
-                if showsTaskFeedback { statusLine }
-                HStack(spacing: 8) {
-                    if model.errorMessage != nil { Button("查看原因") { showingError = true } }
-                    if model.report != nil { Button("报告", action: actions.showReport) }
-                    if model.shareReady && !model.isBusy {
-                        Button("共享结果", action: actions.shareResults).disabled(model.sharing)
+    var body: some View {
+        Group {
+            if visible {
+                VStack(alignment:.leading,spacing:6) {
+                    HStack(spacing:8) {
+                        Label {
+                            Text(message).foregroundColor(hasError ? .red : .secondary)
+                        } icon: {
+                            Image(systemName:statusSymbol)
+                                .foregroundColor(hasError ? .red : model.phase == .completed && !hasFailures ? .green : .secondary)
+                        }.lineLimit(1).help(message)
+                            .id(model.phase).transition(.opacity).subtleAnimation(model.phase)
+                        Spacer(minLength:8)
+                        if busy, let progress = model.progress {
+                            Text("\(Int((min(1,max(0,progress)) * 100).rounded()))%")
+                                .monospacedDigit().foregroundColor(.secondary)
+                        }
+                        if hasError { Button("查看原因",action:showError) }
+                        if hasFailures { Button("查看报告",action:actions.showReport).disabled(model.isBusy) }
+                        if model.libraryMonitoring && !busy { Button("停止监测",action:actions.toggleLibraryMonitoring) }
+                    }.font(.callout)
+                    if busy {
+                        taskProgress
+                        Text(secondaryMessage).font(.caption).foregroundColor(.secondary)
+                            .lineLimit(1).truncationMode(.middle).help(secondaryMessage)
+                            .transaction { $0.animation = nil }
                     }
-                    Spacer(minLength: 0)
-                    Menu("更多") { secondaryActions }.fixedSize()
-                    primaryAction
                 }
-            } else {
-                HStack(spacing: 8) {
-                    if showsTaskFeedback { statusLine }
-                    Spacer(minLength: 0)
-                    if model.errorMessage != nil { Button("查看原因") { showingError = true } }
-                    if model.report != nil { Button("报告", action: actions.showReport) }
-                    if model.shareReady && !model.isBusy {
-                        Button(action: actions.shareResults) { Image(systemName: "square.and.arrow.up") }
-                            .disabled(model.sharing).help("共享结果").accessibilityLabel("共享结果")
-                    }
-                    secondaryActions
-                    primaryAction
-                }
-            }
-            if model.libraryMonitoring {
-                HStack {
-                    Text("正在监测图库").font(.caption).foregroundColor(.secondary)
-                    Button("停止监测", action: actions.toggleLibraryMonitoring).font(.caption)
-                }
-            }
-            if !layout.short && !model.deliverySummary.isEmpty {
-                Text(model.deliverySummary).font(.caption).foregroundColor(.secondary).lineLimit(2).help(model.deliverySummary)
-            } else if !layout.short && !model.librarySummary.isEmpty && !model.isBusy {
-                Text(model.librarySummary).font(.caption).foregroundColor(.secondary).lineLimit(1).help(model.librarySummary)
-            }
-            if !model.currentFile.isEmpty {
-                Text(model.currentFile).font(.callout).foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
-            } else if let report = model.report, !layout.short {
-                Text(report.summary).font(.callout).foregroundColor(.secondary).monospacedDigit()
+                .padding(.horizontal,16).padding(.vertical,8)
+                .frame(maxWidth:.infinity,minHeight:busy ? 60 : 36,alignment:.leading)
+                .background(InterfaceStyle.content)
+                .recordLayout("task-feedback")
+                .transition(.opacity)
             }
         }
-        .padding(.horizontal, layout.margin).padding(.vertical, 10)
-        .recordLayout("task-status")
-        .accessibilityElement(children: .contain)
+        .subtleAnimation(visible,duration:0.18)
+        .subtleAnimation(busy,duration:0.18)
+        .onChange(of:model.phase) { phase in
+            let generation = UUID(); completionGeneration = generation
+            completionVisible = phase == .completed
+            if completionVisible {
+                DispatchQueue.main.asyncAfter(deadline:.now() + 3.5) {
+                    if completionGeneration == generation { completionVisible = false }
+                }
+            }
+        }
+    }
+
+    private var taskProgress: some View {
+        Group {
+            if let progress = model.progress {
+                ProgressView(value:min(1,max(0,progress))).progressViewStyle(.linear)
+                    .subtleAnimation(progress,duration:0.10)
+            } else { ProgressView().progressViewStyle(.linear) }
+        }
+        .frame(height:6).tint(InterfaceStyle.accent)
+        .accessibilityLabel("任务进度")
+        .recordLayout("task-progress")
     }
 }

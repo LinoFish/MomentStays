@@ -33,7 +33,7 @@ artifacts/
 *.dmg
 
 # Local agent instructions, editor settings and personal development records.
-/AGENTS.md
+# Shared release instructions in AGENTS.md are versioned.
 /CLAUDE.md
 /GEMINI.md
 /.agents/

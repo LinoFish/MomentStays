@@ -7,9 +7,10 @@ enum TaskPhase: String {
 }
 
 enum PhotoState: String, CaseIterable {
-    case ready, inspect, converted, resumed, skipped, failed, `static`
+    case ready, manual, inspect, converted, resumed, skipped, failed, `static`
     var title: String {
         switch self {
+        case .manual: return "手动处理"
         case .ready: return "可转换"
         case .inspect: return "需检查"
         case .converted: return "已完成"
@@ -21,6 +22,7 @@ enum PhotoState: String, CaseIterable {
     }
     var symbol: String {
         switch self {
+        case .manual: return "hand.raised"
         case .ready: return "circle"
         case .inspect: return "exclamationmark.triangle"
         case .converted: return "checkmark.circle.fill"
@@ -47,6 +49,7 @@ struct PhotoQueueItem: Identifiable {
     var resultDetail: String?
     var id: String { source.path }
     var name: String { source.lastPathComponent }
+    var requiresManualFrame: Bool { cover == "未确定（需选帧）" }
     var state: PhotoState { resultState ?? initialState }
     var detail: String { resultDetail?.isEmpty == false ? resultDetail! : scanDetail }
 
@@ -54,8 +57,9 @@ struct PhotoQueueItem: Identifiable {
         if [.converted,.resumed].contains(state) { return .converted }
         if state == .static { return .static }
         if [.inspect,.failed].contains(state) { return .inspect }
+        if requiresManualFrame && settings.direction == .toApple && settings.manualCovers?[id] == nil { return .manual }
         if isMotion && cover == "未记录" && settings.direction == .toApple && settings.missingTime == .error &&
-            settings.exportMode != .auxiliaryOnly && settings.coverIndex(for:source) == nil { return .inspect }
+            settings.exportMode != .auxiliaryOnly && settings.coverIndex(for:source) == nil && settings.manualMidpoints?[id] != true { return .manual }
         return .ready
     }
 
@@ -98,11 +102,12 @@ struct ConversionReport {
 // All mutations are main-queue confined. No NSWindow, photo picker, or file dialog
 // is owned here; a future iOS host supplies its own platform actions/presenter.
 enum PhotoQueueScope: String, CaseIterable, Identifiable {
-    case ready, completed, all, still, attention
+    case ready, manual, completed, all, still, attention
     var id: String { rawValue }
     var title: String {
         switch self {
         case .all: return "全部"
+        case .manual: return "手动处理"
         case .ready: return "可转换"
         case .still: return "静态照片"
         case .completed: return "已转换"
@@ -112,6 +117,7 @@ enum PhotoQueueScope: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .all: return "photo.on.rectangle"
+        case .manual: return "hand.raised"
         case .ready: return "circle"
         case .still: return "photo"
         case .completed: return "checkmark.circle"
@@ -121,6 +127,7 @@ enum PhotoQueueScope: String, CaseIterable, Identifiable {
     var emptyTitle: String {
         switch self {
         case .all: return "照片会显示在这里"
+        case .manual: return "没有待手动处理的照片"
         case .ready: return "暂无可转换照片"
         case .still: return "当前来源中没有静态照片"
         case .completed: return "暂无已转换结果"
@@ -131,6 +138,7 @@ enum PhotoQueueScope: String, CaseIterable, Identifiable {
         let category = item.category(settings:settings)
         switch self {
         case .all: return true
+        case .manual: return category == .manual
         case .ready: return category == .ready
         case .still: return category == .static
         case .completed: return category == .converted
@@ -152,7 +160,69 @@ final class WorkspaceModel: ObservableObject {
         if scope != queueScope { followsConversionResults = false }
         queueScope = scope
     }
+    // Preview focus is independent of the global conversion selection.
     @Published var selection: String?
+    @Published private(set) var selectedIDs: Set<String> = []
+    @Published private(set) var hasExplicitSelection = false
+    @Published var manualPromptPresented = false
+    @Published private(set) var manualPreparation = false
+    private var pendingOutput: URL?
+    private var manualVersions: [String: SourceVersion] = [:]
+    private var selectionVersions: [String: SourceVersion] = [:]
+
+    func toggleSelection(_ item: PhotoQueueItem) {
+        selection = item.id
+        guard !isBusy, !sharing, item.isMotion else { return }
+        hasExplicitSelection = true
+        if selectedIDs.remove(item.id) == nil {
+            selectedIDs.insert(item.id)
+            selectionVersions[item.id] = SourceVersion.read(item.source)
+        } else { selectionVersions[item.id] = nil }
+    }
+    func clearSelection() {
+        guard !isBusy, !sharing else { return }
+        selectedIDs = []; selectionVersions = [:]; hasExplicitSelection = false
+    }
+    var manualItems: [PhotoQueueItem] { items.filter { category($0) == .manual } }
+    private var conversionItems: [PhotoQueueItem] {
+        items.filter { $0.isMotion && category($0) != .manual &&
+            (hasExplicitSelection ? selectedIDs.contains($0.id) : [.ready,.converted].contains(category($0))) }
+    }
+    func confirmManualMidpoint(_ item: PhotoQueueItem) {
+        guard !isBusy, !sharing, !item.requiresManualFrame, category(item) == .manual,
+              let version = SourceVersion.read(item.source), item.row.version == nil || item.row.version == version else { return }
+        manualVersions[item.id] = version
+        updateSettings { $0.manualMidpoints = ($0.manualMidpoints ?? [:]).merging([item.id:true],uniquingKeysWith:{ _,new in new }) }
+    }
+    func confirmManualFrame(_ choice: ManualCoverChoice, for item: PhotoQueueItem) {
+        guard !isBusy, !sharing, settings.direction == .toApple, item.requiresManualFrame,
+              let version = SourceVersion.read(item.source), version == item.row.version,
+              choice.source_version == version.manualSignature, choice.track_index == 0, choice.frame_index >= 0,
+              (try? NativeBatch.hashFile(item.source)) == choice.source_sha256,
+              items.contains(where:{ $0.id == item.id && $0.row.version == version }) else {
+            notice = "来源发生变化，请重新扫描并选帧"; return
+        }
+        manualVersions[item.id] = version
+        updateSettings {
+            $0.manualCovers = ($0.manualCovers ?? [:]).merging([item.id:choice],uniquingKeysWith:{ _,new in new })
+            $0.coverSelections?[item.id] = nil; $0.manualMidpoints?[item.id] = nil
+            $0.track = .primary; $0.exportMode = .livePhoto
+        }
+    }
+    func resolveManualPrompt(process: Bool?) {
+        manualPromptPresented = false
+        guard let process = process else { cancelManualPreparation(); return }
+        if process { manualPreparation = true }
+        else { launchConversion(outputOverride:pendingOutput, following:followsConversionResults) }
+    }
+    func cancelManualPreparation() {
+        manualPromptPresented = false; manualPreparation = false; pendingOutput = nil; followsConversionResults = false
+    }
+    func continueManualConversion() {
+        guard manualPreparation else { return }
+        // Unconfirmed items are skipped for this run only.
+        launchConversion(outputOverride:pendingOutput, following:followsConversionResults)
+    }
     @Published private(set) var status = "选择照片或文件夹，开始转换"
     @Published private(set) var notice: String?
     @Published private(set) var currentFile = ""
@@ -173,6 +243,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var sourceMenuRequested = false
     private(set) var isPreview = false
 
+    var prepareConversion: (ConversionSettings, URL) throws -> URL = { _, output in output }
     var onConversionFinished: (BatchOutcome, ConversionSettings) -> Void = { _, _ in }
     var presentExistingOutput: ExistingOutputPresenter = { _, _, reply in reply(.cancel) }
     var cancelPlatformActivity: () -> Void = {}
@@ -193,7 +264,7 @@ final class WorkspaceModel: ObservableObject {
     init(service: ConversionServing = ConversionService()) { self.service = service }
     var isBusy: Bool { phase.isBusy }
     var outputIsChosen: Bool { settings.destination != .ask && (settings.direction != .toApple || settings.outputConfirmed == true) && (settings.destination.usesCache || output != nil) }
-    var canStart: Bool { !isBusy && !sharing && scanComplete && outputIsChosen && items.contains { $0.isMotion } }
+    var canStart: Bool { !isBusy && !sharing && !manualPreparation && !manualPromptPresented && scanComplete && outputIsChosen && (!conversionItems.isEmpty || !manualItems.isEmpty) }
     var canSwitchDirection: Bool { !sharing && (!isBusy || phase == .scanning || phase == .projecting) }
     var canAppendSources: Bool { !sharing && !isPreview && (!isBusy || inspectionActive && [.scanning,.projecting,.stopping].contains(phase)) }
     var canRescan: Bool { !isBusy && !sharing && !sources.isEmpty && !isPreview }
@@ -209,7 +280,8 @@ final class WorkspaceModel: ObservableObject {
     func category(_ item: PhotoQueueItem) -> PhotoState { item.category(settings:settings) }
     var issueCount: Int { items.filter { category($0) == .inspect }.count }
 
-    func selectCover(_ index: Int?, for source: URL) {
+    func selectCover(_ index: Int?, for source: URL, expectedVersion: SourceVersion? = nil) {
+        guard expectedVersion == nil || SourceVersion.read(source) == expectedVersion else { notice = "来源发生变化，请重新扫描并选择封面"; return }
         guard !isBusy, !sharing, settings.direction == .toApple, index == nil || index! >= 0 else { return }
         let key = NativeBatch.normalized(source).path
         coverVersions[key] = index == nil ? nil : SourceVersion.read(source)
@@ -228,6 +300,8 @@ final class WorkspaceModel: ObservableObject {
         let directionChanged = next.direction != settings.direction
         guard !isBusy || directionChanged else { return }
         if directionChanged {
+            cancelManualPreparation(); selectedIDs = []; selectionVersions = [:]; hasExplicitSelection = false
+            manualVersions = [:]; next.manualMidpoints = nil; next.manualCovers = nil; next.coverSelections = nil; coverVersions = [:]
             outputChoices[settings.direction] = OutputChoice(destination:settings.destination,confirmed:settings.outputConfirmed,folder:output,albumID:settings.albumID,albumTitle:settings.albumTitle)
             if let saved = outputChoices[next.direction] {
                 next.destination = saved.destination; next.outputConfirmed = saved.confirmed
@@ -238,7 +312,7 @@ final class WorkspaceModel: ObservableObject {
             }
         }
         next.normalize()
-        let changed = next.options.json as NSDictionary != settings.options.json as NSDictionary || next.coverSelections != settings.coverSelections
+        let changed = next.options.json as NSDictionary != settings.options.json as NSDictionary || next.coverSelections != settings.coverSelections || next.manualMidpoints != settings.manualMidpoints || next.manualCovers != settings.manualCovers
         settings = next
         if changed {
             report = nil
@@ -258,7 +332,7 @@ final class WorkspaceModel: ObservableObject {
         output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction.exportsAndroid ? " Motion Photos" : " Live Photos"))
         items = []; selection = nil; report = nil; sourceOrigins = [:]
         settings.coverSelections = nil
-        coverVersions = [:]
+        coverVersions = [:]; manualVersions = [:]; settings.manualMidpoints = nil; settings.manualCovers = nil; clearSelection(); cancelManualPreparation()
         rescan()
     }
 
@@ -297,7 +371,7 @@ final class WorkspaceModel: ObservableObject {
         operation = UUID(); token.cancel(); service.clearInspections()
         sources = []; items = []; selection = nil; rowIndices = [:]; sourceOrigins = [:]; scanComplete = false
         sourceLabel = "尚未选择原片"; settings.coverSelections = nil
-        coverVersions = [:]
+        coverVersions = [:]; manualVersions = [:]; settings.manualMidpoints = nil; settings.manualCovers = nil; clearSelection(); cancelManualPreparation()
         phase = .idle; status = "选择照片或文件夹，开始转换"
         report = nil; errorMessage = nil; notice = nil; currentFile = ""; progress = nil
         deliverySummary = ""; librarySummary = ""; shareReady = false; detailExpanded = false
@@ -353,14 +427,19 @@ final class WorkspaceModel: ObservableObject {
         refresh(projection:false,preservingResults:preservingResults)
     }
     private func invalidateCoverSelections(_ sources:Set<String>) {
-        for source in sources { coverVersions.removeValue(forKey:source) }
+        for source in sources {
+            coverVersions.removeValue(forKey:source); manualVersions[source] = nil
+            settings.manualMidpoints?[source] = nil; settings.manualCovers?[source] = nil
+            selectedIDs.remove(source); selectionVersions[source] = nil
+        }
         guard var choices = settings.coverSelections else { return }
         let count = choices.count
         for source in sources { choices.removeValue(forKey:source) }
         if choices.count != count { settings.coverSelections = choices.isEmpty ? nil : choices }
     }
     private func refresh(projection:Bool, preservingResults:Bool) {
-        let versions = Dictionary(items.compactMap { item in item.row.version.map { (item.id,$0) } },uniquingKeysWith:{ first,_ in first }).merging(coverVersions,uniquingKeysWith:{ _,cover in cover })
+        cancelManualPreparation()
+        let versions = Dictionary(items.compactMap { item in item.row.version.map { (item.id,$0) } },uniquingKeysWith:{ first,_ in first }).merging(coverVersions,uniquingKeysWith:{ _,cover in cover }).merging(manualVersions,uniquingKeysWith:{ _,new in new }).merging(selectionVersions,uniquingKeysWith:{ _,new in new })
         let changed = Set(versions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) != $0.value ? $0.key : nil })
         invalidateCoverSelections(changed)
         func changedSources(_ rows:[ScanRow]) -> Set<String> {
@@ -403,6 +482,9 @@ final class WorkspaceModel: ObservableObject {
                 if !currentToken.isCancelled { self.invalidateCoverSelections(Set(versions.keys).subtracting(rows.map { $0.source.path })) }
                 self.scanComplete = !currentToken.isCancelled
                 self.items = currentToken.isCancelled ? merge(rows).filter { $0.row.version == nil || SourceVersion.read($0.source) == $0.row.version } : rows.map(queueItem)
+                let valid = Set(self.items.filter { $0.isMotion }.map(\.id))
+                self.selectedIDs.formIntersection(valid)
+                self.invalidateCoverSelections(Set(self.manualVersions.keys).subtracting(valid))
                 self.rowIndices = Dictionary(self.items.enumerated().map { ($0.element.relative, $0.offset) }, uniquingKeysWith: { first, _ in first })
                 if !self.items.contains(where: { $0.id == self.selection }) { self.selection = nil }
                 self.phase = currentToken.isCancelled ? .stopped : .ready
@@ -414,16 +496,49 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func start(outputOverride: URL? = nil) {
-        guard canStart, !isPreview, let output = outputOverride ?? output else { return }
-        invalidateCoverSelections(Set(coverVersions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) != $0.value ? $0.key : nil }))
+        guard canStart, !isPreview, !manualPromptPresented, !manualPreparation else { return }
+        followsConversionResults = queueScope == .ready
+        if queueScope == .ready && !manualItems.isEmpty {
+            pendingOutput = outputOverride
+            queueScope = .manual // System navigation must not cancel result following.
+            manualPromptPresented = true
+            return
+        }
+        launchConversion(outputOverride:outputOverride, following:followsConversionResults)
+    }
+
+    private func launchConversion(outputOverride: URL?, following: Bool) {
+        guard !isBusy, !isPreview, let output = outputOverride ?? output else { return }
+        let versions = coverVersions.merging(manualVersions,uniquingKeysWith:{ _,new in new }).merging(selectionVersions,uniquingKeysWith:{ _,new in new })
+        let changed = Set(versions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) != $0.value ? $0.key : nil }).union(items.compactMap { item in
+            guard let version = item.row.version, SourceVersion.read(item.source) != version else { return nil }
+            return item.id
+        })
+        invalidateCoverSelections(changed)
+        if !changed.isEmpty { cancelManualPreparation(); notice = "来源发生变化，请重新扫描并确认选择"; return }
+        let targets = conversionItems
+        guard !targets.isEmpty else { cancelManualPreparation(); notice = "没有已选择且可转换的照片；未确认的手动项目保留在队列中"; return }
         do { try NativeBatch.validateOutput(sources: sources, output: output) }
         catch { errorMessage = error.localizedDescription; return }
-        followsConversionResults = queueScope == .ready
-        let capturedSettings = settings
-        let job = ConversionJob(sources: sources, output: output, options: capturedSettings.options, scanRows: items.map(\.row))
+        followsConversionResults = following
+        manualPreparation = false; pendingOutput = nil
+        var capturedSettings = settings
+        // Only confirmed unknown-cover sources enter this job. Known timestamps
+        // still take precedence in the engine; unconfirmed items never enter it.
+        if targets.contains(where:{ settings.manualMidpoints?[$0.id] == true }) { capturedSettings.missingTime = .midpoint }
+        if let base = try? NativeBatch.selection(targets.map(\.source)).base {
+            rowIndices = Dictionary(targets.compactMap { item in
+                guard let index = items.firstIndex(where:{ $0.id == item.id }), let relative = try? NativeBatch.relative(item.source,root:base) else { return nil }
+                return (relative,index)
+            },uniquingKeysWith:{ first,_ in first })
+        }
+        let destination: URL
+        do { destination = try prepareConversion(capturedSettings,output) }
+        catch { errorMessage = error.localizedDescription; return }
+        let job = ConversionJob(sources: targets.map(\.source), output: destination, options: capturedSettings.options, scanRows: targets.map(\.row))
         let id = begin(.converting, message: "正在准备转换…"), currentToken = token
         report = nil; progress = 0
-        for index in items.indices { items[index].resultState = nil; items[index].resultDetail = nil }
+        for index in items.indices where targets.contains(where:{ $0.id == items[index].id }) { items[index].resultState = nil; items[index].resultDetail = nil }
         service.run(job: job, token: currentToken, existingOutput: { [weak self] source, target, reply in
             guard let self = self, self.operation == id, !currentToken.isCancelled else { reply(.cancel); return }
             self.phase = .awaitingDecision; self.status = "等待处理已有输出"
@@ -509,6 +624,25 @@ final class WorkspaceModel: ObservableObject {
     }
 
     #if UI_DIAGNOSTICS
+    // Synthetic task states exercise toolbar availability without starting a job.
+    func configurePreviewTask(_ phase: TaskPhase, interactive: Bool) {
+        guard isPreview else { return }
+        self.phase = phase
+        progress = [.converting,.stopping].contains(phase) ? 0.375 : nil
+        currentFile = phase == .converting ? "城市夜景_12.jpg" : ""
+        switch phase {
+        case .scanning: status = "正在识别照片…"
+        case .converting: status = "已处理 12 / 32"
+        case .stopping: status = "正在停止，等待资源清理…"
+        case .stopped: status = "任务已停止"
+        case .delivering: status = "正在保存转换结果…"
+        case .failed: status = "任务未完成"; errorMessage = "示例错误：无法写入输出位置，可更改输出位置后重试。"
+        case .completed: status = "转换完成"
+        default: status = "正在准备照片…"
+        }
+        if interactive { isPreview = false }
+    }
+
     func loadPreviewLocations() {
         sourceLabel = "旅行照片与家庭相册_用于验证长来源名称截断显示"
         output = URL(fileURLWithPath:"/转换结果/旅行照片与家庭相册_用于验证长输出文件夹名称")

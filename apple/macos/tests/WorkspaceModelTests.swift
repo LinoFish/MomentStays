@@ -252,7 +252,7 @@ struct WorkspaceModelTests {
     static func navigationChecks(source: URL, row: ScanRow, root: URL) throws {
         try FileManager.default.createDirectory(at:root.appendingPathComponent("navigation-output"),withIntermediateDirectories:true)
         let order = PhotoQueueScope.allCases
-        check(order.firstIndex(of:.completed) == order.firstIndex(of:.ready)! + 1, "completed tab immediately follows ready")
+        check(order.firstIndex(of:.completed) == order.firstIndex(of:.ready)! + 2, "manual tab sits between ready and completed")
         for (start, switches, cancelled, expected) in [
             (PhotoQueueScope.ready, [PhotoQueueScope](), false, PhotoQueueScope.completed),
             (.all, [], false, .all), (.completed, [], false, .completed),
@@ -276,6 +276,68 @@ struct WorkspaceModelTests {
         }
     }
 
+    static func manualChecks(root: URL) throws {
+        let a = root.appendingPathComponent("input/manual-a.jpg"), b = root.appendingPathComponent("input/manual-b.jpg")
+        try Data([1]).write(to:a); try Data([2]).write(to:b)
+        let out = root.appendingPathComponent("manual-output")
+        try FileManager.default.createDirectory(at:out,withIntermediateDirectories:true)
+        func row(_ url:URL, missing:Bool) -> ScanRow {
+            ScanRow(source:url,relative:url.lastPathComponent,isMotion:true,hdr:"SDR",cover:missing ? "未记录" : "0.4 秒",detail:"fixture",version:SourceVersion.read(url))
+        }
+        let ra = row(a,missing:false), rb = row(b,missing:true)
+        func setup() -> (WorkspaceModel,ControlledService) {
+            let service = ControlledService()
+            let workspace = WorkspaceModel(service:service)
+            workspace.chooseSources([a,b]); service.scans[0].completion(.success([ra,rb])); workspace.setOutput(out)
+            return (workspace,service)
+        }
+        let (m,s) = setup()
+        var allocations = 0
+        m.prepareConversion = { _,output in allocations += 1; return output }
+        m.toggleSelection(m.items[0]); m.selectQueueScope(.manual); m.toggleSelection(m.items[1])
+        check(m.selectedIDs == Set([a.path,b.path]) && m.selection == b.path,"ordinary clicks accumulate across tabs independently of focus")
+        m.toggleSelection(m.items[1]); m.selectQueueScope(.ready)
+        check(m.selectedIDs == [a.path],"single deselection retains hidden selections")
+        m.start(); check(m.queueScope == .manual && m.manualPromptPresented && s.runs.isEmpty,"preflight navigates before prompting")
+        m.resolveManualPrompt(process:nil)
+        check(s.runs.isEmpty && allocations == 0 && !m.manualPreparation && m.selectedIDs == [a.path],"cancel never starts conversion or clears selection")
+        m.selectQueueScope(.ready); m.start(); m.resolveManualPrompt(process:false)
+        check(s.runs.count == 1 && allocations == 1 && s.runs[0].job.sources == [a] && m.manualItems.count == 1,"skip includes only selected ready sources and retains manual input")
+        s.runs[0].completion(.success(BatchOutcome(counts:[:],report:nil,reportData:[:],cancelled:false)))
+        check(m.queueScope == .completed,"system preflight navigation preserves completion following")
+        let (only,os) = setup()
+        only.toggleSelection(only.items[1]); only.start(); only.resolveManualPrompt(process:false)
+        check(os.runs.isEmpty && only.selectedIDs == [b.path],"only manual selection cannot fall back to all ready")
+        only.selectQueueScope(.ready); only.start(); only.resolveManualPrompt(process:true)
+        check(!only.canStart,"manual preparation blocks duplicate primary-action task allocation")
+        only.start(); check(os.runs.isEmpty,"duplicate start cannot bypass manual confirmation")
+        only.confirmManualMidpoint(only.items[1]); only.continueManualConversion()
+        check(os.runs.count == 1 && os.runs[0].job.sources == [b] && os.runs[0].job.options.missingTime == "midpoint","confirmed manual strategy reaches the real batch with exact selected sources")
+        only.selectQueueScope(.all)
+        os.runs[0].completion(.success(BatchOutcome(counts:["failed":1],report:nil,reportData:[:],cancelled:false)))
+        check(only.queueScope == .all,"user navigation during manual conversion disables following")
+        let (both,bs) = setup()
+        both.toggleSelection(both.items[0]); both.toggleSelection(both.items[1]); both.start(); both.resolveManualPrompt(process:true)
+        both.confirmManualMidpoint(both.items[1]); both.continueManualConversion()
+        check(Set(bs.runs[0].job.sources) == Set([a,b]),"manual processing preserves selected ready sources")
+        bs.runs[0].completion(.success(BatchOutcome(counts:[:],report:nil,reportData:[:],cancelled:true)))
+        both.rescan(); bs.scans.last!.completion(.success([ra,rb]))
+        check(both.selectedIDs.count == 2 && both.manualItems.isEmpty,"same-version rescan preserves selections and manual policy")
+        try Data([2,3]).write(to:b)
+        both.rescan(); bs.scans.last!.completion(.success([ra,row(b,missing:true)]))
+        check(both.selectedIDs == [a.path] && both.manualItems.count == 1,"source change invalidates only affected selection and manual policy")
+        both.rescan(); bs.scans.last!.completion(.success([row(b,missing:true)]))
+        check(both.selectedIDs.isEmpty && both.hasExplicitSelection,"deleted selected source never silently restores default all")
+        let (empty,es) = setup()
+        empty.toggleSelection(empty.items[0]); empty.toggleSelection(empty.items[0]); empty.start(); empty.resolveManualPrompt(process:false)
+        check(es.runs.isEmpty && empty.hasExplicitSelection,"explicit empty selection never converts the full queue")
+        let (stale,ss) = setup()
+        stale.start(); stale.resolveManualPrompt(process:true); stale.confirmManualMidpoint(stale.items[1])
+        try Data([9]).write(to:b)
+        stale.continueManualConversion()
+        check(ss.runs.isEmpty && stale.notice != nil,"late source changes block an already confirmed manual transaction")
+    }
+
     static func main() throws {
         // Evaluate fetch predicates without requesting permission or accessing a real library.
         for direction: ConversionDirection in [.toApple,.toAndroid] {
@@ -292,6 +354,12 @@ struct WorkspaceModelTests {
             check(!options.predicate!.evaluate(with: ["mediaType": PHAssetMediaType.video.rawValue, "mediaSubtypes": live]),
                 "standalone videos are excluded from photo scanning")
         }
+        check(AppName.display(languages:["en-US"]) == "MomentStays" && AppName.display(languages:["fr"]) == "MomentStays", "English and unsupported language product fallback")
+        check(AppName.display(languages:["zh-Hans"]) == "留刻" && AppName.display(languages:["zh-Hant-TW"]) == "留刻", "all Chinese language product names")
+        let oldPreferences:[String:Any] = ["old-only":7,"shared":"old"]
+        let migrated = AppIdentityMigration.merged(previous:oldPreferences,current:["shared":"new"],oldID:"old")
+        check(migrated["old-only"] as? Int == 7 && migrated["shared"] as? String == "new" && oldPreferences["shared"] as? String == "old", "migration copies missing preferences without overwriting either domain")
+        check(AppIdentityMigration.merged(previous:["later":1],current:migrated,oldID:"old")["later"] == nil, "identity migration is traceable and idempotent")
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("motionlive-model-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("input"), withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -305,7 +373,7 @@ struct WorkspaceModelTests {
         check(PhotoQueueItem(unknownRow).category(settings:ConversionSettings()) == .inspect,"notMotion text alone cannot prove static")
         let missingRow = ScanRow(source:source,relative:"test.jpg",isMotion:true,hdr:"SDR",cover:"未记录",detail:"missing")
         var relaxed = ConversionSettings(); relaxed.missingTime = .midpoint
-        check(PhotoQueueItem(missingRow).category(settings:ConversionSettings()) == .inspect && PhotoQueueItem(missingRow).category(settings:relaxed) == .ready,"cover classification follows the selected policy")
+        check(PhotoQueueItem(missingRow).category(settings:ConversionSettings()) == .manual && PhotoQueueItem(missingRow).category(settings:relaxed) == .ready,"cover classification follows the selected policy")
         var transfer = ConversionSettings()
         transfer.direction = .androidToAndroid; transfer.vendor = .samsung; transfer.container = .heic
         transfer.exportMode = .withCandidates; transfer.missingTime = .midpoint
@@ -418,6 +486,7 @@ struct WorkspaceModelTests {
         workspace.finishLibraryImport(id: UUID(), urls: [], error: Failure("stale"), output: root)
         check(workspace.errorMessage == nil, "stale library callback ignored")
 
+        try manualChecks(root:root)
         try navigationChecks(source:source,row:row,root:root)
         try deliveryChecks(root: root, workspace: workspace)
 
@@ -433,8 +502,85 @@ struct WorkspaceModelTests {
         if CommandLine.arguments.count > 1 {
             try batchPlanningChecks(source:URL(fileURLWithPath:CommandLine.arguments[1]),root:root)
             try integration(source: URL(fileURLWithPath: CommandLine.arguments[1]), root: root)
+            try manualIntegration(source: URL(fileURLWithPath: CommandLine.arguments[1]), root: root)
         }
+        if CommandLine.arguments.count > 2 { try legacyIntegration(source:URL(fileURLWithPath:CommandLine.arguments[2]),root:root) }
         print("PASS \(checks) workspace state, cancellation and integration checks")
+    }
+
+    static func legacyIntegration(source:URL, root:URL) throws {
+        let input = root.appendingPathComponent("legacy-source")
+        try FileManager.default.createDirectory(at:input,withIntermediateDirectories:true)
+        let copy = input.appendingPathComponent("legacy.jpg")
+        try FileManager.default.copyItem(at:source,to:copy)
+        let model = WorkspaceModel(); model.chooseSources([copy]); pump(until:{ !model.isBusy })
+        check(model.manualItems.count == 1 && model.items.first?.requiresManualFrame == true,"production cache scans legacy input into the real manual tab")
+        let item = model.items[0]
+        model.confirmManualMidpoint(item)
+        check(model.settings.manualMidpoints?[item.id] == nil && model.manualItems.count == 1,"legacy input cannot use midpoint approval")
+        let output = root.appendingPathComponent("legacy-output")
+        try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true); model.setOutput(output)
+        let frames = try RustCore.engine(["mode":"manual-cover-frames","input":copy.path,"output":root.appendingPathComponent("legacy-preview.mp4").path])
+        let choice = ManualCoverChoice(source_sha256:frames["source_sha256"] as! String,source_version:frames["source_version"] as! String,track_index:0,frame_index:0)
+        model.toggleSelection(item); model.start(); model.resolveManualPrompt(process:nil)
+        check(model.settings.manualCovers == nil && model.report == nil,"cancelled legacy preflight confirms nothing")
+        model.selectQueueScope(.ready); model.start(); model.resolveManualPrompt(process:true)
+        model.confirmManualFrame(choice,for:item)
+        check(model.manualItems.isEmpty && model.settings.manualCovers?[item.id] == choice && model.selectedIDs == [item.id],"explicit main-frame confirmation retains global selection")
+        model.continueManualConversion(); pump(until:{ !model.isBusy })
+        if model.report?.counts["converted"] != 1 {
+            fputs("Legacy model failure: phase=\(model.phase) notice=\(model.notice ?? "") error=\(model.errorMessage ?? "") entries=\(model.report?.entries.map(\.detail) ?? [])\n",stderr)
+        }
+        check(model.report?.counts["converted"] == 1,"App model converts the selected legacy main frame through Rust")
+        guard let report = model.report else { throw Failure("missing legacy report") }
+        let entry = report.entries.first!
+        let outcome = BatchOutcome(counts:["converted":1],report:nil,reportData:["files":[["status":"converted","source":item.id,"output":entry.output!]]],cancelled:false)
+        // Real outcomes carry all archive names; reconstruct from the mandatory manifest.
+        let manifest = try RustCore.engine(["mode":"verify","input":entry.output!])
+        let delivered = try DeliveryStore.collect(BatchOutcome(counts:outcome.counts,report:nil,reportData:["files":[["status":"converted","source":item.id,"output":entry.output!,"output_files":manifest["output_files"]!]]],cancelled:false),settings:model.settings,origins:[:])
+        check(delivered.count == 1 && delivered[0].files.count == 2 && delivered[0].hashes.count > 4,"Photos resources exclude hash-protected original archives")
+        try delivered[0].verify()
+        let shareStore = DeliveryStore(root:root.appendingPathComponent("legacy-share"))
+        var task = DeliveryTask(settings:model.settings,output:output.path,results:delivered)
+        let share = try shareStore.stageShare(&task)
+        check(share.count == 1 && share[0].pathExtension == "zip","legacy sharing keeps the media, manifest and original archives together")
+        try FileManager.default.removeItem(at:URL(fileURLWithPath:entry.output!).appendingPathComponent("source-tail.bin"))
+        do { try delivered[0].verify(); check(false,"missing sidecar must reject delivery") } catch { check(true,"missing legacy sidecar blocks recent delivery") }
+        model.rescan(); pump(until:{ !model.isBusy }); check(model.settings.manualCovers?[item.id] == choice,"unchanged rescan preserves selected frame")
+        try (Data(contentsOf:copy) + Data([0])).write(to:copy)
+        model.rescan(); pump(until:{ !model.isBusy })
+        check(model.settings.manualCovers?[item.id] == nil && model.selectedIDs.isEmpty,"changed legacy source drops manual frame and conversion selection")
+        model.confirmManualFrame(choice,for:item)
+        check(model.settings.manualCovers?[item.id] == nil,"stale frame callback cannot restore a selection")
+    }
+
+    static func manualIntegration(source:URL, root:URL) throws {
+        let parsed = try PhotoFormat.parse(Array(Data(contentsOf:source)))
+        let input = root.appendingPathComponent("manual-real-input")
+        try FileManager.default.createDirectory(at:input,withIntermediateDirectories:true)
+        let unknown = input.appendingPathComponent("unknown.jpg")
+        try Data(fixtureMotion(still:parsed.still,video:parsed.video,options:AndroidOptions(),time:-1,frame:0)).write(to:unknown)
+        let original = try NativeBatch.hashFile(unknown)
+        let model = WorkspaceModel()
+        model.updateSettings { $0.exportDataFiles = true }
+        model.chooseSources([unknown]); pump(until:{ !model.isBusy })
+        check(model.manualItems.count == 1,"real supported unknown timestamp enters manual processing")
+        let output = root.appendingPathComponent("manual-real-output")
+        try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true); model.setOutput(output)
+        model.toggleSelection(model.items[0]); model.start(); model.resolveManualPrompt(process:true)
+        model.confirmManualMidpoint(model.items[0]); model.continueManualConversion(); pump(until:{ !model.isBusy })
+        check(model.report?.counts["converted"] == 1 && model.queueScope == .completed,"real manual confirmation converts through production Rust engine")
+        check(try! NativeBatch.hashFile(unknown) == original,"manual processing retains the original source")
+        let pair = output.appendingPathComponent("unknown.jpg.livephoto")
+        let still = try FileManager.default.contentsOfDirectory(at:pair,includingPropertiesForKeys:nil).first { $0.pathExtension == "jpg" }!
+        let stillBytes = Array(try Data(contentsOf:still))
+        check(try! PhotoFormat.codingHash(stillBytes) == PhotoFormat.codingHash(parsed.still),"manual midpoint retains original static image coding")
+        var options = model.settings.options; options.missingTime = "midpoint"
+        let resumed = try NativeBatch.run(sources:[unknown],output:output,options:options,token:StopToken()) { _ in }
+        check(resumed.counts["resumed"] == 1,"confirmed manual conversion resumes its published output")
+        model.presentExistingOutput = { _,_,reply in reply(.overwrite) }
+        model.selectQueueScope(.ready); model.start(); pump(until:{ !model.isBusy })
+        check(model.report?.counts["converted"] == 1,"manual output supports the App overwrite/retry path")
     }
 
     static func integration(source: URL, root: URL) throws {

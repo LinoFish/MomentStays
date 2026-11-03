@@ -63,6 +63,8 @@ pub struct ConversionOptions {
     /// Normalized source path -> candidate index.
     pub cover_selections: BTreeMap<String, i64>,
     pub candidate_delivery: String,
+    pub manual_cover: Option<crate::engine::manual::Selection>,
+    pub manual_covers: BTreeMap<String, crate::engine::manual::Selection>,
 }
 
 impl Default for ConversionOptions {
@@ -80,6 +82,8 @@ impl Default for ConversionOptions {
             cover_index: None,
             cover_selections: BTreeMap::new(),
             candidate_delivery: "static".into(),
+            manual_cover: None,
+            manual_covers: BTreeMap::new(),
         }
     }
 }
@@ -133,6 +137,9 @@ impl ConversionOptions {
                 Value::from(self.candidate_delivery.clone()),
             );
         }
+        if let Some(c) = &self.manual_cover {
+            m.insert("manual_cover".into(), c.json());
+        }
         Value::Object(m)
     }
 
@@ -146,7 +153,12 @@ impl ConversionOptions {
         if let Some(m) = req["cover_selections"].as_object() {
             for (k, v) in m {
                 if let Some(i) = v.as_i64() {
-                    selections.insert(k.clone(), i);
+                    selections.insert(
+                        crate::engine::paths::normalized(std::path::Path::new(k))
+                            .to_string_lossy()
+                            .into_owned(),
+                        i,
+                    );
                 }
             }
         }
@@ -170,6 +182,24 @@ impl ConversionOptions {
             cover_index: req["cover_candidate_index"].as_i64(),
             cover_selections: selections,
             candidate_delivery: s("candidate_delivery", "static"),
+            manual_cover: crate::engine::manual::Selection::from_json(&req["manual_cover"]),
+            manual_covers: req["manual_covers"]
+                .as_object()
+                .map(|m| {
+                    m.iter()
+                        .filter_map(|(k, v)| {
+                            crate::engine::manual::Selection::from_json(v).map(|s| {
+                                (
+                                    crate::engine::paths::normalized(std::path::Path::new(k))
+                                        .to_string_lossy()
+                                        .into_owned(),
+                                    s,
+                                )
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 }
