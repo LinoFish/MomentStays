@@ -170,17 +170,50 @@ pub fn frames(path: &Path, output: &Path) -> Result<Value> {
     let video = photo.video(&data);
     let movie = mp4::Movie::parse(video)?;
     let count = crate::cover::sorted_presentation(&movie.video(0)?.samples).len();
-    let frames: Vec<Value> = (0..count).filter_map(|index| {
-        crate::live::resolve_cover_in(video,&movie,crate::model::Cover::Frame(index as i64),crate::live::TimeDomain::Presentation,0)
-            .ok().map(|m|json!({"frame_index":index,"presented_us":m.marker_us,"media_us":m.frame_time_us}))
+    let visible: Vec<crate::live::CoverMatch> = (0..count).filter_map(|index| {
+        crate::live::resolve_cover_in(video,&movie,crate::model::Cover::Frame(index as i64),crate::live::TimeDomain::Presentation,0).ok()
     }).collect();
-    if frames.is_empty() || stamp != version(path)? {
+    if visible.is_empty() || stamp != version(path)? {
         return Err(Error::new("来源已变化或没有可选画面"));
     }
+    let frames: Vec<Value> = visible.iter().map(|m|json!({"frame_index":m.frame,"presented_us":m.marker_us,"media_us":m.frame_time_us})).collect();
+    let (hints, issues, raw) = legacy_hints(&data,video,&movie,&visible)?;
+    if stamp != version(path)? { return Err(Error::new("来源已变化，请重新读取候选")); }
     crate::engine::write(output, video)?;
-    Ok(
-        json!({"source_sha256":crate::sha256_hex(&data),"source_version":stamp,"track_index":0,"frames":frames}),
-    )
+    Ok(json!({"source_sha256":crate::sha256_hex(&data),"source_version":stamp,"track_index":0,
+        "frames":frames,"source_hints":hints,"hint_issues":issues,"raw_hint_field":raw,
+        "hint_policy":"unconfirmed-millisecond-hypotheses; media/presentation domains unverified"}))
+}
+
+// Only hypotheses from bytes the source actually contains. Neither unit nor
+// domain of the legacy pair is known. Never feed these into default conversion.
+fn legacy_hints(data: &[u8], video: &[u8], movie: &mp4::Movie,
+                visible: &[crate::live::CoverMatch]) -> Result<(Vec<Value>,Vec<Value>,String)> {
+    use crate::live::{resolve_cover_in,TimeDomain};
+    let raw = field(&data[data.len()-40..data.len()-20])?.to_owned();
+    let mut grouped = std::collections::BTreeMap::<(i64,usize),Vec<Value>>::new();
+    let mut issues = Vec::new();
+    for (component,value) in raw.split(':').enumerate() {
+        let assumed = number(value)?.checked_mul(1000).and_then(|n|i64::try_from(n).ok());
+        for (domain,name) in [(TimeDomain::Presentation,"presentation"),(TimeDomain::Media,"media")] {
+            let origin = json!({"kind":"legacy-huawei-40-pair","raw_field":raw,"component":component+1,
+                "raw_value":value,"interpretation":"milliseconds-hypothesis","time_domain":name,"assumed_us":assumed});
+            let result = assumed.ok_or_else(||Error::new("源字段按毫秒尝试时超出范围")).and_then(|us| {
+                let mut times = visible.iter().map(|m| if domain == TimeDomain::Media {m.frame_time_us} else {m.marker_us});
+                let low = times.next().unwrap_or(0);
+                let (low,high) = times.fold((low,low),|(lo,hi),t|(lo.min(t),hi.max(t)));
+                if us < low || us > high { return Err(Error::new("源字段的可能时间超出可见采样范围")); }
+                resolve_cover_in(video,movie,crate::model::Cover::Time(us),domain,0)
+            });
+            match result {
+                Ok(m) => grouped.entry((m.marker_us,m.frame)).or_default().push(origin),
+                Err(e) => issues.push(json!({"source":origin,"issue":e.0})),
+            }
+        }
+    }
+    let hints = grouped.into_iter().map(|((time,frame),sources)|json!({"frame_index":frame,
+        "presented_us":time,"verified":false,"sources":sources})).collect();
+    Ok((hints,issues,raw))
 }
 
 /// All source bytes are reversible, including the original MP4 container. These

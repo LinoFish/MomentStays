@@ -288,7 +288,7 @@ struct WorkspaceModelTests {
         func setup() -> (WorkspaceModel,ControlledService) {
             let service = ControlledService()
             let workspace = WorkspaceModel(service:service)
-            workspace.chooseSources([a,b]); service.scans[0].completion(.success([ra,rb])); workspace.setOutput(out)
+            workspace.chooseSources([a,b]); service.scans[0].completion(.success([row(a,missing:false),row(b,missing:true)])); workspace.setOutput(out)
             return (workspace,service)
         }
         let (m,s) = setup()
@@ -301,12 +301,12 @@ struct WorkspaceModelTests {
         m.start(); check(m.queueScope == .manual && m.manualPromptPresented && s.runs.isEmpty,"preflight navigates before prompting")
         m.resolveManualPrompt(process:nil)
         check(s.runs.isEmpty && allocations == 0 && !m.manualPreparation && m.selectedIDs == [a.path],"cancel never starts conversion or clears selection")
-        m.selectQueueScope(.ready); m.start(); m.resolveManualPrompt(process:false)
+        m.selectQueueScope(.ready); m.start(); m.resolveManualPrompt(process:false); RunLoop.current.run(until:Date(timeIntervalSinceNow:0.02))
         check(s.runs.count == 1 && allocations == 1 && s.runs[0].job.sources == [a] && m.manualItems.count == 1,"skip includes only selected ready sources and retains manual input")
         s.runs[0].completion(.success(BatchOutcome(counts:[:],report:nil,reportData:[:],cancelled:false)))
         check(m.queueScope == .completed,"system preflight navigation preserves completion following")
         let (only,os) = setup()
-        only.toggleSelection(only.items[1]); only.start(); only.resolveManualPrompt(process:false)
+        only.toggleSelection(only.items[1]); only.start(); only.resolveManualPrompt(process:false); RunLoop.current.run(until:Date(timeIntervalSinceNow:0.02))
         check(os.runs.isEmpty && only.selectedIDs == [b.path],"only manual selection cannot fall back to all ready")
         only.selectQueueScope(.ready); only.start(); only.resolveManualPrompt(process:true)
         check(!only.canStart,"manual preparation blocks duplicate primary-action task allocation")
@@ -329,8 +329,53 @@ struct WorkspaceModelTests {
         both.rescan(); bs.scans.last!.completion(.success([row(b,missing:true)]))
         check(both.selectedIDs.isEmpty && both.hasExplicitSelection,"deleted selected source never silently restores default all")
         let (empty,es) = setup()
-        empty.toggleSelection(empty.items[0]); empty.toggleSelection(empty.items[0]); empty.start(); empty.resolveManualPrompt(process:false)
+        empty.toggleSelection(empty.items[0]); empty.toggleSelection(empty.items[0]); empty.start(); empty.resolveManualPrompt(process:false); RunLoop.current.run(until:Date(timeIntervalSinceNow:0.02))
         check(es.runs.isEmpty && empty.hasExplicitSelection,"explicit empty selection never converts the full queue")
+        for dismissedFirst in [true,false] {
+            let (life,ls) = setup()
+            life.toggleSelection(life.items[0]); life.toggleSelection(life.items[1])
+            life.start(outputOverride:out)
+            if dismissedFirst { life.manualPromptPresented = false }
+            life.resolveManualPrompt(process:false)
+            if !dismissedFirst { life.manualPromptPresented = false }
+            check(ls.runs.isEmpty && !life.canStart && life.manualDecisionPending,"skip waits until the alert event completes without a duplicate start")
+            life.resolveManualPrompt(process:nil) // A duplicate dismissal cannot cancel an answered plan.
+            pump(until:{ !ls.runs.isEmpty })
+            check(ls.runs.count == 1 && ls.runs[0].job.sources == [a] && life.selectedIDs == Set([a.path,b.path]),"dismiss ordering preserves exact ready plan and hidden selection")
+        }
+        let (unrelated,us) = setup()
+        unrelated.start(); try Data([2,3,4]).write(to:b)
+        unrelated.manualPromptPresented = false
+        unrelated.resolveManualPrompt(process:false); pump(until:{ !us.runs.isEmpty })
+        check(us.runs[0].job.sources == [a],"a changed skipped manual source cannot block unchanged ready targets")
+        let (aborted,aservice) = setup()
+        aborted.start(); aborted.manualPromptPresented = false; aborted.resolveManualPrompt(process:nil)
+        RunLoop.current.run(until:Date(timeIntervalSinceNow:0.02))
+        check(aservice.runs.isEmpty && !aborted.manualPreparation,"native dismissal plus explicit cancel never starts a job")
+        let (cap,_) = setup()
+        var pending = [(Bool)->Void]()
+        cap.inspectCoverCandidates = { _,reply in pending.append(reply) }
+        let entry = cap.items[0]
+        cap.requestCoverCandidates(entry)
+        check(!cap.hasCoverCandidates(entry),"loading capability never exposes an empty cover action")
+        pending[0](true)
+        check(cap.hasCoverCandidates(entry),"only actual auxiliary candidates expose the cover action")
+        cap.requestCoverCandidates(entry)
+        check(pending.count == 1,"same-version capability reuses metadata without repeated decoding")
+        cap.updateSettings { $0.direction = .androidToAndroid }
+        check(!cap.hasCoverCandidates(entry),"direction invalidates candidate capability")
+        pending[0](true)
+        check(!cap.hasCoverCandidates(entry),"stale capability callback cannot cross direction")
+        let (none,_) = setup()
+        none.inspectCoverCandidates = { _,reply in reply(false) }
+        none.requestCoverCandidates(none.items[0])
+        check(!none.hasCoverCandidates(none.items[0]),"a decodable main video alone never exposes a cover action")
+        let (late,_) = setup()
+        var lateReply: ((Bool)->Void)?
+        late.inspectCoverCandidates = { _,reply in lateReply=reply }
+        let lateItem=late.items[0]; late.toggleSelection(lateItem); late.requestCoverCandidates(lateItem)
+        try Data([7,8,9]).write(to:a);lateReply?(true)
+        check(!late.hasCoverCandidates(lateItem) && late.selectedIDs == [a.path],"late metadata cannot resurrect a changed source capability or mutate selection")
         let (stale,ss) = setup()
         stale.start(); stale.resolveManualPrompt(process:true); stale.confirmManualMidpoint(stale.items[1])
         try Data([9]).write(to:b)

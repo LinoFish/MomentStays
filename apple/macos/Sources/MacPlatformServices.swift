@@ -317,7 +317,7 @@ final class MacPlatformServices: NSObject {
         libraryMonitor = monitor; lastScope = scope; model.libraryMonitoring = true
     }
     private func drainLibraryUpdates() {
-        guard model.libraryMonitoring, !model.isBusy, !model.sharing, !autoStartPending, libraryPicker == nil,
+        guard model.libraryMonitoring, !model.manualDecisionPending, !model.isBusy, !model.sharing, !autoStartPending, libraryPicker == nil,
               window?.attachedSheet == nil, let scope = lastScope, scope.direction == model.settings.direction,
               !pendingAssets.isEmpty else { return }
         guard PHPhotoLibrary.authorizationStatus(for: .readWrite) == .authorized else {

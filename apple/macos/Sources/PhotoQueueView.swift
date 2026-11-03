@@ -25,7 +25,7 @@ struct PhotoQueueView: View {
             let layout = QueueLayout(width: geometry.size.width)
             queueContent(layout)
                 .sheet(item:$coverEditor) { item in
-                    coverSheet(item,width:min(480,max(320,geometry.size.width - 32)))
+                    coverSheet(item,size:geometry.size)
                 }
                 .alert("有照片需要手动处理", isPresented:$model.manualPromptPresented) {
                     Button("处理") { model.resolveManualPrompt(process:true) }
@@ -79,26 +79,30 @@ struct PhotoQueueView: View {
             .recordLayout("queue-scope-" + scope.rawValue)
     }
 
-    @ViewBuilder private func coverSheet(_ item: PhotoQueueItem, width: CGFloat) -> some View {
+    @ViewBuilder private func coverSheet(_ item: PhotoQueueItem, size: CGSize) -> some View {
         if item.requiresManualFrame {
-            ManualMainFrameEditor(item:item,confirmed:model.settings.manualCovers?[item.id],
+            ManualMainFrameEditor(item:item,confirmed:model.settings.manualCovers?[item.id],availableSize:size,
                 confirm:{ model.confirmManualFrame($0,for:item); coverEditor = nil },cancel:{ coverEditor = nil })
-        } else { VStack(alignment:.leading,spacing:12) {
-                HStack {
-                    Text("选择封面").font(.headline)
-                    Spacer()
-                    Button("完成") { coverEditor = nil }.keyboardShortcut(.defaultAction)
+        } else {
+            let width = min(620,max(320,size.width-32))
+            let height = min(560,max(360,size.height-24))
+            VStack(alignment:.leading,spacing:12) {
+                Text("选择封面").font(.headline)
+                Text(item.name).lineLimit(2).truncationMode(.middle).help(item.name)
+                ScrollView {
+                    VStack(alignment:.leading,spacing:12) {
+                        manualControls(item)
+                        PhotoMotionPreview(item:item,direction:model.settings.direction.rawValue,timeDomain:model.settings.timeDomain.rawValue,
+                            isDemo:model.isPreview,height:min(260,max(140,height*0.45)),select:{},selectedCover:model.settings.coverIndex(for:item.source),
+                            chooseCover:{ model.selectCover($0,for:item.source,expectedVersion:item.row.version) },allowsCoverSelection:!model.isBusy && !model.sharing,
+                            showsCandidateStatus:true)
+                    }.frame(maxWidth:.infinity)
                 }
-                Text(item.name).lineLimit(1).truncationMode(.middle)
-                manualControls(item)
-                PhotoMotionPreview(item:item,direction:model.settings.direction.rawValue,timeDomain:model.settings.timeDomain.rawValue,
-                    isDemo:model.isPreview,height:short ? 180 : 260,select:{},selectedCover:model.settings.coverIndex(for:item.source),
-                    chooseCover:{ model.selectCover($0,for:item.source,expectedVersion:item.row.version) },allowsCoverSelection:!model.isBusy && !model.sharing,
-                    showsCandidateStatus:true)
-        }.padding(20).frame(width:width)
-            .tint(InterfaceStyle.accent).accentColor(InterfaceStyle.accent)
-            .recordLayout("cover-editor")
-            .dismissOnEscape { coverEditor = nil }
+                Divider()
+                HStack { Spacer(); Button("完成") { coverEditor = nil }.keyboardShortcut(.defaultAction) }
+            }.padding(20).frame(width:width,height:height)
+                .tint(InterfaceStyle.accent).accentColor(InterfaceStyle.accent)
+                .recordLayout("cover-editor").dismissOnEscape { coverEditor = nil }
         }
     }
 
@@ -128,6 +132,7 @@ struct PhotoQueueView: View {
                             }.contentShape(Rectangle())
                         }.buttonStyle(.plain)
                             .accessibilityAddTraits(model.selectedIDs.contains(item.id) ? .isSelected : [])
+                            .task(id:item.id + model.settings.direction.rawValue + (item.row.version?.manualSignature ?? "")) { model.requestCoverCandidates(item) }
                             .listRowInsets(EdgeInsets(top: layout.twoLines ? 7 : 4, leading: 12, bottom: layout.twoLines ? 7 : 4, trailing: 12))
                             .contextMenu { itemActions(item) }
                     }
@@ -163,6 +168,7 @@ struct PhotoQueueView: View {
                         .disabled(model.isBusy || model.sharing || !item.isMotion)
                     Text(item.detail).font(.callout).textSelection(.enabled)
                 }.padding(16).recordLayout("preview-photo")
+                    .task(id:item.id + model.settings.direction.rawValue + (item.row.version?.manualSignature ?? "")) { model.requestCoverCandidates(item) }
             } else { emptyState }
         }.frame(maxWidth:.infinity,maxHeight:.infinity)
             .background(InterfaceStyle.content).recordLayout("preview")
@@ -290,6 +296,7 @@ struct PhotoQueueView: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(model.selectedIDs.contains(item.id) ? .isSelected : [])
         .accessibilityLabel(item.name + "，" + model.category(item).title + "，" + item.hdr)
+        .task(id:item.id + model.settings.direction.rawValue + (item.row.version?.manualSignature ?? "")) { model.requestCoverCandidates(item) }
         .accessibilityHint(item.isMotion ? "点击累加选择，再次点击取消此项；使用预览查看动态画面" : "点击查看文件详情")
     }
 
@@ -334,7 +341,7 @@ struct PhotoQueueView: View {
     }
 
     private func canChooseCover(_ item: PhotoQueueItem) -> Bool {
-        item.isMotion && !item.requiresManualFrame && model.settings.direction == .toApple && model.settings.exportMode != .auxiliaryOnly
+        item.isMotion && !item.requiresManualFrame && model.hasCoverCandidates(item) && model.settings.exportMode != .auxiliaryOnly
     }
 
     @ViewBuilder private func coverButton(_ item: PhotoQueueItem, onPhoto: Bool = false) -> some View {
@@ -358,7 +365,7 @@ struct PhotoQueueView: View {
     }
 
     @ViewBuilder private func itemActions(_ item: PhotoQueueItem) -> some View {
-        if item.isMotion && !item.requiresManualFrame && model.settings.direction == .toApple {
+        if canChooseCover(item) {
             Button("选择高清候选封面…") { model.selection = item.id; coverEditor = item }
                 .disabled(model.isBusy || model.sharing || model.settings.exportMode == .auxiliaryOnly)
         }
@@ -564,6 +571,7 @@ enum HDRBadgeDiagnostics { static var badges: [String:[String:Any]] = [:] }
 struct PhotoThumbnail: View {
     let source: URL
     let isPreview: Bool
+    var fitsImage = false
     @State private var thumbnail: CGImage?
 
     var body: some View {
@@ -572,7 +580,7 @@ struct PhotoThumbnail: View {
                 InterfaceStyle.canvas
                 if let thumbnail = thumbnail {
                     Image(decorative: thumbnail, scale: 1)
-                        .resizable().scaledToFill()
+                        .resizable().aspectRatio(contentMode:fitsImage ? .fit : .fill)
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .clipped()
                 } else {

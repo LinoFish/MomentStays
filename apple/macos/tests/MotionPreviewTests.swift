@@ -19,6 +19,17 @@ struct MotionPreviewTests {
         check(unknown.flatMap(\.markers).allSatisfy { $0.time == nil },"unknown cover times are never fabricated")
         check(unknown.flatMap(\.markers).first(where:{ $0.index == 0 })?.issue == "unavailable","unavailable candidate keeps its reason")
         check(CoverTimelineGroup.layout(original:0,candidates:close,duration:0,width:320).isEmpty,"unloaded duration has no fabricated timeline markers")
+        let points = [ManualFramePoint(frame_index:0,presented_us:0,media_us:2_000_000),
+                      ManualFramePoint(frame_index:1,presented_us:40_000,media_us:2_040_000),
+                      ManualFramePoint(frame_index:2,presented_us:200_000,media_us:2_200_000)]
+        check(ManualFrameTimeline.nearest(0,frames:points)==0,"manual first-frame zero remains valid")
+        check(ManualFrameTimeline.nearest(0.19,frames:points)==2,"manual VFR seek uses actual presentation PTS rather than average fps")
+        check(ManualFrameTimeline.nearest(.nan,frames:points)==0,"nonfinite seek does not invent a position")
+        let hint = ManualSourceHint(frame_index:1,presented_us:40_000,verified:false,sources:[])
+        let dense = ManualHintGroup.layout([hint,ManualSourceHint(frame_index:2,presented_us:41_000,verified:false,sources:[])],end:0.2,width:180)
+        check(dense.count==1 && dense[0].hints.count==2,"nearby source hints combine into a reachable menu")
+        check(ManualHintGroup.layout([hint],end:0.02,width:180).isEmpty,"out-of-range hints are not selectable markers")
+        check(ManualHintGroup.layout([hint],end:.nan,width:180).isEmpty,"unknown or nonfinite timeline has no fabricated hints")
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("motion-preview-tests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -37,6 +48,19 @@ struct MotionPreviewTests {
             let times = fixtureInfo["frame_times_us"] as! [Int64]
             let expected = Double(times[12] - times[0]) / 1e6
             check(abs((session.coverTime ?? -100) - expected) < 0.00001, name + " cover uses presentation timeline")
+            let raw = name == "offset" ? "2000:0" : "40:200"
+            let tail = raw.padding(toLength:20,withPad:" ",startingAt:0) + ("LIVE_" + String(video.count)).padding(toLength:20,withPad:" ",startingAt:0)
+            let legacy = directory.appendingPathComponent("legacy-hints.jpg")
+            try Data(still + video + Array(tail.utf8)).write(to:legacy)
+            let cue = try RustCore.engine(["mode":"manual-cover-frames","input":legacy.path,"output":directory.appendingPathComponent("hint-preview.mp4").path])
+            let hints=cue["source_hints"] as! [[String:Any]]
+            check(!hints.isEmpty,name + " maps actual source hints without guessing a midpoint")
+            for hint in hints {
+                let frame=(hint["frame_index"] as! NSNumber).intValue
+                let us=(hint["presented_us"] as! NSNumber).doubleValue
+                check(abs(us-Double(times[frame]))<=2,name + " hint matches original presentation PTS including leading empty edits")
+                check(hint["verified"] as? Bool == false,name + " unknown legacy fields stay explicitly unconfirmed")
+            }
             check(session.frameTimes.count == 30, name + " retains every visible frame")
             check(abs(session.frameTimes[0]) < 0.00001, name + " preview starts at zero")
             let first = try session.frame(at: -1), last = try session.frame(at: 1)

@@ -55,6 +55,23 @@ fn private_legacy_end_to_end() {
         )
         .unwrap();
         assert_eq!(std::fs::read(folder.join("preview.mp4")).unwrap(), video);
+        assert_eq!(frames["raw_hint_field"].as_str().unwrap(), std::str::from_utf8(&data[data.len()-40..data.len()-20]).unwrap().trim_end());
+        for hint in frames["source_hints"].as_array().unwrap() {
+            assert_eq!(hint["verified"],false);
+            assert!(!hint["sources"].as_array().unwrap().is_empty());
+            assert!(frames["frames"].as_array().unwrap().iter().any(|f|f["frame_index"]==hint["frame_index"] && f["presented_us"]==hint["presented_us"]));
+        }
+        for (pair,expected) in [("0:0",1),("999999999:999999999",0),("0:999999999999999999",1)] {
+            let mut hinted = data.clone();
+            let n=hinted.len();hinted[n-40..n-20].fill(b' ');hinted[n-40..n-40+pair.len()].copy_from_slice(pair.as_bytes());
+            let probe=folder.join("hint-source.jpg");std::fs::write(&probe,&hinted).unwrap();
+            let info=call(json!({"mode":"manual-cover-frames","input":probe,"output":folder.join("hint-video.mp4")})).unwrap();
+            assert_eq!(info["raw_hint_field"],pair);
+            assert_eq!(info["source_hints"].as_array().unwrap().len(),expected);
+            if expected>0 { assert_eq!(info["source_hints"][0]["frame_index"],0); }
+            if pair=="0:0" { assert_eq!(info["source_hints"][0]["sources"].as_array().unwrap().len(),4); }
+            else { assert!(!info["hint_issues"].as_array().unwrap().is_empty()); }
+        }
         for direction in ["to-apple", "to-android", "android-to-android"] {
             let row=call(json!({"mode":"scan-file","input":input,"relative":"sample.jpg","direction":direction})).unwrap();
             assert_eq!(row["motion"], direction == "to-apple");

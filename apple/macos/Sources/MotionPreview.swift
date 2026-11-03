@@ -61,6 +61,57 @@ struct CoverTimelineGroup: Identifiable {
     }
 }
 
+// Source hints are suggestions bound to a main-track sample, not auxiliary covers.
+struct ManualFramePoint: Decodable {
+    let frame_index: Int
+    let presented_us: Int
+    let media_us: Int
+}
+struct ManualHintOrigin: Decodable {
+    let raw_field: String
+    let component: Int
+    let raw_value: String
+    let interpretation: String
+    let time_domain: String
+}
+struct ManualSourceHint: Decodable, Identifiable {
+    let frame_index: Int
+    let presented_us: Int
+    let verified: Bool
+    let sources: [ManualHintOrigin]
+    var id: Int { frame_index }
+    var time: Double { Double(presented_us)/1e6 }
+    var title: String { String(format:"%@ %.3f s",verified ? "源封面" : "可能",time) }
+    var detail: String {
+        sources.map { "尾标「\($0.raw_field)」第\($0.component)值\($0.raw_value)，按毫秒尝试\($0.time_domain == "media" ? "媒体" : "播放")时间域，单位/时间域未确定" }.joined(separator:"；")
+    }
+}
+struct ManualHintGroup: Identifiable {
+    static let controlWidth: CGFloat = 104
+    let hints: [ManualSourceHint]
+    let x: CGFloat
+    var id: String { hints.map { String($0.id) }.joined(separator:"|") }
+    static func layout(_ hints:[ManualSourceHint], end:Double, width:CGFloat) -> [Self] {
+        guard end.isFinite, end > 0, width.isFinite, width > 0 else { return [] }
+        let inset = min(controlWidth/2,width/2)
+        let values = hints.filter { $0.time.isFinite && $0.time >= 0 && $0.time <= end }.sorted { $0.time < $1.time }
+        var result = [Self]()
+        for hint in values {
+            let x = inset + CGFloat(hint.time/end) * max(0,width - 2*inset)
+            if let last = result.last, x-last.x < controlWidth+8 {
+                result[result.count-1] = Self(hints:last.hints+[hint],x:last.x)
+            } else { result.append(Self(hints:[hint],x:x)) }
+        }
+        return result
+    }
+}
+enum ManualFrameTimeline {
+    static func nearest(_ time:Double, frames:[ManualFramePoint]) -> Int {
+        guard time.isFinite else { return 0 }
+        return frames.indices.min { abs(Double(frames[$0].presented_us)/1e6-time) < abs(Double(frames[$1].presented_us)/1e6-time) } ?? 0
+    }
+}
+
 // A session owns only its extracted preview cache. Originals and paired MOVs are read-only.
 final class MotionPreviewSession {
     let duration: Double
