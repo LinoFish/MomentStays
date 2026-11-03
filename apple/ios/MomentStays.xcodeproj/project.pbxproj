@@ -21,7 +21,7 @@
         F3000000000000000000000A = {isa = PBXBuildFile; fileRef = F2000000000000000000000A; };
         F2000000000000000000000D = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../shared/RustCore.swift"; sourceTree = "<group>"; };
         F3000000000000000000000D = {isa = PBXBuildFile; fileRef = F2000000000000000000000D; };
-        F20000000000000000000000 = {isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647; files = (); inputPaths = (); outputPaths = ("$(DERIVED_FILE_DIR)/libmomentstays_core.a", "-framework", "CoreFoundation", "-framework", "CoreGraphics", "-framework", "ImageIO", "-framework", "CoreMedia", "-framework", "AVFoundation", "-framework", "Security", "-framework", "SystemConfiguration", "-lresolv", "-lobjc", ); name = "Build Rust core"; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/bash; shellScript = "\"${SRCROOT}/scripts/build-ios-rust.sh\""; };
+        F20000000000000000000000 = {isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647; files = (); inputPaths = (); outputPaths = ("$(DERIVED_FILE_DIR)/libmomentstays_core.a", ); name = "Build Rust core"; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/bash; shellScript = "\"${SRCROOT}/scripts/build-ios-rust.sh\""; };
 
         F00000000000000000000003 = {isa = PBXBuildFile; fileRef = F00000000000000000000004; };
         F00000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoScan/PhotoScanner.swift; sourceTree = "<group>"; };

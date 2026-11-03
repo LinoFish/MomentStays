@@ -202,7 +202,11 @@ struct BatchRowResult: Identifiable {
         let result: InspectionResult = try await withCheckedThrowingContinuation { continuation in
             engine.inspect(input: url, cancellation: InspectionCancellation()) { continuation.resume(with: $0) }
         }
-        guard case .motion = result.classification else { throw ConversionFailure.unreadable }
+        switch result.classification {
+        case .motion: return
+        case .staticImage: throw ConversionError(code: .failed, message: String(localized: "This file isn't a Motion Photo, so it can't be converted."))
+        case .unknown: throw ConversionError(code: .failed, message: String(localized: "Could not determine whether this is a Motion Photo. Try the original file."))
+        }
     }
 
     private func output(_ result: ConversionResult, direction: Direction, brand: String) throws -> ConversionOutput {

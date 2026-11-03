@@ -1,8 +1,15 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct MSRootView: View {
-    @State private var flow = MSFlow()
+    @State private var flow: MSFlow
+    @State private var pickedPhotos: [PhotosPickerItem] = []
+
+    init(engine: any ConversionEngine) { _flow = State(initialValue: MSFlow(engine: engine)) }
+
     var body: some View {
+        @Bindable var flow = flow
         NavigationStack(path: $flow.path) {
             MSHomeView()
                 .navigationDestination(for: MSRoute.self) { route in
@@ -17,9 +24,26 @@ struct MSRootView: View {
         }
         .environment(flow)
         .tint(.msLink)
-        .alert(flow.notice ?? "", isPresented: Binding(get: { flow.notice != nil }, set: { if !$0 { flow.notice = nil } })) {
+        .photosPicker(isPresented: $flow.pickingPhotos, selection: $pickedPhotos, maxSelectionCount: nil, selectionBehavior: .ordered,
+                      matching: flow.direction == .liveToAndroid ? .livePhotos : .images, photoLibrary: .shared())
+        .onChange(of: pickedPhotos) { _, picked in
+            guard !picked.isEmpty else { return }
+            pickedPhotos = []
+            Task { await flow.photosPicked(picked) }
+        }
+        .fileImporter(isPresented: $flow.pickingFiles, allowedContentTypes: importTypes, allowsMultipleSelection: true) { result in
+            Task { await flow.filesPicked(result) }
+        }
+        .alert(flow.notice ?? "", isPresented: Binding(get: { flow.notice != nil }, set: { if !$0 { flow.notice = nil; flow.noticeMessage = nil } })) {
             Button("好", role: .cancel) {}
-        } message: { Text("界面预览版暂未接入转换功能，此操作不会执行。") }
+        } message: {
+            if let message = flow.noticeMessage { Text(message) }
+        }
+    }
+
+    /// Live Photo pairs need the still and its movie; Motion Photos are a single image.
+    private var importTypes: [UTType] {
+        flow.direction == .liveToAndroid ? [.jpeg, .heic, .heif, .quickTimeMovie, .mpeg4Movie] : [.jpeg, .heic, .heif]
     }
 }
 
@@ -172,14 +196,14 @@ struct MSSelectionView: View {
     @Environment(MSFlow.self) private var flow
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    private var ids: [Int] { Array(1...flow.candidateCount) }
-    private var allSelected: Bool { flow.selected.count == ids.count }
+    private var ids: [UUID] { flow.candidates.map(\.id) }
+    private var allSelected: Bool { !ids.isEmpty && flow.selected.count == ids.count }
 
     var body: some View {
         List {
             Section {
                 if flow.source == .files {
-                    ForEach(ids, id: \.self) { id in fileRow(id) }
+                    ForEach(flow.candidates) { fileRow($0) }
                 } else {
                     grid.listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
                 }
@@ -188,8 +212,6 @@ struct MSSelectionView: View {
                 Text("已选 \(flow.selected.count) / \(ids.count) 张")
                     .font(.subheadline).foregroundStyle(Color(uiColor: .secondaryLabel)).textCase(nil).monospacedDigit()
                     .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            } footer: {
-                Text("灰色图形仅为布局占位，不是用户照片。")
             }
             if flow.direction == .liveToAndroid {
                 Section {
@@ -227,39 +249,55 @@ struct MSSelectionView: View {
     private var grid: some View {
         let columns = typeSize.isAccessibilitySize ? 2 : 3
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: columns), spacing: 4) {
-            ForEach(ids, id: \.self) { id in
+            ForEach(Array(flow.candidates.enumerated()), id: \.element.id) { index, candidate in
+                let id = candidate.id
                 let isOn = flow.selected.contains(id)
                 Button { toggle(id) } label: {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Color(uiColor: .tertiarySystemFill))
                         .aspectRatio(1, contentMode: .fit)
                         .overlay {
-                            VStack(spacing: 6) {
-                                Image(systemName: "photo").font(.title2).foregroundStyle(.secondary)
-                                Text(flow.candidateName(id)).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge).padding(.horizontal, 6)
+                            if let image = flow.thumbnail(for: id) {
+                                Image(uiImage: image).resizable().scaledToFill()
+                            } else {
+                                VStack(spacing: 6) {
+                                    Image(systemName: "photo").font(.title2).foregroundStyle(.secondary)
+                                    Text(candidate.name).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge).padding(.horizontal, 6)
+                                }
                             }
                         }
+                        .clipShape(RoundedRectangle(cornerRadius: 2))
                         .overlay { if isOn { RoundedRectangle(cornerRadius: 2).strokeBorder(Color.msAccentFill, lineWidth: 2) } }
                         .overlay(alignment: .topTrailing) { selectionMark(isOn).padding(6) }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("动态照片，第 \(id) 张，\(flow.candidateName(id))")
+                .accessibilityLabel(flow.direction == .liveToAndroid ? "实况照片，第 \(index + 1) 张，\(candidate.name)" : "动态照片，第 \(index + 1) 张，\(candidate.name)")
                 .accessibilityValue(isOn ? "已选中" : "未选中")
                 .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+                .task(id: id) { await flow.loadThumbnail(id) }
             }
         }
         .padding(4)
     }
 
-    private func fileRow(_ id: Int) -> some View {
+    private func fileRow(_ candidate: MSCandidate) -> some View {
+        let id = candidate.id
         let isOn = flow.selected.contains(id)
+        let side: CGFloat = typeSize.isAccessibilitySize ? 32 : 44
         let thumb = RoundedRectangle(cornerRadius: 6).fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: typeSize.isAccessibilitySize ? 32 : 44, height: typeSize.isAccessibilitySize ? 32 : 44)
-            .overlay { Image(systemName: "doc").foregroundStyle(.secondary).imageScale(.small) }
-        let name = Text(flow.candidateName(id)).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
+            .frame(width: side, height: side)
+            .overlay {
+                if let image = flow.thumbnail(for: id) {
+                    Image(uiImage: image).resizable().scaledToFill().frame(width: side, height: side)
+                } else {
+                    Image(systemName: "doc").foregroundStyle(.secondary).imageScale(.small)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        let name = Text(candidate.name).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
         return Button { toggle(id) } label: {
             Group {
                 if typeSize.isAccessibilitySize {
@@ -276,9 +314,10 @@ struct MSSelectionView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(flow.candidateName(id))
+        .accessibilityLabel(candidate.name)
         .accessibilityValue(isOn ? "已选中" : "未选中")
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+        .task(id: id) { await flow.loadThumbnail(id) }
     }
 
     private func selectionMark(_ isOn: Bool) -> some View {
@@ -291,7 +330,7 @@ struct MSSelectionView: View {
         .accessibilityHidden(true)
     }
 
-    private func toggle(_ id: Int) {
+    private func toggle(_ id: UUID) {
         if flow.selected.contains(id) { flow.selected.remove(id) } else { flow.selected.insert(id) }
     }
 }
@@ -301,21 +340,22 @@ struct MSSelectionView: View {
 struct MSScanView: View {
     @Environment(MSFlow.self) private var flow
     @Environment(\.dismiss) private var dismiss
-    @State private var checked = 128
+    @State private var checked = 0
+    @State private var total = 0
+    @State private var found: [String] = []
+    @State private var identities: [String: PhotoResourceIdentity] = [:]
+    @State private var unreadable = 0
     @State private var scanning = true
-    @State private var stopping = false
-    private let total = 500
-    private let found = 6
 
     var body: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(scanning ? "正在扫描相册…" : "扫描已停止，结果不完整").font(.headline)
+                    Text(scanning ? "正在扫描相册…" : "扫描完成").font(.headline)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("已检查 \(checked) / \(total) 张").font(.subheadline).foregroundStyle(.secondary).monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.7)
-                    ProgressView(value: Double(checked), total: Double(total)).tint(.msAccentFill)
+                    ProgressView(value: Double(checked), total: Double(max(total, 1))).tint(.msAccentFill)
                         .accessibilityLabel("扫描进度")
                         .accessibilityValue("已检查 \(checked) 张，共 \(total) 张")
                 }
@@ -325,23 +365,26 @@ struct MSScanView: View {
             }
             Section {
                 if scanning {
-                    Text("已找到 \(found) 张照片，扫描结束后可选择。")
+                    Text("已找到 \(found.count) 张照片，扫描结束后可选择。")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                 } else {
-                    Button("选择已找到的 \(found) 张") {
-                        flow.source = .scan; flow.candidateCount = found; flow.selected = []
-                        flow.path.append(.select(.androidToLive, .scan))
-                    }
-                    .frame(minHeight: 44)
+                    Button("选择已找到的 \(found.count) 张") { flow.showScanResults(found, identities) }
+                        .frame(minHeight: 44)
+                        .disabled(found.isEmpty)
                 }
             } footer: {
                 // Same font and size cap as the "已检查" line so it never outranks the card title.
-                Label("只检查你允许访问的照片原件。", systemImage: "info.circle")
-                    .font(.subheadline)
-                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                VStack(alignment: .leading, spacing: 6) {
+                    if !scanning && unreadable > 0 {
+                        Text("Originals for \(unreadable) photos couldn't be read, so results may be incomplete.")
+                    }
+                    Label("只检查你允许访问的照片原件。", systemImage: "info.circle")
+                }
+                .font(.subheadline)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             }
         }
         .listStyle(.insetGrouped)
@@ -353,20 +396,31 @@ struct MSScanView: View {
                 ToolbarItem(placement: .topBarLeading) { Button("取消") { scanning = false; dismiss() } }
             }
         }
-        .task {
-            while scanning && !stopping && checked < total {
-                try? await Task.sleep(for: .milliseconds(400))
-                checked = min(total, checked + 12)
-            }
-            if checked >= total { scanning = false }
-        }
+        .task { await scan() }
     }
 
-    private func stop() {
-        stopping = true
-        Task {
-            try? await Task.sleep(for: .milliseconds(600))
-            stopping = false; scanning = false
+    private func scan() async {
+        do {
+            let result = try await flow.scanLibrary { progress in
+                checked = progress.completed; total = progress.total
+                found = progress.motionAssetIdentifiers; identities = progress.matchedResources
+            }
+            guard result.access == .authorized || result.access == .limited else {
+                flow.notice = String(localized: "Couldn't Complete the Scan")
+                flow.noticeMessage = String(localized: "Can't access Photos, so your library can't be scanned. You can still choose from Files.")
+                scanning = false; dismiss()
+                return
+            }
+            found = result.motionAssetIdentifiers; identities = result.matchedResources
+            unreadable = result.issues.count
+            checked = total
+            scanning = false
+        } catch is CancellationError {
+        } catch {
+            guard !Task.isCancelled else { return }
+            flow.notice = String(localized: "Couldn't Complete the Scan")
+            flow.noticeMessage = error.localizedDescription
+            scanning = false; dismiss()
         }
     }
 }
@@ -456,7 +510,7 @@ struct MSConvertingView: View {
         }
         .alert("要停止转换吗？", isPresented: $confirmStop) {
             Button("继续转换", role: .cancel) {}
-            Button("停止转换", role: .destructive) { flow.stopping = true }
+            Button("停止转换", role: .destructive) { flow.stop() }
         } message: {
             Text("当前这张完成后停止，已完成的结果会保留。")
         }
@@ -528,7 +582,7 @@ struct MSResultsView: View {
             if typeSize.isAccessibilitySize && flow.succeeded > 0 {
                 Section {
                     if flow.direction == .liveToAndroid {
-                        Button { flow.notice = "存到文件" } label: { Text("存到文件").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle()) }
+                        Button { flow.exportToFiles() } label: { Text("存到文件").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle()) }
                     }
                     if flow.failed > 0 {
                         Button { filter = .all; flow.retryFailed() } label: { Text("重试失败的 \(flow.failed) 张").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle()) }
@@ -560,13 +614,14 @@ struct MSResultsView: View {
                         .buttonStyle(MSPrimaryButtonStyle())
                 } else {
                     Button(flow.direction == .liveToAndroid ? "分享 \(flow.succeeded) 个文件" : "全部存入照片（\(flow.succeeded)）") {
-                        flow.notice = flow.direction == .liveToAndroid ? "分享" : "存入照片"
+                        if flow.direction == .liveToAndroid { flow.shareAll() } else { Task { await flow.saveAllToPhotos() } }
                     }
                     .buttonStyle(MSPrimaryButtonStyle())
+                    .disabled(flow.saving)
                     if !typeSize.isAccessibilitySize {
                     HStack(spacing: 8) {
                         if flow.direction == .liveToAndroid {
-                            Button { flow.notice = "存到文件" } label: { secondaryLabel("存到文件") }
+                            Button { flow.exportToFiles() } label: { secondaryLabel("存到文件") }
                         }
                         if flow.direction == .liveToAndroid && flow.failed > 0 { Divider().frame(height: 16) }
                         if flow.failed > 0 {
@@ -630,7 +685,7 @@ struct MSItemRow: View {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top) {
-                        MSPlaceholderThumb(size: min(thumbSize, 64))
+                        thumb(min(thumbSize, 64))
                         Spacer()
                         if !isShareable {
                             trailing.font(.system(size: min(statusSize, 40)))
@@ -643,7 +698,7 @@ struct MSItemRow: View {
                 .padding(.vertical, 6)
             } else {
                 HStack(spacing: 12) {
-                    MSPlaceholderThumb()
+                    thumb(44)
                     texts
                     Spacer(minLength: 8)
                     trailing
@@ -652,6 +707,18 @@ struct MSItemRow: View {
         }
         .frame(minHeight: 72)
         .accessibilityElement(children: .combine)
+        .task(id: item.id) { await flow.loadThumbnail(item.id) }
+    }
+
+    @ViewBuilder private func thumb(_ size: CGFloat) -> some View {
+        if let image = flow.thumbnail(for: item.id) {
+            Image(uiImage: image).resizable().scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .accessibilityHidden(true)
+        } else {
+            MSPlaceholderThumb(size: size)
+        }
     }
 
     private var isShareable: Bool { showShare && item.status == .done }
@@ -676,7 +743,7 @@ struct MSItemRow: View {
         case .skipped: Image(systemName: "minus.circle").foregroundStyle(.secondary).accessibilityHidden(true)
         case .done:
             if showShare {
-                Button { flow.notice = "分享" } label: {
+                Button { flow.share(item) } label: {
                     Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44).contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
@@ -690,30 +757,24 @@ struct MSItemRow: View {
 
 // MARK: - Previews
 
+#if DEBUG
 @MainActor private func previewFlow(_ route: MSRoute?) -> MSFlow {
-    let flow = MSFlow()
-    flow.direction = .liveToAndroid
-    flow.items = (1...8).map { MSItem(id: $0, name: "IMG_\(2040 + $0).jpg", status: [3, 7].contains($0) ? .failed("未找到配对视频") : .done) }
-    if route == .converting {
-        flow.items[3].status = .converting
-        for i in 4..<8 { flow.items[i].status = .waiting }
-    }
-    flow.selected = [1, 4]
-    return flow
+    MSFlow.preview(.liveToAndroid, converting: route == .converting)
 }
 
-#Preview("首页 浅色") { MSRootView() }
-#Preview("首页 深色") { MSRootView().preferredColorScheme(.dark) }
-#Preview("首页 最大字号") { MSRootView().dynamicTypeSize(.accessibility5) }
+#Preview("首页 浅色") { MSRootView(engine: UnavailableEngine()) }
+#Preview("首页 深色") { MSRootView(engine: UnavailableEngine()).preferredColorScheme(.dark) }
+#Preview("首页 最大字号") { MSRootView(engine: UnavailableEngine()).dynamicTypeSize(.accessibility5) }
 #Preview("选择") { NavigationStack { MSSelectionView() }.environment(previewFlow(nil)).tint(.msLink) }
 #Preview("选择 深色") { NavigationStack { MSSelectionView() }.environment(previewFlow(nil)).tint(.msLink).preferredColorScheme(.dark) }
 #Preview("选择 最大字号") { NavigationStack { MSSelectionView() }.environment(previewFlow(nil)).tint(.msLink).dynamicTypeSize(.accessibility5) }
 #Preview("结果") { NavigationStack { MSResultsView() }.environment(previewFlow(.results)).tint(.msLink) }
 #Preview("结果 深色") { NavigationStack { MSResultsView() }.environment(previewFlow(.results)).tint(.msLink).preferredColorScheme(.dark) }
 #Preview("结果 最大字号") { NavigationStack { MSResultsView() }.environment(previewFlow(.results)).tint(.msLink).dynamicTypeSize(.accessibility5) }
-#Preview("扫描") { NavigationStack { MSScanView() }.environment(MSFlow()).tint(.msLink) }
-#Preview("扫描 深色") { NavigationStack { MSScanView() }.environment(MSFlow()).tint(.msLink).preferredColorScheme(.dark) }
-#Preview("扫描 最大字号") { NavigationStack { MSScanView() }.environment(MSFlow()).tint(.msLink).dynamicTypeSize(.accessibility5) }
-#Preview("品牌") { NavigationStack { MSBrandView() }.environment(MSFlow()).tint(.msLink) }
-#Preview("品牌 深色") { NavigationStack { MSBrandView() }.environment(MSFlow()).tint(.msLink).preferredColorScheme(.dark) }
-#Preview("品牌 最大字号") { NavigationStack { MSBrandView() }.environment(MSFlow()).tint(.msLink).dynamicTypeSize(.accessibility5) }
+#Preview("扫描") { NavigationStack { MSScanView() }.environment(MSFlow(engine: UnavailableEngine())).tint(.msLink) }
+#Preview("扫描 深色") { NavigationStack { MSScanView() }.environment(MSFlow(engine: UnavailableEngine())).tint(.msLink).preferredColorScheme(.dark) }
+#Preview("扫描 最大字号") { NavigationStack { MSScanView() }.environment(MSFlow(engine: UnavailableEngine())).tint(.msLink).dynamicTypeSize(.accessibility5) }
+#Preview("品牌") { NavigationStack { MSBrandView() }.environment(MSFlow(engine: UnavailableEngine())).tint(.msLink) }
+#Preview("品牌 深色") { NavigationStack { MSBrandView() }.environment(MSFlow(engine: UnavailableEngine())).tint(.msLink).preferredColorScheme(.dark) }
+#Preview("品牌 最大字号") { NavigationStack { MSBrandView() }.environment(MSFlow(engine: UnavailableEngine())).tint(.msLink).dynamicTypeSize(.accessibility5) }
+#endif

@@ -1020,6 +1020,98 @@
           }
         }
       }
+    },
+    "照片 %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo %lld"
+          }
+        }
+      }
+    },
+    "没有找到同名的照片和视频。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No photo with a matching video was found."
+          }
+        }
+      }
+    },
+    "%lld 张照片没有同名视频，已略过。": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photo had no matching video and was skipped."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photos had no matching video and were skipped."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "已存到文件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved to Files"
+          }
+        }
+      }
+    },
+    "请在“设置”中允许留刻添加照片。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow MomentStays to add photos in Settings."
+          }
+        }
+      }
+    },
+    "已存入 %lld 张，%lld 张没能存入照片": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved %lld, couldn't save %lld to Photos"
+          }
+        }
+      }
+    },
+    "扫描完成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan complete"
+          }
+        }
+      }
+    },
+    "实况照片，第 %lld 张，%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live Photo %lld, %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
