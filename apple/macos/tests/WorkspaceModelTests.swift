@@ -383,6 +383,60 @@ struct WorkspaceModelTests {
         check(ss.runs.isEmpty && stale.notice != nil,"late source changes block an already confirmed manual transaction")
     }
 
+    static func staticHDRChecks(root: URL) throws {
+        let input = root.appendingPathComponent("static-input")
+        try FileManager.default.createDirectory(at:input,withIntermediateDirectories:true)
+        let hdr = input.appendingPathComponent("static-hdr.jpg"), motion = input.appendingPathComponent("motion.jpg")
+        try Data([1]).write(to:hdr); try Data([2]).write(to:motion)
+        let row = ScanRow(source:hdr,relative:"static-hdr.jpg",isMotion:false,hdr:"Ultra HDR",cover:"不适用",detail:"静态 HDR",confirmedStatic:true,version:SourceVersion.read(hdr))
+        let dynamic = ScanRow(source:motion,relative:"motion.jpg",isMotion:true,hdr:"SDR",cover:"0.0 秒",detail:"",version:SourceVersion.read(motion))
+        let service = ControlledService()
+        let model = WorkspaceModel(service:service); model.chooseSources([hdr,motion]); service.scans[0].completion(.success([row,dynamic]))
+        check(model.items[0].isConvertible && !model.items[0].isMotion && model.category(model.items[0]) == .ready,"static HDR is ready without claiming motion")
+        model.toggleSelection(model.items[0]); model.selectQueueScope(.completed); model.toggleSelection(model.items[1])
+        check(model.selectedIDs == Set([hdr.path,motion.path]),"static HDR and motion share cross-tab multiselection")
+        let output=root.appendingPathComponent("static-output")
+        try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
+        model.selectQueueScope(.ready); model.setOutput(output); model.start()
+        check(service.runs.count == 1 && Set(service.runs[0].job.sources) == Set([hdr,motion]),"static HDR is included in the actual mixed conversion plan")
+        // Source provenance is tested without opening a Photos library.
+        let photosService=ControlledService()
+        let libraryModel=WorkspaceModel(service:photosService)
+        let origins=[hdr.path:LibraryOrigin(assetID:"static-asset",version:"v1",edited:false,filename:hdr.lastPathComponent),
+                     motion.path:LibraryOrigin(assetID:"live-asset",version:"v1",edited:false,filename:motion.lastPathComponent)]
+        libraryModel.appendSources([hdr,motion],origins:origins)
+        photosService.scans[0].completion(.success([row,dynamic]))
+        let staticItem=libraryModel.items.first { $0.source == hdr }!
+        let motionItem=libraryModel.items.first { $0.source == motion }!
+        check(!staticItem.isConvertible && libraryModel.category(staticItem) == .static,"Photos-origin static HDR stays outside the conversion queue")
+        libraryModel.toggleSelection(staticItem)
+        check(libraryModel.selectedIDs.isEmpty,"Photos-origin static HDR cannot enter a manual multiselection")
+        libraryModel.toggleSelection(motionItem); libraryModel.setOutput(output); libraryModel.start()
+        check(photosService.runs.count == 1 && photosService.runs[0].job.sources == [motion],"mixed Photos selection processes only actual motion photos")
+
+    }
+
+    static func staticHDRIntegration(source: URL, root: URL) throws {
+        for direction:ConversionDirection in [.toApple,.toAndroid,.androidToAndroid] {
+            let model=WorkspaceModel(); model.updateSettings { $0.direction=direction; $0.exportDataFiles=false }
+            model.chooseSources([source]); pump(until:{ !model.isBusy })
+            check(model.items.first?.row.isStaticHDR == true && model.items.first?.isMotion == false,"production static HDR scan stays static in every direction")
+            model.toggleSelection(model.items[0]); let out=root.appendingPathComponent("hdr-" + direction.rawValue)
+            try FileManager.default.createDirectory(at:out,withIntermediateDirectories:true)
+            model.setOutput(out); model.start(); pump(until:{ !model.isBusy })
+            check(model.report?.counts["converted"] == 1,"production model actually processes selected static HDR")
+            let outcome=try NativeBatch.run(sources:[source],output:out,options:model.settings.options,token:StopToken(),progress:{ _ in })
+            let delivered=try DeliveryStore.collect(outcome,settings:model.settings,origins:[:])
+            check(delivered.count == 1 && delivered[0].files.count == 1 && delivered[0].standaloneHDR == true,"static result exports exactly one image without a video")
+            try delivered[0].verify()
+            var task=DeliveryTask(settings:model.settings,output:out.path,results:delivered)
+            let store=DeliveryStore(root:root.appendingPathComponent("hdr-share-" + direction.rawValue))
+            let staged=try store.stageShare(&task)
+            let same = try Data(contentsOf:staged[0]) == Data(contentsOf:URL(fileURLWithPath:delivered[0].files[0]))
+            check(staged.count == 1 && same,"static share retains complete output bytes")
+        }
+    }
+
     static func main() throws {
         // Evaluate fetch predicates without requesting permission or accessing a real library.
         for direction: ConversionDirection in [.toApple,.toAndroid] {
@@ -394,7 +448,7 @@ struct WorkspaceModelTests {
                 "both scan directions include user, shared-album and synced assets")
             for subtype in [UInt(0), live, live | PHAssetMediaSubtype.photoHDR.rawValue] {
                 check(options.predicate!.evaluate(with: ["mediaType": image, "mediaSubtypes": subtype]) == (direction == .toApple || subtype & live != 0),
-                    "Android original inspection includes Live Photo assets; reverse requires Live Photo")
+                    "Photos reverse retains Live Photo filtering; local static HDR does not broaden library reads")
             }
             check(!options.predicate!.evaluate(with: ["mediaType": PHAssetMediaType.video.rawValue, "mediaSubtypes": live]),
                 "standalone videos are excluded from photo scanning")
@@ -531,6 +585,7 @@ struct WorkspaceModelTests {
         workspace.finishLibraryImport(id: UUID(), urls: [], error: Failure("stale"), output: root)
         check(workspace.errorMessage == nil, "stale library callback ignored")
 
+        try staticHDRChecks(root:root)
         try manualChecks(root:root)
         try navigationChecks(source:source,row:row,root:root)
         try deliveryChecks(root: root, workspace: workspace)
@@ -549,6 +604,7 @@ struct WorkspaceModelTests {
             try integration(source: URL(fileURLWithPath: CommandLine.arguments[1]), root: root)
             try manualIntegration(source: URL(fileURLWithPath: CommandLine.arguments[1]), root: root)
         }
+        if CommandLine.arguments.count > 3 { try staticHDRIntegration(source:URL(fileURLWithPath:CommandLine.arguments[3]),root:root) }
         if CommandLine.arguments.count > 2 { try legacyIntegration(source:URL(fileURLWithPath:CommandLine.arguments[2]),root:root) }
         print("PASS \(checks) workspace state, cancellation and integration checks")
     }

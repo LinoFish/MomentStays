@@ -3,6 +3,7 @@
 
 use crate::engine::failure;
 use crate::Result;
+use serde_json::Value;
 use std::cmp::Ordering;
 use std::path::{Component, Path, PathBuf};
 
@@ -275,4 +276,9 @@ pub fn validate_output(sources: &[PathBuf], output: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// A path in the existing engine JSON representation.
+pub(crate) fn json(p: &Path) -> Value {
+    Value::from(p.to_string_lossy().into_owned())
 }

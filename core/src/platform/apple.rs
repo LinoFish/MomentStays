@@ -1,9 +1,24 @@
 //! Direct ImageIO/CoreGraphics codecs; no Swift callbacks or application policy.
-use crate::engine::{Gray, HeicGain, Native};
+use crate::engine::{Gray, HeicGain, Native, Rgba};
 use crate::{Error, Result};
 use std::{ffi::c_void, path::Path, ptr};
 type Ref = *const c_void;
 const MAX_BYTES: usize = 256 * 1024 * 1024;
+#[repr(C)]
+struct Point {
+    x: f64,
+    y: f64,
+}
+#[repr(C)]
+struct Size {
+    width: f64,
+    height: f64,
+}
+#[repr(C)]
+struct Rect {
+    origin: Point,
+    size: Size,
+}
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
     fn CFRelease(v: Ref);
@@ -41,6 +56,17 @@ extern "C" {
     fn CGImageGetDataProvider(image: Ref) -> Ref;
     fn CGDataProviderCopyData(provider: Ref) -> Ref;
     fn CGDataProviderCreateWithCFData(data: Ref) -> Ref;
+    fn CGBitmapContextCreate(
+        data: *mut c_void,
+        width: usize,
+        height: usize,
+        bits: usize,
+        stride: usize,
+        space: Ref,
+        bitmap: u32,
+    ) -> Ref;
+    fn CGContextDrawImage(context: Ref, rect: Rect, image: Ref);
+    fn CGContextRelease(context: Ref);
     fn CGImageCreate(
         w: usize,
         h: usize,
@@ -56,6 +82,12 @@ extern "C" {
     ) -> Ref;
 }
 struct Owned(Ref);
+struct BitmapContext(Ref);
+impl Drop for BitmapContext {
+    fn drop(&mut self) {
+        unsafe { CGContextRelease(self.0) }
+    }
+}
 impl Owned {
     fn new(v: Ref, what: &str) -> Result<Self> {
         if v.is_null() {
@@ -220,6 +252,55 @@ impl Native for SystemNative {
                 width: w,
                 height: h,
                 stride: s,
+                pixels,
+            }))
+        }
+    }
+    fn decode_srgb_jpeg(&self, input: &[u8]) -> Result<Option<Rgba>> {
+        let src = source(input)?;
+        unsafe {
+            let img = image(src.0)?;
+            if CGImageGetBitsPerComponent(img.0) != 8 {
+                return Ok(None);
+            }
+            let (width, height) = (CGImageGetWidth(img.0), CGImageGetHeight(img.0));
+            let stride = width
+                .checked_mul(4)
+                .ok_or_else(|| Error::new("主图行跨度溢出"))?;
+            let count = dimensions(width, height, stride)?;
+            let mut pixels = vec![0u8; count];
+            let space = Owned::new(CGColorSpaceCreateWithName(kCGColorSpaceSRGB), "sRGB")?;
+            // Match the validated ImageIO probe: sRGB, RGBA bytes, opaque JPEG,
+            // no EXIF transform, no row reversal and no source re-encoding.
+            let context = CGBitmapContextCreate(
+                pixels.as_mut_ptr().cast(),
+                width,
+                height,
+                8,
+                stride,
+                space.0,
+                0x4001, // kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast
+            );
+            if context.is_null() {
+                return Err(Error::new("无法创建 sRGB 主图解码上下文"));
+            }
+            let context = BitmapContext(context);
+            CGContextDrawImage(
+                context.0,
+                Rect {
+                    origin: Point { x: 0.0, y: 0.0 },
+                    size: Size {
+                        width: width as f64,
+                        height: height as f64,
+                    },
+                },
+                img.0,
+            );
+            drop(context);
+            Ok(Some(Rgba {
+                width,
+                height,
+                stride,
                 pixels,
             }))
         }

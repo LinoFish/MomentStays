@@ -108,9 +108,9 @@ struct ExportSettingsView: View {
             }
             Divider()
             settingsGroup("HDR 兼容") {
-                Toggle("尝试兼容其他 HDR 格式", isOn: binding(\.legacyHDR))
+                Toggle("尝试转换私有 HDR", isOn: binding(\.legacyHDR))
                     .disabled(model.settings.exportMode == .auxiliaryOnly)
-                note("仅转换参数明确的增益图。已有 Ultra HDR 和普通 SDR 保持不变。")
+                note("开启后尝试兼容旧增益图及荣耀 EHDR（无参考图、实验性，仅限已标定配置）。不支持时保留原格式；已有 Ultra HDR 和 SDR 保持不变。")
             }
         }
     }

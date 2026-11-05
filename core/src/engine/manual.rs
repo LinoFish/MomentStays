@@ -100,9 +100,9 @@ pub fn parse(data: &[u8]) -> Result<format::MotionPhoto<'_>> {
     })
 }
 
-pub const FORMAT: &str = "huawei-honor-legacy";
+pub use crate::engine::contracts::LEGACY_FORMAT as FORMAT;
 pub const COVER: &str = "未确定（需选帧）";
-use crate::engine::scanrow::SourceVersion;
+use crate::engine::identity::SourceVersion;
 use serde_json::{json, Value};
 use std::path::Path;
 

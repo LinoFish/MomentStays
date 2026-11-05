@@ -1,116 +1,19 @@
-//! Batch engine (Swift `NativeBatch` replacement): all three directions,
-//! resume and existing-output policies, option JSON compatibility, the
-//! movie writer's Swift-side refusals, still writers and the C ABI.
+//! Batch/route integration: all three directions, resume, output decisions,
+//! request JSON, movie refusals and the C ABI. HDR/output checks have separate files.
 
 use base64::Engine;
-use momentstays_core::engine::batch::{self, ExistingOutput, RunRequest};
+use momentstays_core::engine::batch::{self, ExistingOutput};
 use momentstays_core::engine::movie::{self, MovieRequest};
 use momentstays_core::engine::options::ConversionOptions;
 use momentstays_core::engine::{still, NoNative, StopToken};
 use momentstays_core::live2motion::mett_cover_time;
-use momentstays_core::model::{self, Cover, MotionModel, Vendor};
+use momentstays_core::model::{Cover, Vendor};
 use momentstays_core::{format, jpeg, live, remux};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-fn b64(path: &str) -> Vec<u8> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path);
-    base64::engine::general_purpose::STANDARD
-        .decode(std::fs::read_to_string(p).unwrap().trim_ascii())
-        .unwrap()
-}
-
-/// `real.mp4` without its edit list: 5 frames at 0.4, 0.6, ... 1.2 s.
-fn video() -> Vec<u8> {
-    let mut d = b64("tests/fixtures-samples/real.mp4.b64");
-    let i = d.windows(4).position(|w| w == b"edts").unwrap();
-    d[i..i + 4].copy_from_slice(b"free");
-    d
-}
-
-fn motion(cover: Cover, vendor: Vendor) -> Vec<u8> {
-    let m = MotionModel {
-        still: b64("tests/fixtures-pycli/base.jpg.b64"),
-        video: video(),
-        cover,
-        source_format: "test".into(),
-    };
-    model::write(&m, vendor).unwrap()
-}
-
-struct Dir(PathBuf);
-impl Dir {
-    fn new(name: &str) -> Dir {
-        let p = std::env::temp_dir().join(format!(
-            "ms-engine-{name}-{}-{}",
-            std::process::id(),
-            momentstays_core::engine::uuid()
-        ));
-        std::fs::create_dir_all(&p).unwrap();
-        Dir(p)
-    }
-}
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn inputs(dir: &Path) {
-    std::fs::write(
-        dir.join("google.jpg"),
-        motion(Cover::Time(800_000), Vendor::Google),
-    )
-    .unwrap();
-    std::fs::write(
-        dir.join("samsung.jpg"),
-        motion(Cover::Time(600_000), Vendor::Samsung),
-    )
-    .unwrap();
-    std::fs::write(
-        dir.join("huawei.jpg"),
-        motion(Cover::Frame(2), Vendor::Huawei),
-    )
-    .unwrap();
-    std::fs::write(
-        dir.join("static.jpg"),
-        b64("tests/fixtures-pycli/base.jpg.b64"),
-    )
-    .unwrap();
-}
-
-fn run(
-    sources: &[PathBuf],
-    output: &Path,
-    options: &ConversionOptions,
-    policy: Option<ExistingOutput>,
-) -> batch::Outcome {
-    let decide = policy.map(|p| move |_: &Path, _: &Path| p);
-    batch::run(
-        &NoNative,
-        &RunRequest {
-            sources,
-            output,
-            options,
-            scan_rows: None,
-            concurrency: Some(2),
-        },
-        &StopToken::new(),
-        decide
-            .as_ref()
-            .map(|d| d as &(dyn Fn(&Path, &Path) -> ExistingOutput + Sync)),
-        |_| {},
-    )
-    .unwrap()
-}
-
-fn counts(o: &batch::Outcome) -> [usize; 4] {
-    ["converted", "resumed", "skipped", "failed"].map(|k| o.counts[k])
-}
-
-fn files(o: &batch::Outcome) -> Vec<Value> {
-    o.report_data["files"].as_array().unwrap().clone()
-}
+mod engine_support;
+use engine_support::*;
 
 #[test]
 fn swift_option_json_is_kept() {
@@ -144,7 +47,7 @@ fn motion_to_live_batch_converts_resumes_and_respects_existing_output() {
         let target = PathBuf::from(f["output"].as_str().unwrap());
         let manifest: Value =
             serde_json::from_slice(&std::fs::read(target.join("manifest.json")).unwrap()).unwrap();
-        assert_eq!(manifest["implementation"], "gui-native-1.1.5");
+        assert_eq!(manifest["implementation"], batch::REVISION);
         let names = &manifest["output_files"];
         let source = PathBuf::from(f["source"].as_str().unwrap());
         assert_eq!(
@@ -415,51 +318,6 @@ fn movie_writer_keeps_swift_refusals_and_report_keys() {
 }
 
 #[test]
-fn still_writers_keep_coding_bytes() {
-    let ultra = b64("tests/fixtures-pycli/ultra.jpg.b64");
-    let p = format::parse(&ultra).unwrap();
-    let still_bytes = p.still.to_vec();
-    let aux = jpeg::auxiliary(&still_bytes).unwrap();
-    assert_eq!(aux.len(), 2);
-    let packed = still::pack_gain_map(&still_bytes, &still_bytes[aux[1].clone()]).unwrap();
-    assert_eq!(
-        jpeg::coding_hash(&packed).unwrap(),
-        jpeg::coding_hash(&still_bytes).unwrap()
-    );
-    let after = jpeg::auxiliary(&packed).unwrap();
-    assert_eq!(&packed[after[1].clone()], &still_bytes[aux[1].clone()]);
-    // Live still without identifier: motion gone, gain map unchanged.
-    let clean = still::live_still(&still_bytes, "", false).unwrap();
-    assert!(format::parse(&clean).is_err());
-    assert_eq!(
-        format::auxiliary_hashes(&clean).unwrap(),
-        format::auxiliary_hashes(&still_bytes).unwrap()
-    );
-    assert_eq!(live::still_content_identifier(&clean).unwrap(), None);
-}
-
-#[test]
-fn swift_number_text() {
-    for (v, s) in [
-        (2.0, "2.0"),
-        (0.5, "0.5"),
-        (1e-5, "1e-05"),
-        (1.5e-7, "1.5e-07"),
-        (1e16, "1e+16"),
-        (2.3, "2.3"),
-    ] {
-        assert_eq!(still::swift_double(v), s);
-    }
-}
-
-#[test]
-fn gain_lookup_matches_swift_math() {
-    let t = still::gain_lookup(2.0);
-    assert_eq!((t[0], t[255]), (0, 255));
-    assert!(t.windows(2).all(|w| w[0] <= w[1]));
-}
-
-#[test]
 fn c_abi_runs_requests_and_reports_progress() {
     use momentstays_core::engine::cabi::{ms_core_engine, ms_stop_free, ms_stop_new, MsNative};
     use momentstays_core::ffi::{ms_core_bytes, ms_core_free};
@@ -576,154 +434,4 @@ fn byte_helpers_use_real_writers_and_reject_invalid_base64() {
     assert_eq!(jpeg::static_only(&image).unwrap(), image);
     assert!(call(json!({"mode":"live-still", "data_base64":"!bad"})).is_err());
     assert!(call(json!({"mode":"android-assemble", "still_base64":enc(&base)})).is_err());
-}
-
-#[test]
-fn hdr_writers_match_the_reference_bytes() {
-    let base = b64("tests/fixtures-pycli/base.jpg.b64");
-    assert_eq!(
-        still::ultra(&base, &base, 2.0).unwrap(),
-        b64("tests/fixtures-pycli/expected/ultra-2.0.bin.b64")
-    );
-    assert_eq!(
-        still::ultra(&base, &base, 1.8).unwrap(),
-        b64("tests/fixtures-pycli/expected/ultra-1.8.bin.b64")
-    );
-    assert_eq!(
-        still::color_profile(&b64("tests/fixtures-pycli/srgb.jpg.b64"), b"FAKEICC").unwrap(),
-        b64("tests/fixtures-pycli/expected/srgb-icc.bin.b64")
-    );
-}
-
-/// A host that "decodes" any gain map to 2x2 gray and "encodes" to base.jpg.
-struct FakeHost;
-impl momentstays_core::engine::Native for FakeHost {
-    fn srgb_icc(&self) -> momentstays_core::Result<Vec<u8>> {
-        Ok(b"FAKEICC".to_vec())
-    }
-    fn decode_gray_jpeg(
-        &self,
-        _: &[u8],
-    ) -> momentstays_core::Result<Option<momentstays_core::engine::Gray>> {
-        Ok(Some(momentstays_core::engine::Gray {
-            width: 2,
-            height: 2,
-            stride: 2,
-            pixels: vec![0, 64, 128, 255],
-        }))
-    }
-    fn encode_gray_jpeg(
-        &self,
-        g: &momentstays_core::engine::Gray,
-        quality: f64,
-    ) -> momentstays_core::Result<Vec<u8>> {
-        assert_eq!(quality, 1.0);
-        assert_eq!(g.pixels.len(), 4);
-        Ok(b64("tests/fixtures-pycli/base.jpg.b64"))
-    }
-}
-
-#[test]
-fn legacy_apple_hdr_is_converted_through_host_codecs() {
-    let (src, out) = (Dir::new("src"), Dir::new("out"));
-    let legacy = b64("tests/fixtures-pycli/legacy-mpf.jpg.b64");
-    let still_bytes = momentstays_core::jpeg::static_only(&legacy).unwrap();
-    // Swift refuses to guess the colour space: give the still an ICC profile.
-    let icc = momentstays_core::pyjpeg::app(0xE2, b"ICC_PROFILE\0\x01\x01FAKEICC").unwrap();
-    let still_bytes =
-        momentstays_core::pyjpeg::edit_header(&still_bytes, &Default::default(), &icc).unwrap();
-    assert!(momentstays_core::apple_hdr::legacy(&still_bytes)
-        .unwrap()
-        .0
-        .is_some());
-    let m = MotionModel {
-        still: still_bytes,
-        video: video(),
-        cover: Cover::Time(800_000),
-        source_format: "test".into(),
-    };
-    // The writer declares any second MPF image an Ultra HDR GainMap (like
-    // Swift's assembler). Rename that attribute in place (same length, so
-    // no offsets move) to keep a legacy-only Apple HDR Motion Photo.
-    let mut file = model::write(&m, Vendor::Google).unwrap();
-    let at = file
-        .windows(14)
-        .position(|w| w == b"hdrgm:Version=")
-        .unwrap();
-    file[at + 12] = b'x';
-    let p = format::parse(&file).unwrap();
-    assert!(!p.ultra);
-    std::fs::write(src.0.join("hdr.jpg"), &file).unwrap();
-    let outcome = batch::run(
-        &FakeHost,
-        &RunRequest {
-            sources: std::slice::from_ref(&src.0),
-            output: &out.0,
-            options: &ConversionOptions::default(),
-            scan_rows: None,
-            concurrency: Some(1),
-        },
-        &StopToken::new(),
-        None,
-        |_| {},
-    )
-    .unwrap();
-    let f = &files(&outcome)[0];
-    assert_eq!(f["status"], "converted", "{f:#}");
-    assert_eq!(f["hdr"]["status"], "converted", "{f:#}");
-    assert_eq!(f["hdr"]["output"], "ultra-hdr");
-    assert_eq!(
-        (f["hdr"]["width"].as_u64(), f["hdr"]["height"].as_u64()),
-        (Some(2), Some(2))
-    );
-    let live_still = std::fs::read(out.0.join("hdr.jpg.livephoto/hdr.jpg")).unwrap();
-    assert_eq!(
-        jpeg::auxiliary(&live_still).unwrap().len(),
-        2,
-        "gain map packed"
-    );
-    // Without host codecs the same file still converts, keeping the original HDR.
-    let out2 = Dir::new("out2");
-    let plain = run(
-        std::slice::from_ref(&src.0),
-        &out2.0,
-        &ConversionOptions::default(),
-        None,
-    );
-    let g = &files(&plain)[0];
-    assert_eq!(g["status"], "converted");
-    assert_eq!(g["hdr"]["reason"], "旧 HDR 尝试转换未完成，原格式已保留");
-    assert!(g["warnings"][0]
-        .as_str()
-        .unwrap()
-        .starts_with("需要原生处理"));
-}
-
-#[test]
-fn legacy_name_restore_never_overwrites_an_unlisted_user_file() {
-    let dir = Dir::new("rename-collision");
-    let pair = dir.0.join("pair");
-    std::fs::create_dir(&pair).unwrap();
-    std::fs::write(pair.join("photo.jpg"), b"old still").unwrap();
-    std::fs::write(pair.join("photo.mov"), b"old movie").unwrap();
-    std::fs::write(pair.join("source.jpg"), b"user file").unwrap();
-    let original = json!({"timing":{},"hdr":{},"implementation":"gui-native-1.0.3",
-        "output_sha256":{"photo.jpg":momentstays_core::sha256_hex(b"old still"),"photo.mov":momentstays_core::sha256_hex(b"old movie")}});
-    let bytes = serde_json::to_vec(&original).unwrap();
-    std::fs::write(pair.join("manifest.json"), &bytes).unwrap();
-    assert!(
-        batch::restore_names(&pair, Path::new("source.jpg"), &original, &StopToken::new()).is_err()
-    );
-    assert_eq!(
-        std::fs::read(pair.join("source.jpg")).unwrap(),
-        b"user file"
-    );
-    assert_eq!(std::fs::read(pair.join("photo.jpg")).unwrap(), b"old still");
-    assert_eq!(std::fs::read(pair.join("photo.mov")).unwrap(), b"old movie");
-    assert_eq!(std::fs::read(pair.join("manifest.json")).unwrap(), bytes);
-    assert_eq!(
-        std::fs::read_dir(&dir.0).unwrap().count(),
-        1,
-        "no staging left behind"
-    );
 }

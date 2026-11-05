@@ -54,7 +54,13 @@ with tempfile.TemporaryDirectory(prefix="motionlive-swift-gui-") as folder:
         (src/"missing.jpg").write_bytes(motion(still,None,movie=video))
         output = root/(name+"-out")
         result = call({"mode":"batch","input":str(src),"output":str(output)})
-        assert result["counts"] == {"converted":1,"failed":1,"skipped":1,"resumed":0},result
+        expected_counts = {"converted":2 if name == "legacy" else 1,"failed":1,"skipped":0 if name == "legacy" else 1,"resumed":0}
+        assert result["counts"] == expected_counts,result
+        if name == "legacy":
+            static = output / "still.jpg.static-hdr"
+            static_manifest = json.loads((static / "manifest.json").read_text())
+            assert static_manifest["output_files"] == {"static":"still.jpg"}
+            assert "identifier" not in static_manifest and not list(static.glob("*.mov"))
         manifest = json.loads((output/"中文动态.jpg.livephoto/manifest.json").read_text())
         expected = (fixture["cover_us"] - settings.get("start_us",0))/1e6
         assert abs(manifest["timing"]["cover_seconds"] - expected) < 2e-6
@@ -64,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix="motionlive-swift-gui-") as folder:
         if name == "audio":
             assert len(manifest["timing"]["tracks"]) == 2
         again = call({"mode":"batch","input":str(src),"output":str(output)})
-        assert again["counts"]["resumed"] == 1,again
+        assert again["counts"]["resumed"] == (2 if name == "legacy" else 1),again
         scan = call({"mode":"scan","input":str(src)})
         assert sum(row["motion"] for row in scan["rows"]) == 2,scan
         call({"mode":"batch","input":str(src),"output":str(src/"unsafe-output")},ok=False)

@@ -129,7 +129,8 @@ final class PhotoLibraryService {
                 } else {
                     do { _ = try PhotoFormat.parse(Array(Data(contentsOf: image))) }
                     catch {
-                        if error.localizedDescription == PhotoFormat.notMotion {
+                        let row = RustCore.scanFile(image,relative:filename,direction:"to-apple")
+                        if error.localizedDescription == PhotoFormat.notMotion || row.confirmedStatic {
                             result.skipped += 1; try? fm.removeItem(at: folder)
                             try store.inspected(asset.localIdentifier, version: Self.version(asset, edited: edited), scope: scope.key)
                             progress(index + 1, assets.count, "静态照片已跳过"); continue
@@ -203,7 +204,7 @@ final class PhotoLibraryService {
             if token.isCancelled { break }
             progress("导入相册 \(index + 1) / \(task.results.count)")
             do {
-                let standalone = task.settings.exportMode == .withCandidates && file.files.count == 1
+                let standalone = file.files.count == 1 && (file.standaloneHDR == true || task.settings.exportMode == .withCandidates)
                 guard standalone || file.files.count == 2 else { throw Failure("缺少完整实况配对") }
                 var record = store.records()[file.key]
                 var asset: PHAsset?

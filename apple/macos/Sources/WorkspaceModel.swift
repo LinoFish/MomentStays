@@ -49,6 +49,8 @@ struct PhotoQueueItem: Identifiable {
     var resultDetail: String?
     var id: String { source.path }
     var name: String { source.lastPathComponent }
+    private let allowsStaticHDR: Bool
+    var isConvertible: Bool { isMotion || (allowsStaticHDR && row.isStaticHDR) }
     var requiresManualFrame: Bool { cover == "未确定（需选帧）" }
     var state: PhotoState { resultState ?? initialState }
     var detail: String { resultDetail?.isEmpty == false ? resultDetail! : scanDetail }
@@ -63,12 +65,13 @@ struct PhotoQueueItem: Identifiable {
         return .ready
     }
 
-    init(_ row: ScanRow) {
+    init(_ row: ScanRow, allowsStaticHDR: Bool = true) {
+        self.allowsStaticHDR = allowsStaticHDR
         self.row = row
         source = row.source; relative = row.relative; isMotion = row.isMotion
         manufacturer = row.manufacturer; manufacturerDetail = row.manufacturerDetail
         hdr = row.hdr; cover = row.cover; scanDetail = row.detail
-        initialState = row.isMotion ? .ready : row.needsInspection ? .inspect : .static
+        initialState = (row.isMotion || (allowsStaticHDR && row.isStaticHDR)) ? .ready : row.needsInspection ? .inspect : .static
     }
 }
 
@@ -215,7 +218,7 @@ final class WorkspaceModel: ObservableObject {
 
     func toggleSelection(_ item: PhotoQueueItem) {
         selection = item.id
-        guard !isBusy, !sharing, item.isMotion else { return }
+        guard !isBusy, !sharing, item.isConvertible else { return }
         hasExplicitSelection = true
         if selectedIDs.remove(item.id) == nil {
             selectedIDs.insert(item.id)
@@ -228,7 +231,7 @@ final class WorkspaceModel: ObservableObject {
     }
     var manualItems: [PhotoQueueItem] { items.filter { category($0) == .manual } }
     private var conversionItems: [PhotoQueueItem] {
-        items.filter { $0.isMotion && category($0) != .manual &&
+        items.filter { $0.isConvertible && category($0) != .manual &&
             (hasExplicitSelection ? selectedIDs.contains($0.id) : [.ready,.converted].contains(category($0))) }
     }
     func confirmManualMidpoint(_ item: PhotoQueueItem) {
@@ -330,7 +333,7 @@ final class WorkspaceModel: ObservableObject {
     var outputOpenHelp: String { canOpenOutput ? "打开输出文件夹" : "输出文件夹尚未创建，转换后可打开" }
     var canStop: Bool { isBusy && phase != .stopping && !isPreview }
     var selectedItem: PhotoQueueItem? { items.first { $0.id == selection } }
-    var motionCount: Int { items.filter { $0.isMotion }.count }
+    var motionCount: Int { items.filter { $0.isConvertible }.count }
     func category(_ item: PhotoQueueItem) -> PhotoState { item.category(settings:settings) }
     var issueCount: Int { items.filter { category($0) == .inspect }.count }
 
@@ -506,7 +509,7 @@ final class WorkspaceModel: ObservableObject {
         }
         let retained = preservingResults ? Dictionary(items.map { ($0.id,$0) },uniquingKeysWith:{ first,_ in first }) : [:]
         func queueItem(_ row: ScanRow) -> PhotoQueueItem {
-            var item = PhotoQueueItem(row)
+            var item = PhotoQueueItem(row,allowsStaticHDR:sourceOrigins[row.source.path] == nil)
             if let old = retained[item.id], old.row.version != nil, old.row.version == row.version { item.resultState = old.resultState; item.resultDetail = old.resultDetail }
             return item
         }
@@ -538,13 +541,13 @@ final class WorkspaceModel: ObservableObject {
                 if !currentToken.isCancelled { self.invalidateCoverSelections(Set(versions.keys).subtracting(rows.map { $0.source.path })) }
                 self.scanComplete = !currentToken.isCancelled
                 self.items = currentToken.isCancelled ? merge(rows).filter { $0.row.version == nil || SourceVersion.read($0.source) == $0.row.version } : rows.map(queueItem)
-                let valid = Set(self.items.filter { $0.isMotion }.map(\.id))
+                let valid = Set(self.items.filter { $0.isConvertible }.map(\.id))
                 self.selectedIDs.formIntersection(valid)
                 self.invalidateCoverSelections(Set(self.manualVersions.keys).subtracting(valid))
                 self.rowIndices = Dictionary(self.items.enumerated().map { ($0.element.relative, $0.offset) }, uniquingKeysWith: { first, _ in first })
                 if !self.items.contains(where: { $0.id == self.selection }) { self.selection = nil }
                 self.phase = currentToken.isCancelled ? .stopped : .ready
-                self.status = currentToken.isCancelled ? "扫描已停止，可重新扫描" : self.motionCount > 0 ? "已就绪 · \(self.motionCount) 张可转换" : "没有可转换的动态照片"
+                self.status = currentToken.isCancelled ? "扫描已停止，可重新扫描" : self.motionCount > 0 ? "已就绪 · \(self.motionCount) 张可转换" : "没有可转换的动态照片或静态 HDR"
                 self.progress = nil
             case .failure(let error): self.fail(error, cancelled: currentToken.isCancelled)
             }
@@ -568,7 +571,7 @@ final class WorkspaceModel: ObservableObject {
         guard !isBusy, !isPreview else { return }
         guard let output = outputOverride ?? output else { cancelManualPreparation(); notice = "请先选择输出位置"; return }
         manualPlan = nil; manualPreparation = false; pendingOutput = nil
-        let targets = targetIDs.map { ids in items.filter { ids.contains($0.id) && $0.isMotion && category($0) != .manual } } ?? conversionItems
+        let targets = targetIDs.map { ids in items.filter { ids.contains($0.id) && $0.isConvertible && category($0) != .manual } } ?? conversionItems
         let versions = coverVersions.merging(manualVersions,uniquingKeysWith:{ _,new in new }).merging(selectionVersions,uniquingKeysWith:{ _,new in new })
         let changed = Set(versions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) != $0.value ? $0.key : nil }).union(items.compactMap { item in
             guard let version = item.row.version, SourceVersion.read(item.source) != version else { return nil }

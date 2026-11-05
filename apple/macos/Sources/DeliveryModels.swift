@@ -17,6 +17,7 @@ struct DeliveredFile: Codable, Equatable {
     var key: String
     var origin: LibraryOrigin?
     var hashes: [String: String] = [:]
+    var standaloneHDR: Bool? = nil
     func verify() throws {
         for file in Set(files).union(hashes.keys) {
             guard let expected = hashes[file], try NativeBatch.hashFile(URL(fileURLWithPath: file)) == expected else {
@@ -144,7 +145,10 @@ final class DeliveryStore {
                   let source = entry["source"] as? String, let path = entry["output"] as? String else { return [] }
             let input = URL(fileURLWithPath: source), folder = URL(fileURLWithPath: path)
             let files: [URL]
-            if settings.direction.exportsAndroid {
+            if let names = entry["output_files"] as? [String:String], let photo = names["static"] {
+                _ = try RustCore.engine(["mode":"verify","input":folder.path])
+                files = [folder.appendingPathComponent(photo)]
+            } else if settings.direction.exportsAndroid {
                 let ext = settings.direction == .toAndroid && settings.container == .heic ? "heic" : "jpg"
                 files = [folder.appendingPathComponent(input.deletingPathExtension().lastPathComponent + ".MP." + ext)]
             } else {
@@ -165,7 +169,8 @@ final class DeliveryStore {
                 verifiedFiles.append(folder.appendingPathComponent("manifest.json"))
             }
             var result = [DeliveredFile(source:source,folder:path,files:files.map(\.path),key:baseKey,origin:origin,
-                hashes:try Dictionary(uniqueKeysWithValues:verifiedFiles.map { ($0.path,try NativeBatch.hashFile($0)) }))]
+                hashes:try Dictionary(uniqueKeysWithValues:verifiedFiles.map { ($0.path,try NativeBatch.hashFile($0)) }),
+                standaloneHDR:(entry["output_files"] as? [String:String])?["static"] != nil)]
             if settings.direction == .toApple && settings.exportMode == .withCandidates {
                 let names = entry["output_files"] as? [String:String] ?? [:]
                 for role in names.keys.sorted() where NativeBatch.isCandidatePhotoRole(role) {

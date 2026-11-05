@@ -2,7 +2,7 @@
 //! form, which is stored in manifests and compared on resume, so it must
 //! stay value-identical to the Swift engine's.
 
-use crate::engine::transfer;
+use crate::engine::contracts;
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 
@@ -94,7 +94,7 @@ impl ConversionOptions {
             return json!({
                 "direction": self.direction,
                 "target": "honor",
-                "layout": transfer::REVISION,
+                "layout": contracts::TRANSFER_REVISION,
                 "vendor": "google",
                 "container": "jpeg",
                 "export_data_files": self.export_data_files,

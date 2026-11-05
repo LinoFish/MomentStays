@@ -133,7 +133,7 @@ struct ConversionSettings: Equatable, Codable {
 
     var options: ConversionOptions {
         if direction == .androidToAndroid {
-            var result = ConversionOptions()
+            var result = ConversionOptions(legacyHDR: legacyHDR)
             result.direction = direction.rawValue
             result.exportDataFiles = exportDataFiles
             return result

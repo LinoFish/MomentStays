@@ -5,57 +5,7 @@ use crate::{format, scan};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-/// Batch-local identity of a file: device, inode, size, modification and
-/// change times (Swift `SourceVersion`, from `lstat`). Never persisted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SourceVersion {
-    pub device: u64,
-    pub inode: u64,
-    pub size: u64,
-    pub modified_ns: i128,
-    pub changed_ns: i128,
-}
-
-impl SourceVersion {
-    fn read_kind(path: &Path, dir: bool) -> Option<Self> {
-        let m = std::fs::symlink_metadata(path).ok()?;
-        if (dir && !m.is_dir()) || (!dir && !m.is_file()) {
-            return None;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            Some(SourceVersion {
-                device: m.dev(),
-                inode: m.ino(),
-                size: m.size(),
-                modified_ns: m.mtime() as i128 * 1_000_000_000 + m.mtime_nsec() as i128,
-                changed_ns: m.ctime() as i128 * 1_000_000_000 + m.ctime_nsec() as i128,
-            })
-        }
-        #[cfg(not(unix))]
-        {
-            let ns = |t: std::io::Result<std::time::SystemTime>| {
-                t.ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(0, |d| d.as_nanos() as i128)
-            };
-            Some(SourceVersion {
-                device: 0,
-                inode: 0,
-                size: m.len(),
-                modified_ns: ns(m.modified()),
-                changed_ns: ns(m.created()),
-            })
-        }
-    }
-    pub fn read(path: &Path) -> Option<Self> {
-        Self::read_kind(path, false)
-    }
-    pub fn read_directory(path: &Path) -> Option<Self> {
-        Self::read_kind(path, true)
-    }
-}
+pub use crate::engine::identity::SourceVersion;
 
 #[derive(Clone, Debug)]
 pub struct ScanRow {
@@ -89,6 +39,13 @@ impl Default for ScanRow {
 }
 
 impl ScanRow {
+    pub fn is_static_hdr(&self) -> bool {
+        self.confirmed_static
+            && matches!(
+                self.hdr.as_str(),
+                "Ultra HDR" | "ISO HDR" | "旧 Apple HDR" | "荣耀私有 HDR" | "HEIC HDR"
+            )
+    }
     pub fn needs_inspection(&self) -> bool {
         !self.is_motion && !self.confirmed_static
     }
@@ -165,6 +122,21 @@ pub fn scan_file(
                 confirmed_static: r.confirmed_static,
                 version: None,
             };
+            if !row.is_motion {
+                match crate::engine::static_hdr::inspect(native, data) {
+                    Ok(Some(kind)) => {
+                        row.confirmed_static = true;
+                        row.hdr = kind.into();
+                        row.cover = "不适用".into();
+                        row.detail = "静态 HDR，可处理并导出静态图片".into();
+                    }
+                    Err(e) => {
+                        row.confirmed_static = false;
+                        row.detail = e.0;
+                    }
+                    Ok(None) => {}
+                }
+            }
             // The pixel half of Swift `confirmedStatic` (ImageIO decode).
             if row.confirmed_static && native.image_decodes(data) == Some(false) {
                 row.confirmed_static = false;

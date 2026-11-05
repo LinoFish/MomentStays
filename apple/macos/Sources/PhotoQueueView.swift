@@ -125,7 +125,7 @@ struct PhotoQueueView: View {
                     ForEach(visibleItems) { item in
                         Button { model.toggleSelection(item) } label: {
                             HStack {
-                                if item.isMotion {
+                                if item.isConvertible {
                                     PhotoSelectionMark(selected:model.selectedIDs.contains(item.id))
                                 }
                                 row(item, layout: layout)
@@ -165,7 +165,7 @@ struct PhotoQueueView: View {
                     coverButton(item)
                     manualControls(item)
                     Button(model.selectedIDs.contains(item.id) ? "取消选择此照片" : "选择此照片") { model.toggleSelection(item) }
-                        .disabled(model.isBusy || model.sharing || !item.isMotion)
+                        .disabled(model.isBusy || model.sharing || !item.isConvertible)
                     Text(item.detail).font(.callout).textSelection(.enabled)
                 }.padding(16).recordLayout("preview-photo")
                     .task(id:item.id + model.settings.direction.rawValue + (item.row.version?.manualSignature ?? "")) { model.requestCoverCandidates(item) }
@@ -283,7 +283,7 @@ struct PhotoQueueView: View {
                     .frame(height:cardImageHeight).clipped()
                     .recordLayout("photo-image-" + item.id)
                 HStack(spacing:6) {
-                    if item.isMotion {
+                    if item.isConvertible {
                         PhotoSelectionMark(selected:model.selectedIDs.contains(item.id))
                     }
                     Text(item.name).font(.callout.weight(.medium)).foregroundColor(.primary)
@@ -297,7 +297,7 @@ struct PhotoQueueView: View {
         .accessibilityAddTraits(model.selectedIDs.contains(item.id) ? .isSelected : [])
         .accessibilityLabel(item.name + "，" + model.category(item).title + "，" + item.hdr)
         .task(id:item.id + model.settings.direction.rawValue + (item.row.version?.manualSignature ?? "")) { model.requestCoverCandidates(item) }
-        .accessibilityHint(item.isMotion ? "点击累加选择，再次点击取消此项；使用预览查看动态画面" : "点击查看文件详情")
+        .accessibilityHint(item.isConvertible ? "点击累加选择，再次点击取消此项；使用预览查看动态画面" : "点击查看文件详情")
     }
 
     private func cardBadges(_ item: PhotoQueueItem) -> some View {

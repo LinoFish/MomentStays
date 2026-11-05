@@ -181,7 +181,9 @@ pub fn handle(
             let file = first()?;
             let relative = req["relative"].as_str().unwrap_or("");
             let row = match req["direction"].as_str().unwrap_or("to-apple") {
-                "to-android" => android::scan_file(&file, relative),
+                "to-android" => {
+                    crate::engine::live::pairing::scan_file_with_native(native, &file, relative)
+                }
                 "android-to-android" => {
                     crate::engine::transfer::scan_file(native, &file, relative, None)
                 }
@@ -243,6 +245,16 @@ pub fn handle(
             let source = first()?;
             let target = path(req, "output")?;
             let overwrite = req["overwrite"].as_bool().unwrap_or(false);
+            let row = if options.direction == "to-android" {
+                crate::engine::live::pairing::scan_file_with_native(native, &source, "")
+            } else {
+                crate::engine::scanrow::scan_file(native, &source, "", None)
+            };
+            if row.is_static_hdr() {
+                return crate::engine::static_hdr::convert(
+                    native, &source, &target, &options, token, overwrite, &timings,
+                );
+            }
             match options.direction.as_str() {
                 "to-android" => android::convert(
                     native, &source, &target, &options, token, overwrite, &timings,

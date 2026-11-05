@@ -61,6 +61,8 @@ struct ScanRow {
     var manufacturerDetail: String = ""
     var confirmedStatic = false
     var version: SourceVersion?
+    var isStaticHDR: Bool { confirmedStatic && ["Ultra HDR","ISO HDR","旧 Apple HDR","荣耀私有 HDR","HEIC HDR"].contains(hdr) }
+    var isConvertible: Bool { isMotion || isStaticHDR }
     var needsInspection: Bool { !isMotion && !confirmedStatic }
 }
 

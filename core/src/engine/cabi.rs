@@ -14,7 +14,7 @@
 use crate::engine::batch::{ExistingOutput, Progress};
 use crate::engine::request::{self, row_json, Events};
 use crate::engine::scanrow::ScanRow;
-use crate::engine::{needs_native, Gray, HeicGain, Native, StopToken};
+use crate::engine::{needs_native, Gray, HeicGain, Native, Rgba, StopToken};
 use crate::{Error, Result};
 use serde_json::{json, Value};
 use std::ffi::{c_char, c_void, CString};
@@ -231,6 +231,11 @@ impl Native for Host {
             return Ok(None);
         }
         gray(out.0, dims[0], dims[1], dims[2]).map(Some)
+    }
+    fn decode_srgb_jpeg(&self, jpeg: &[u8]) -> Result<Option<Rgba>> {
+        // Keep the C callback table ABI unchanged; Apple uses the direct Rust
+        // ImageIO backend. Other Rust hosts can implement the Native method.
+        crate::platform::SystemNative.decode_srgb_jpeg(jpeg)
     }
     fn encode_gray_jpeg(&self, image: &Gray, quality: f64) -> Result<Vec<u8>> {
         if self.table().encode_gray_jpeg.is_none() {

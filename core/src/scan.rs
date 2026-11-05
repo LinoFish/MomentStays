@@ -350,7 +350,8 @@ pub fn confirmed_static(data: &[u8]) -> bool {
     let Ok(ranges) = jpeg::image_ranges(data) else {
         return false;
     };
-    if ranges.last().is_none_or(|r| r.end != data.len()) {
+    let end = ranges.last().map_or(0, |r| r.end);
+    if end != data.len() && !matches!(hdr::honor_private(data, end), Ok(Some(_))) {
         return false;
     }
     let Ok(packets) = xmp::packets(data) else {

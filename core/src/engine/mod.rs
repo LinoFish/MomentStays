@@ -7,6 +7,10 @@
 //! (Chinese) texts follow the Swift engine, so results written by the
 //! Swift app are resumed, verified and delivered unchanged.
 //!
+//! `batch` owns queue/scheduling; `live` owns per-item conversion routes;
+//! `output` owns publication/integrity; `hdr` owns static HDR processing.
+//! `native` supplies shared codec types and the replaceable backend interface.
+//!
 //! Byte and container work is done here. Pixel and codec work (decoding a
 //! gain map, re-encoding a JPEG, decoding a video frame, ImageIO checks)
 //! goes through [`Native`], implemented by the host (ImageIO/AVFoundation
@@ -17,95 +21,29 @@ pub mod android;
 pub mod batch;
 pub mod cabi;
 pub mod candidates;
+pub mod contracts;
+pub mod hdr;
+pub mod honor;
+pub mod identity;
+pub mod live;
 pub mod manual;
 pub mod movie;
+pub mod native;
 pub mod options;
+pub mod output;
 pub mod paths;
 pub mod request;
 pub mod scanrow;
+pub mod static_hdr;
 pub mod still;
 pub mod transfer;
+
+pub use native::{needs_native, Gray, HeicGain, Native, NoNative, Rgba};
 
 use crate::{Error, ErrorKind, Result};
 use serde_json::{Map, Value};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-
-/// Error for a step that needs the host's image or video codecs.
-pub fn needs_native<T>(what: &str) -> Result<T> {
-    Err(Error::with_kind(
-        ErrorKind::Unsupported,
-        format!("需要原生处理：{what}"),
-    ))
-}
-
-/// An 8-bit single-channel image (gain maps).
-#[derive(Clone, Debug, PartialEq)]
-pub struct Gray {
-    pub width: usize,
-    pub height: usize,
-    /// Bytes per row (>= width).
-    pub stride: usize,
-    pub pixels: Vec<u8>,
-}
-
-/// The HDR gain map ImageIO exposes for a HEIC (`kCGImageAuxiliaryDataTypeHDRGainMap`).
-#[derive(Clone, Debug)]
-pub struct HeicGain {
-    /// `HDRGainMapVersion` values in the auxiliary metadata (Apple namespace).
-    pub versions: Vec<String>,
-    /// `HDRGainMapHeadroom` values.
-    pub headrooms: Vec<f64>,
-    /// None when the pixel format is not 8-bit one-component.
-    pub image: Option<Gray>,
-}
-
-/// Host codecs and services. Every method has a refusing default, so a
-/// host implements only what it supports.
-pub trait Native: Sync {
-    /// ImageIO-style full decode check of a still (complete, positive size).
-    /// None = not available; callers then rely on the byte checks alone.
-    fn image_decodes(&self, _data: &[u8]) -> Option<bool> {
-        None
-    }
-    /// The sRGB ICC profile tagged onto a legacy-HDR still without one.
-    fn srgb_icc(&self) -> Result<Vec<u8>> {
-        needs_native("sRGB ICC 色彩描述")
-    }
-    /// Decode a JPEG gain map; Ok(None) when it is not 8-bit monochrome.
-    fn decode_gray_jpeg(&self, _jpeg: &[u8]) -> Result<Option<Gray>> {
-        needs_native("解码旧 Apple 增益图")
-    }
-    /// Encode an 8-bit gray image as JPEG at `quality` (0..=1).
-    fn encode_gray_jpeg(&self, _image: &Gray, _quality: f64) -> Result<Vec<u8>> {
-        needs_native("编码增益图 JPEG")
-    }
-    /// Decode the still at `path` and re-encode it as JPEG at `quality`,
-    /// keeping its image properties (EXIF, orientation, colour).
-    fn reencode_jpeg(&self, _path: &Path, _quality: f64) -> Result<Vec<u8>> {
-        needs_native("重新编码静态图")
-    }
-    /// The HDR gain map of a HEIC still, if ImageIO exposes one.
-    fn heic_gain_map(&self, _path: &Path) -> Result<Option<HeicGain>> {
-        needs_native("读取 HEIC HDR 增益图")
-    }
-    /// Decode one frame of video track `track` (0-based among video tracks)
-    /// of the movie at `video`, at media time `time_seconds`, with the track
-    /// transform applied, and encode it as JPEG at quality 1.0.
-    /// Returns (jpeg, width, height).
-    fn frame_jpeg(
-        &self,
-        _video: &Path,
-        _track: usize,
-        _time_seconds: f64,
-    ) -> Result<(Vec<u8>, u32, u32)> {
-        needs_native("解码辅助轨高清画面")
-    }
-}
-
-/// No host codecs: pixel steps are refused, byte steps still run.
-pub struct NoNative;
-impl Native for NoNative {}
 
 /// Cooperative cancellation, like Swift `StopToken`.
 #[derive(Default)]
