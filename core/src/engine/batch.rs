@@ -166,6 +166,7 @@ pub fn scan(
 /// What to do with an output folder that already exists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExistingOutput {
+    Resume,
     Skip,
     Overwrite,
     Cancel,
@@ -236,6 +237,7 @@ pub fn run(
         .collect();
     let mut static_indices: HashSet<usize> = HashSet::new();
     let mut hdr_indices: HashSet<usize> = HashSet::new();
+    let mut inspected: BTreeMap<usize, ScanRow> = BTreeMap::new();
     {
         perform(
             &entries,
@@ -247,35 +249,61 @@ pub fn run(
                     if cached.version.is_some()
                         && cached.version == SourceVersion::read(&entries[i])
                     {
-                        return (cached.confirmed_static, cached.is_static_hdr());
+                        return (*cached).clone();
                     }
                 }
-                let row = if options.direction == "to-android" {
+                if options.direction == "to-android" {
                     android::scan_file_with_native(native, &entries[i], &relatives[i])
                 } else if options.direction == "android-to-android" {
                     transfer::scan_file(native, &entries[i], &relatives[i], None)
                 } else {
                     scanrow::scan_file(native, &entries[i], &relatives[i], None)
-                };
-                (row.confirmed_static, row.is_static_hdr())
+                }
             },
-            |i, (is_static, is_hdr)| {
-                if is_hdr {
+            |i, row| {
+                if row.is_static_hdr() && row.burst.is_none() {
                     hdr_indices.insert(i);
                 }
-                if is_static && !is_hdr {
+                if row.confirmed_static && !row.is_static_hdr() && row.burst.is_none() {
                     static_indices.insert(i);
                 }
+                inspected.insert(i, row);
             },
         );
+    }
+    // Group work is admitted to the same queue as live/HDR items. A group leader
+    // owns the transaction; per-member results are emitted only after publication.
+    let plans = if options.burst_plans.is_empty() {
+        crate::engine::burst::plans(&inspected.values().cloned().collect::<Vec<_>>())
+    } else {
+        options.burst_plans.clone()
+    };
+    let by_group: HashMap<String, Value> = plans
+        .into_iter()
+        .filter_map(|p| p["id"].as_str().map(|id| (id.to_owned(), p.clone())))
+        .collect();
+    let mut grouped: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for (i, row) in &inspected {
+        if let Some(id) = row.burst.as_ref().and_then(|v| v["group_id"].as_str()) {
+            grouped.entry(id.into()).or_default().push(*i);
+        }
+    }
+    let mut burst_jobs: HashMap<usize, (Value, Vec<usize>)> = HashMap::new();
+    let mut followers = HashSet::new();
+    for (id, indices) in grouped {
+        if let Some(plan) = by_group.get(&id) {
+            followers.extend(indices.iter().skip(1).copied());
+            burst_jobs.insert(indices[0], (plan.clone(), indices));
+        }
     }
     let planned = crate::engine::uptime(started);
     let total = entries.len() - static_indices.len();
     let mut results: BTreeMap<usize, Value> = BTreeMap::new();
-    let mut counts: BTreeMap<String, usize> = ["converted", "resumed", "skipped", "failed"]
-        .iter()
-        .map(|k| (k.to_string(), 0))
-        .collect();
+    let mut counts: BTreeMap<String, usize> =
+        ["converted", "resumed", "copied", "skipped", "failed"]
+            .iter()
+            .map(|k| (k.to_string(), 0))
+            .collect();
     let mut sorted_static: Vec<usize> = static_indices.iter().copied().collect();
     sorted_static.sort_unstable();
     for i in &sorted_static {
@@ -290,7 +318,7 @@ pub fn run(
         });
     }
     let active: Vec<usize> = (0..entries.len())
-        .filter(|i| !static_indices.contains(i))
+        .filter(|i| !static_indices.contains(i) && !followers.contains(i))
         .collect();
     let suffix = if options.direction != "to-apple" {
         ".motionphoto"
@@ -302,6 +330,20 @@ pub fn run(
     let targets: Vec<PathBuf> = active
         .iter()
         .map(|i| {
+            if let Some((plan, _)) = burst_jobs.get(i) {
+                let parent = Path::new(&relatives[*i]).parent().unwrap_or(Path::new(""));
+                let evidence = crate::engine::burst::filename(&paths::file_name(&entries[*i]), "");
+                let label = evidence
+                    .as_ref()
+                    .and_then(|v| v["source_group"].as_str())
+                    .unwrap_or("burst");
+                let namespace = crate::sha256_hex(plan["id"].to_string().as_bytes());
+                return destination.join(parent).join(format!(
+                    "{}-{}.burst",
+                    label,
+                    &namespace[..8]
+                ));
+            }
             destination.join(format!(
                 "{}{}",
                 relatives[*i],
@@ -329,9 +371,25 @@ pub fn run(
         || !options.cover_selections.is_empty()
         || options.output_mode == "livephoto+candidates";
     let active_files: Vec<PathBuf> = active.iter().map(|i| entries[*i].clone()).collect();
+    // Frames are processed sequentially; reserve for the largest member, not
+    // merely the leader's size, while retaining the shared bounded scheduler.
+    let admission_files: Vec<PathBuf> = active
+        .iter()
+        .map(|i| {
+            burst_jobs
+                .get(i)
+                .and_then(|(_, indices)| {
+                    indices.iter().max_by_key(|j| {
+                        std::fs::metadata(&entries[**j]).map_or(u64::MAX, |m| m.len())
+                    })
+                })
+                .map(|j| entries[*j].clone())
+                .unwrap_or_else(|| entries[*i].clone())
+        })
+        .collect();
     let mut completed = 0usize;
     let (peak, reserved) = perform(
-        &active_files,
+        &admission_files,
         workers,
         heavy,
         token,
@@ -357,6 +415,7 @@ pub fn run(
                             return json!({"status": "skipped", "source": s(file), "output": s(target), "detail": "输出已存在，已按选择跳过；已有文件未改动", "decision_wait_seconds": wait})
                         }
                         ExistingOutput::Overwrite => overwrite = true,
+                        ExistingOutput::Resume => {}
                         ExistingOutput::Cancel => token.cancel(),
                     }
                 }
@@ -366,7 +425,35 @@ pub fn run(
             }
             let began = Instant::now();
             let timings = Timings::default();
-            let outcome = if hdr_indices.contains(&active[offset]) {
+            let outcome = if let Some((plan, indices)) = burst_jobs.get(&active[offset]) {
+                let id = plan["id"].as_str().unwrap_or("");
+                let choice = options.burst_choices.get(id);
+                let selected: Vec<_> = indices.iter().map(|i| entries[*i].clone()).collect();
+                let invalid_choice = choice.is_some_and(|c| c["signature"] != plan["signature"]);
+                if options.direction != "to-apple" {
+                    failure("荣耀连拍目前仅支持 Apple 目标")
+                } else if options.output_mode != "livephoto"
+                    || options.video_track != "primary"
+                    || options.cover_index.is_some()
+                {
+                    failure("连拍不支持实况封面或视频轨选项")
+                } else if invalid_choice {
+                    failure("连拍成员版本变化，代表帧或独立导出确认已失效")
+                } else {
+                    crate::engine::burst::convert(
+                        native,
+                        plan,
+                        &selected,
+                        crate::engine::burst::Choice {
+                            representative: choice.and_then(|c| c["representative"].as_str()),
+                            independent: choice.is_some_and(|c| c["independent"] == true),
+                        },
+                        target,
+                        token,
+                        overwrite,
+                    )
+                }
+            } else if hdr_indices.contains(&active[offset]) {
                 crate::engine::static_hdr::convert(
                     native, file, target, options, token, overwrite, &timings,
                 )
@@ -384,6 +471,13 @@ pub fn run(
             let mut result = outcome.unwrap_or_else(
                 |e| json!({"status": "failed", "source": s(file), "error": e.0, "detail": e.0}),
             );
+            if [Some("converted"), Some("resumed")].contains(&result["status"].as_str())
+                && !result["verification"].is_object()
+            {
+                if let Ok(manifest) = verify(target) {
+                    result["verification"] = manifest;
+                }
+            }
             result["stage_seconds"] = timings.seconds();
             result["conversion_seconds"] = json!(began.elapsed().as_secs_f64());
             result["decision_wait_seconds"] = json!(wait);
@@ -398,17 +492,32 @@ pub fn run(
                 return;
             }
             let index = active[offset];
-            let detail = result["detail"].as_str().unwrap_or("").to_string();
-            results.insert(index, result);
-            *counts.entry(status.clone()).or_default() += 1;
-            completed += 1;
-            progress(&Progress {
-                index: completed,
-                total,
-                relative: relatives[index].clone(),
-                status,
-                detail,
-            });
+            let indices = burst_jobs
+                .get(&index)
+                .map(|(_, v)| v.clone())
+                .unwrap_or_else(|| vec![index]);
+            for index in indices {
+                let detail = result["detail"].as_str().unwrap_or("").to_string();
+                let mut item = result.clone();
+                item["source"] = s(&entries[index]);
+                results.insert(index, item);
+                let count_kind = if result["processing_kind"] == "original-copy"
+                    && ["converted", "resumed"].contains(&status.as_str())
+                {
+                    "copied".to_string()
+                } else {
+                    status.clone()
+                };
+                *counts.entry(count_kind).or_default() += 1;
+                completed += 1;
+                progress(&Progress {
+                    index: completed,
+                    total,
+                    relative: relatives[index].clone(),
+                    status: status.clone(),
+                    detail,
+                });
+            }
         },
     );
     let stamp = iso8601_now().replace(':', "-");

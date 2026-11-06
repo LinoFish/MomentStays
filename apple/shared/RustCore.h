@@ -21,6 +21,7 @@ typedef struct {
     int32_t (*heic_gain_map)(void *, const char *path, MsBuffer *info_json, MsBuffer *pixels, MsBuffer *err);
     int32_t (*frame_jpeg)(void *, const char *video, int64_t track, double seconds, MsBuffer *out, int64_t *dims2, MsBuffer *err);
     void (*progress)(void *, const uint8_t *json, size_t len);
+    /* Decisions: 0 skip, 1 overwrite, 2 cancel, 3 verify/resume, -1 request policy. */
     int32_t (*existing_output)(void *, const char *source, const char *target);
     void (*rows_ready)(void *, const uint8_t *json, size_t len);
 } MsNative;

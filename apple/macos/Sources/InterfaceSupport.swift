@@ -287,6 +287,8 @@ struct WorkspaceActions {
     var copy: (String) -> Void = { _ in }
     var acceptDrop: ([NSItemProvider], Bool) -> Bool = { _, _ in false }
     var shareResults: () -> Void = {}
+    var exportResults: () -> Void = {}
+    var chooseUnconvertedOutput: () -> Void = {}
     var chooseAlbum: () -> Void = {}
     var recentResults: () -> Void = {}
     var toggleLibraryMonitoring: () -> Void = {}
@@ -361,7 +363,7 @@ extension PhotoState {
         switch self {
         case .failed: return .red
         case .inspect: return .orange
-        case .converted, .resumed: return .green
+        case .converted, .resumed, .copied: return .green
         default: return .secondary
         }
     }

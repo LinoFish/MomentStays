@@ -431,7 +431,7 @@ pub fn scan_file(
         }
         Err(e) => {
             let base = scanrow::scan_file(native, source, relative, bytes);
-            if base.is_static_hdr() {
+            if base.is_static_hdr() || base.burst.is_some() {
                 return base;
             }
             ScanRow {
@@ -515,5 +515,6 @@ pub fn convert(
         "timing": timing,
         "hdr": hdr,
         "detail": "Google → 荣耀：已无损保留原视频和源封面并校验",
+        "verification": manifest,
     }))
 }

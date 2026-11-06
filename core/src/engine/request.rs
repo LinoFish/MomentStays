@@ -90,7 +90,7 @@ pub fn row_json(row: &ScanRow) -> Value {
     v
 }
 
-fn row_from_json(v: &Value) -> Option<ScanRow> {
+pub(crate) fn row_from_json(v: &Value) -> Option<ScanRow> {
     let version = v.get("version").and_then(|ver| {
         Some(SourceVersion {
             device: ver["device"].as_u64()?,
@@ -111,6 +111,7 @@ fn row_from_json(v: &Value) -> Option<ScanRow> {
         manufacturer_detail: v["manufacturer_detail"].as_str().unwrap_or("").into(),
         confirmed_static: v["static"].as_bool().unwrap_or(false),
         version,
+        burst: v.get("burst").filter(|v| v.is_object()).cloned(),
     })
 }
 
@@ -132,6 +133,8 @@ pub fn handle(
             .ok_or_else(|| Error::new("Missing input"))
     };
     match mode {
+        "export-plan" => crate::engine::export::plan(native, token, req),
+        "export" => crate::engine::export::run(events, token, req),
         "format" => {
             let data = read(&first()?)?;
             let photo = format::parse(&data)?;
@@ -151,6 +154,16 @@ pub fn handle(
                 result["output_coding_hash"] = json!(format::coding_hash(&live)?);
             }
             Ok(result)
+        }
+        "burst-filename" => Ok(
+            json!({"candidate":crate::engine::burst::filename(req["filename"].as_str().unwrap_or(""), "").is_some()}),
+        ),
+        "burst-plan" => {
+            let rows: Vec<_> = req["scan_rows"]
+                .as_array()
+                .map(|a| a.iter().filter_map(row_from_json).collect())
+                .unwrap_or_default();
+            Ok(json!({"groups":crate::engine::burst::plans(&rows)}))
         }
         "scan" => {
             let direction = req["direction"].as_str().unwrap_or("to-apple");
@@ -196,6 +209,7 @@ pub fn handle(
             let policy = req["existing_output"].as_str().map(|p| match p {
                 "overwrite" => ExistingOutput::Overwrite,
                 "skip" => ExistingOutput::Skip,
+                "resume" => ExistingOutput::Resume,
                 _ => ExistingOutput::Cancel,
             });
             let decide = |s: &Path, t: &Path| {
@@ -250,6 +264,11 @@ pub fn handle(
             } else {
                 crate::engine::scanrow::scan_file(native, &source, "", None)
             };
+            if row.burst.is_some() {
+                return Err(Error::new(
+                    "连拍必须通过批次组计划执行，以检查完整成员和组事务",
+                ));
+            }
             if row.is_static_hdr() {
                 return crate::engine::static_hdr::convert(
                     native, &source, &target, &options, token, overwrite, &timings,
@@ -267,7 +286,15 @@ pub fn handle(
                 ),
             }
         }
-        "verify" => batch::verify(&first()?),
+        "verify" => {
+            let folder = first()?;
+            if req["verification"].is_object() {
+                crate::engine::output::verify_manifest(&folder, &req["verification"])?;
+                Ok(req["verification"].clone())
+            } else {
+                batch::verify(&folder)
+            }
+        }
         "candidates-video" => {
             let folder = path(req, "output")?;
             std::fs::create_dir_all(&folder).map_err(|e| crate::engine::io_error(&folder, e))?;

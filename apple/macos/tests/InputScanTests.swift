@@ -54,7 +54,7 @@ private final class PendingInspections: ConversionServing {
         model.appendSources([e]);check(projection.token.isCancelled && service.requests.last!.direction == .androidToAndroid,"addition after fast direction change uses latest projection")
         projection.finish(.success([ar]));service.requests.last!.finish(.success([ar,br,cr,dr,row(e)]))
         check(model.items.count==5,"late old direction cannot drop appended rows")
-        check(model.settings.coverSelections?[a.path]==nil,"incompatible direction invalidates the previous manual cover")
+        check(model.settings.coverSelections?[a.path]==1,"direction keeps a valid saved cover while incompatible options remain inactive")
         try Data([9]).write(to:a);try fm.removeItem(at:b)
         let f=root.appendingPathComponent("f.jpg");try Data([0]).write(to:f)
         model.appendSources([f]);check(!model.items.contains{$0.source==a || $0.source==b},"changed/deleted sources invalidate old rows immediately")

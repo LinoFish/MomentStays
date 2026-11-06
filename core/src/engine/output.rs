@@ -220,6 +220,14 @@ pub fn verify(folder: &Path) -> Result<Value> {
     let invalid = || Error::new("已有输出的校验清单无效");
     let text = read(&folder.join(MANIFEST))?;
     let manifest: Value = serde_json::from_slice(&text).map_err(|_| invalid())?;
+    verify_manifest(folder, &manifest)?;
+    Ok(manifest)
+}
+
+/// The same integrity contract using a manifest retained in the task entry
+/// when the user chose not to write JSON sidecars beside their media.
+pub fn verify_manifest(folder: &Path, manifest: &Value) -> Result<()> {
+    let invalid = || Error::new("已有输出的校验清单无效");
     let hashes = string_map(&manifest["output_sha256"]).ok_or_else(invalid)?;
     if !manifest["timing"].is_object() || !manifest["hdr"].is_object() {
         return Err(invalid());
@@ -301,6 +309,7 @@ pub fn verify(folder: &Path) -> Result<Value> {
     fn set<'a>(v: &[&'a str]) -> HashSet<&'a str> {
         v.iter().copied().collect()
     }
+    let burst = manifest["source_format"] == "honor-burst";
     let known = [
         set(&["still", "video"]),
         set(&["still", "video", "auxiliary"]),
@@ -323,8 +332,11 @@ pub fn verify(folder: &Path) -> Result<Value> {
     let hash_keys: HashSet<&str> = hashes.keys().map(String::as_str).collect();
     let names_ok = names
         .values()
-        .all(|n| !n.is_empty() && !n.contains('/') && !n.contains('\0') && n != "." && n != "..");
-    if !(known || candidate_set) || hash_keys != values || hashes.len() != names.len() || !names_ok
+        .all(|n| !n.is_empty() && !n.contains(['/', '\\', '\0']) && n != "." && n != "..");
+    if !(known || candidate_set || burst)
+        || hash_keys != values
+        || hashes.len() != names.len()
+        || !names_ok
     {
         return failure("已有输出的配对文件名无效");
     }
@@ -334,7 +346,10 @@ pub fn verify(folder: &Path) -> Result<Value> {
             || role == "still"
             || role == "motionphoto"
             || is_candidate_photo_role(role);
-        let ok = if role.starts_with("legacy_") {
+        let ok = if burst {
+            (role.starts_with("burst_frame_") && ["jpg", "jpeg"].contains(&ext.as_str()))
+                || (role.starts_with("burst_original_") && ext == "bin")
+        } else if role.starts_with("legacy_") {
             legacy && ext == "bin"
         } else if image {
             paths::PHOTO_EXTENSIONS.contains(&ext.as_str())
@@ -344,11 +359,16 @@ pub fn verify(folder: &Path) -> Result<Value> {
         if !ok {
             return failure("输出文件扩展名无效");
         }
-        if hash_file(&folder.join(name))? != hashes[name] {
+        if crate::engine::identity::SourceVersion::read(&folder.join(name)).is_none()
+            || hash_file(&folder.join(name))? != hashes[name]
+        {
             return failure(format!("已有输出校验失败：{name}"));
         }
     }
-    Ok(manifest)
+    if burst {
+        crate::engine::burst::verify(folder, manifest)?;
+    }
+    Ok(())
 }
 
 pub fn output_names(source: &Path) -> BTreeMap<String, String> {

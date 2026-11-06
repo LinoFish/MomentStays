@@ -250,7 +250,14 @@ struct PhotoMotionPreview: View {
                     .disabled(!allowsCoverSelection || marker.issue != nil)
                     .help(marker.issue ?? marker.title)
                     .accessibilityLabel(marker.title)
-            } else {
+            } else { markerMenu(group,title:title,selected:selected) }
+        }
+        .frame(width:CoverTimelineGroup.controlWidth,height:28)
+        .accessibilityValue(selected ? "当前封面" : "未选择")
+        .accessibilityIdentifier("cover-timeline-" + group.id)
+    }
+
+    private func markerMenu(_ group: CoverTimelineGroup, title: String, selected: Bool) -> some View {
                 Menu {
                     ForEach(group.markers) { marker in
                         Button { chooseMarker(marker) } label: {
@@ -262,11 +269,6 @@ struct PhotoMotionPreview: View {
                     .disabled(!allowsCoverSelection)
                     .help(group.markers.map(\.title).joined(separator:"\n"))
                     .accessibilityLabel("相邻封面，" + group.markers.map(\.title).joined(separator:"，"))
-            }
-        }
-        .frame(width:CoverTimelineGroup.controlWidth,height:28)
-        .accessibilityValue(selected ? "当前封面" : "未选择")
-        .accessibilityIdentifier("cover-timeline-" + group.id)
     }
 
     private func markerLabel(_ title: String, selected: Bool) -> some View {

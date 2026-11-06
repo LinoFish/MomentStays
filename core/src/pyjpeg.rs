@@ -17,11 +17,16 @@ pub use crate::jpeg::{
 
 /// Retain existing Apple gain-map tags and their original relative offsets.
 pub fn maker_note(identifier: &str, old: &[u8]) -> Result<Vec<u8>> {
-    let value = {
-        let mut v = identifier.as_bytes().to_vec();
-        v.push(0);
-        v
-    };
+    apple_note(old, &[(0x11, identifier)])
+}
+
+/// Edit named Apple ASCII fields together, retaining other fields and payloads.
+/// Burst tag IDs/layout follow MomentPort cb927369 (GPL-3.0-only).
+pub fn apple_note(old: &[u8], fields: &[(usize, &str)]) -> Result<Vec<u8>> {
+    let values: Vec<Vec<u8>> = fields
+        .iter()
+        .map(|(_, v)| [v.as_bytes(), &[0]].concat())
+        .collect();
     if old.starts_with(b"Apple iOS\0\x00\x01") {
         let little = match old.get(12..14) {
             Some(b"MM") => false,
@@ -36,6 +41,9 @@ pub fn maker_note(identifier: &str, old: &[u8]) -> Result<Vec<u8>> {
         if end > old.len() {
             return fail("Truncated Apple MakerNote");
         }
+        if u32_at(old, end - 4, little) != 0 {
+            return fail("Unsupported Apple MakerNote linked directory");
+        }
         let mut entries: Vec<[u8; 12]> = Vec::new();
         for i in 0..n {
             let mut raw = [0u8; 12];
@@ -44,11 +52,15 @@ pub fn maker_note(identifier: &str, old: &[u8]) -> Result<Vec<u8>> {
         }
         let kept: Vec<[u8; 12]> = entries
             .into_iter()
-            .filter(|e| u16_at(e, 0, little) as usize != 0x11)
+            .filter(|e| {
+                !fields
+                    .iter()
+                    .any(|(tag, _)| *tag == u16_at(e, 0, little) as usize)
+            })
             .collect();
         // Growing the front table moves old data: adjust external value offsets.
         let kept_len = kept.len();
-        let delta = (kept_len as isize + 1 - n as isize) * 12;
+        let delta = (kept_len as isize + fields.len() as isize - n as isize) * 12;
         // TIFF 6.0 field sizes, plus BigTIFF LONG8/IFD8: real iPhone
         // MakerNotes use type 16 (LONG8) for LivePhotoVideoIndex.
         let sizes: HashMap<usize, usize> = [
@@ -90,7 +102,14 @@ pub fn maker_note(identifier: &str, old: &[u8]) -> Result<Vec<u8>> {
             patched.push(e);
         }
         let note_end = (old.len() as isize + delta) as usize;
-        patched.push(entry(little, 0x11, 2, value.len(), note_end));
+        let mut at = note_end;
+        for ((tag, _), value) in fields.iter().zip(&values) {
+            if value.len() <= 4 {
+                return fail("Apple identifier too short");
+            }
+            patched.push(entry(little, *tag, 2, value.len(), at));
+            at += value.len();
+        }
         patched.sort_by_key(|e| u16_at(e, 0, little));
         let mut out = Vec::new();
         out.extend_from_slice(&old[..14]);
@@ -100,19 +119,42 @@ pub fn maker_note(identifier: &str, old: &[u8]) -> Result<Vec<u8>> {
         }
         out.extend_from_slice(&[0u8; 4]);
         out.extend_from_slice(&old[end..]);
-        out.extend_from_slice(&value);
+        for value in &values {
+            out.extend_from_slice(value);
+        }
         Ok(out)
     } else {
+        let mut entries = if fields.iter().any(|(tag, _)| *tag == 0xb) {
+            vec![entry(false, 1, 9, 1, 17)]
+        } else {
+            Vec::new()
+        };
+        let mut at = 14 + 2 + (fields.len() + entries.len()) * 12 + 4;
+        for ((tag, _), value) in fields.iter().zip(&values) {
+            if value.len() <= 4 {
+                return fail("Apple identifier too short");
+            }
+            entries.push(entry(false, *tag, 2, value.len(), at));
+            at += value.len();
+        }
         let mut out = b"Apple iOS\0\x00\x01MM".to_vec();
-        out.extend_from_slice(&pack_u16(false, 1));
-        out.extend_from_slice(&entry(false, 0x11, 2, value.len(), 32));
-        out.extend_from_slice(&[0u8; 4]);
-        out.extend_from_slice(&value);
+        out.extend_from_slice(&serialize(false, &entries, 0));
+        for value in &values {
+            out.extend_from_slice(value);
+        }
         Ok(out)
     }
 }
 
 pub fn exif_identifier(payload: Option<&[u8]>, identifier: &str) -> Result<Vec<u8>> {
+    exif_note(payload, |old| maker_note(identifier, old))
+}
+
+/// Append replacement directories; original EXIF/MakerNote remains recoverable.
+pub fn exif_note(
+    payload: Option<&[u8]>,
+    build: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
+) -> Result<Vec<u8>> {
     let raw: Vec<u8> = match payload {
         Some(p) if !p.is_empty() => p.get(6..).unwrap_or(&[]).to_vec(),
         _ => b"MM\0*\0\0\0\x08\0\0\0\0\0\0".to_vec(),
@@ -138,7 +180,7 @@ pub fn exif_identifier(payload: Option<&[u8]>, identifier: &str) -> Result<Vec<u
         }
         old = raw[offset..offset + count].to_vec();
     }
-    let note = maker_note(identifier, &old)?;
+    let note = build(&old)?;
     // Append directories, retaining all original offsets, GPS, thumbnail and data.
     let mut out: Vec<u8> = raw.clone();
     if out.len() % 2 == 1 {

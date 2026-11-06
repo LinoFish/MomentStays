@@ -140,7 +140,7 @@ pub struct MsNative {
     >,
     /// (ctx, progress_json, len): {"index","total","relative","status","detail"}
     pub progress: Option<unsafe extern "C" fn(*mut c_void, *const u8, usize)>,
-    /// (ctx, source, target) -> 0 skip, 1 overwrite, 2 cancel, -1 use the request policy
+    /// (ctx, source, target) -> 0 skip, 1 overwrite, 2 cancel, 3 verify/resume, -1 use the request policy
     pub existing_output:
         Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> i32>,
     /// (ctx, rows_json, len): a JSON array of scan rows
@@ -398,6 +398,7 @@ impl Events for Host {
             0 => Some(ExistingOutput::Skip),
             1 => Some(ExistingOutput::Overwrite),
             2 => Some(ExistingOutput::Cancel),
+            3 => Some(ExistingOutput::Resume),
             _ => None,
         }
     }

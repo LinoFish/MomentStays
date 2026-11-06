@@ -188,5 +188,6 @@ pub fn convert(
         "hdr": hdr,
         "timing": timing,
         "warnings": warnings,
+        "verification": manifest,
     }))
 }

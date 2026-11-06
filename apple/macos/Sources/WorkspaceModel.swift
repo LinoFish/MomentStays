@@ -1,20 +1,44 @@
 import Foundation
 import Combine
 
+enum MigrationPhotoFeature: String, CaseIterable, Identifiable {
+    case live, hdr, burst
+    var id: String { rawValue }
+    var title: String { self == .live ? "实况" : self == .hdr ? "HDR" : "连拍" }
+    func includes(_ item: PhotoQueueItem) -> Bool {
+        switch self {
+        case .live: return item.isMotion
+        case .hdr: return item.hdr.localizedCaseInsensitiveContains("HDR")
+        case .burst: return item.row.burst != nil
+        }
+    }
+}
+
+struct MigrationReviewSnapshot {
+    let settings: ConversionSettings
+    let readyIDs: Set<String>
+    let originalRows: [ScanRow]
+    let choice: UnconvertedExportChoice
+    let originalsOutput: URL?
+    let versions: [String:SourceVersion]
+    let followsResults: Bool
+}
+
 enum TaskPhase: String {
     case idle, library, scanning, projecting, ready, converting, awaitingDecision, delivering, stopping, completed, stopped, failed
     var isBusy: Bool { [.library, .scanning, .projecting, .converting, .awaitingDecision, .delivering, .stopping].contains(self) }
 }
 
 enum PhotoState: String, CaseIterable {
-    case ready, manual, inspect, converted, resumed, skipped, failed, `static`
+    case ready, manual, inspect, converted, resumed, copied, skipped, failed, `static`
     var title: String {
         switch self {
         case .manual: return "手动处理"
-        case .ready: return "可转换"
+        case .ready: return "待处理"
         case .inspect: return "需检查"
-        case .converted: return "已完成"
+        case .converted: return "已转换"
         case .resumed: return "已有结果"
+        case .copied: return "原样输出"
         case .skipped: return "已跳过"
         case .static: return "静态照片"
         case .failed: return "失败"
@@ -27,6 +51,7 @@ enum PhotoState: String, CaseIterable {
         case .inspect: return "exclamationmark.triangle"
         case .converted: return "checkmark.circle.fill"
         case .resumed: return "checkmark.circle"
+        case .copied: return "doc.on.doc"
         case .skipped: return "minus.circle"
         case .static: return "photo"
         case .failed: return "exclamationmark.circle.fill"
@@ -47,16 +72,18 @@ struct PhotoQueueItem: Identifiable {
     let initialState: PhotoState
     var resultState: PhotoState?
     var resultDetail: String?
+    var originalDelivery: String? = nil
     var id: String { source.path }
     var name: String { source.lastPathComponent }
     private let allowsStaticHDR: Bool
-    var isConvertible: Bool { isMotion || (allowsStaticHDR && row.isStaticHDR) }
+    var isConvertible: Bool { row.burst.map { allowsStaticHDR && $0.supported } ?? (isMotion || (allowsStaticHDR && row.isStaticHDR)) }
     var requiresManualFrame: Bool { cover == "未确定（需选帧）" }
     var state: PhotoState { resultState ?? initialState }
     var detail: String { resultDetail?.isEmpty == false ? resultDetail! : scanDetail }
 
     func category(settings: ConversionSettings) -> PhotoState {
-        if [.converted,.resumed].contains(state) { return .converted }
+        if row.burst != nil && settings.direction != .toApple { return .inspect }
+        if [.converted,.resumed,.copied].contains(state) { return .converted }
         if state == .static { return .static }
         if [.inspect,.failed].contains(state) { return .inspect }
         if requiresManualFrame && settings.direction == .toApple && settings.manualCovers?[id] == nil { return .manual }
@@ -71,7 +98,7 @@ struct PhotoQueueItem: Identifiable {
         source = row.source; relative = row.relative; isMotion = row.isMotion
         manufacturer = row.manufacturer; manufacturerDetail = row.manufacturerDetail
         hdr = row.hdr; cover = row.cover; scanDetail = row.detail
-        initialState = (row.isMotion || (allowsStaticHDR && row.isStaticHDR)) ? .ready : row.needsInspection ? .inspect : .static
+        initialState = row.burst.map { allowsStaticHDR && $0.supported ? .ready : .inspect } ?? ((row.isMotion || (allowsStaticHDR && row.isStaticHDR)) ? .ready : row.needsInspection ? .inspect : .static)
     }
 }
 
@@ -89,16 +116,34 @@ struct ConversionReport {
     let entries: [ReportEntry]
     let cancelled: Bool
     init(_ outcome: BatchOutcome) {
-        url = outcome.report; counts = outcome.counts; cancelled = outcome.cancelled
-        entries = ((outcome.reportData["files"] as? [[String: Any]]) ?? []).enumerated().map { index, file in
-            ReportEntry(id: index, source: file["source"] as? String ?? "", output: file["output"] as? String,
-                state: file["classification"] as? String == "static" ? .static : PhotoState(rawValue: file["status"] as? String ?? "") ?? .failed,
+        url = outcome.report; cancelled = outcome.cancelled
+        let files = outcome.reportData["files"] as? [[String:Any]] ?? []
+        var displayed = outcome.counts
+        // Compatibility for historical results predating the explicit copied counter.
+        if displayed["copied"] == nil {
+            let unchanged = files.filter { Self.isOriginalCopy($0) && $0["status"] as? String == "converted" }.count
+            displayed["copied"] = unchanged
+            displayed["converted"] = max(0,displayed["converted",default:0] - unchanged)
+        }
+        counts = displayed
+        entries = files.enumerated().map { index, file in
+            let status = file["status"] as? String ?? ""
+            let copied = Self.isOriginalCopy(file) && ["converted","resumed"].contains(status)
+            return ReportEntry(id: index, source: file["source"] as? String ?? "", output: file["output"] as? String,
+                state: copied ? .copied : file["classification"] as? String == "static" ? .static : PhotoState(rawValue:status) ?? .failed,
                 detail: file["detail"] as? String ?? file["error"] as? String ?? "")
         }
     }
+    static func isOriginalCopy(_ entry: [String:Any]) -> Bool {
+        if let kind = entry["processing_kind"] as? String { return kind == "original-copy" }
+        guard let burst = entry["burst"] as? [String:Any] else { return false }
+        if burst["independent"] as? Bool == true { return true }
+        guard let members = burst["members"] as? [Any], !members.isEmpty else { return false }
+        return burst["uuid"] == nil || burst["uuid"] is NSNull
+    }
     var summary: String {
         let staticCount = entries.filter { $0.state == .static }.count
-        return "成功 \(counts["converted", default:0]) · 已有 \(counts["resumed", default:0]) · 静态 \(staticCount) · 跳过 \(max(0,counts["skipped", default:0] - staticCount)) · 失败 \(counts["failed", default:0])"
+        return "转换 \(counts["converted", default:0]) · 原样输出 \(counts["copied", default:0]) · 已有 \(counts["resumed", default:0]) · 静态 \(staticCount) · 跳过 \(max(0,counts["skipped", default:0] - staticCount)) · 失败 \(counts["failed", default:0])"
     }
 }
 
@@ -111,9 +156,9 @@ enum PhotoQueueScope: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "全部"
         case .manual: return "手动处理"
-        case .ready: return "可转换"
+        case .ready: return "待处理"
         case .still: return "静态照片"
-        case .completed: return "已转换"
+        case .completed: return "已处理"
         case .attention: return "需检查"
         }
     }
@@ -157,6 +202,71 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var sourceLabel = "尚未选择原片"
     @Published private(set) var output: URL?
     @Published private(set) var items: [PhotoQueueItem] = []
+    @Published private(set) var burstGroups: [BurstGroup] = []
+    @Published var burstReviewPresented = false
+    private var burstApproved = false
+    private var burstOutput: URL?
+    func burstChoice(_ group: BurstGroup) -> BurstChoice {
+        if let choice = settings.burstChoices?[group.id], choice.signature == group.signature { return choice }
+        return BurstChoice(signature:group.signature,representative:group.representative)
+    }
+    func setBurstChoice(_ group: BurstGroup, representative: String? = nil, independent: Bool? = nil) {
+        guard !isBusy, !sharing, burstGroups.contains(where:{ $0.id == group.id && $0.signature == group.signature }) else { return }
+        var choice = burstChoice(group)
+        if let representative = representative, group.members.contains(where:{ $0.source == representative }) { choice.representative = representative }
+        if let independent = independent { choice.independent = independent }
+        updateSettings { $0.burstChoices = ($0.burstChoices ?? [:]).merging([group.id:choice],uniquingKeysWith:{ _,new in new }) }
+    }
+    func selectBurst(_ group: BurstGroup, selected: Bool) {
+        guard !isBusy, !sharing else { return }
+        if !hasExplicitSelection {
+            for item in migrationScopeItems { selectedIDs.insert(item.id); selectionVersions[item.id] = item.row.version }
+        }
+        hasExplicitSelection = true
+        for member in group.members {
+            if selected { selectedIDs.insert(member.source); selectionVersions[member.source] = SourceVersion.read(URL(fileURLWithPath:member.source)) }
+            else { selectedIDs.remove(member.source); selectionVersions[member.source] = nil }
+        }
+    }
+    func setBurstMember(_ member: BurstMember, selected: Bool) {
+        guard !isBusy, !sharing else { return }
+        if !hasExplicitSelection {
+            for item in migrationScopeItems { selectedIDs.insert(item.id); selectionVersions[item.id] = item.row.version }
+        }
+        hasExplicitSelection = true
+        if selected { selectedIDs.insert(member.source); selectionVersions[member.source] = SourceVersion.read(URL(fileURLWithPath:member.source)) }
+        else { selectedIDs.remove(member.source); selectionVersions[member.source] = nil }
+    }
+    func burstSelectedCount(_ group: BurstGroup) -> Int {
+        group.members.filter { !hasExplicitSelection || selectedIDs.contains($0.source) }.count
+    }
+    var selectedBurstGroups: [BurstGroup] { burstGroups.filter { burstSelectedCount($0) > 0 && $0.supported } }
+    func burstBlockingReason(_ group: BurstGroup) -> String? {
+        let count = burstSelectedCount(group), choice = burstChoice(group)
+        if count == 0 { return nil }
+        if settings.direction != .toApple { return "连拍目前仅支持 Apple 目标" }
+        if !group.supported { return group.reason }
+        if choice.independent { return nil }
+        if count != group.members.count { return "只选择了部分成员；请选择全组，或显式按独立照片导出" }
+        if !group.ordered { return group.reason }
+        if count > 1 && !group.members.contains(where:{ $0.source == choice.representative }) { return "请选择代表帧" }
+        return nil
+    }
+    func continueBurstConversion() {
+        guard selectedBurstGroups.allSatisfy({ burstBlockingReason($0) == nil }) else { return }
+        burstReviewPresented = false; burstApproved = true
+        let output = burstOutput; burstOutput = nil
+        start(outputOverride:output); burstApproved = false
+    }
+    private func rebuildBurstGroups() {
+        do {
+            let result = try RustCore.engine(["mode":"burst-plan","scan_rows":items.map { RustCore.rowJSON($0.row) }])
+            let data = try JSONSerialization.data(withJSONObject:result["groups"] ?? [])
+            burstGroups = try JSONDecoder().decode([BurstGroup].self,from:data)
+            let signatures = Dictionary(uniqueKeysWithValues:burstGroups.map { ($0.id,$0.signature) })
+            settings.burstChoices = settings.burstChoices?.filter { signatures[$0.key] == $0.value.signature }
+        } catch { burstGroups = []; notice = error.localizedDescription }
+    }
     @Published private(set) var queueScope: PhotoQueueScope = .ready
     private var followsConversionResults = false
     func selectQueueScope(_ scope: PhotoQueueScope) {
@@ -217,8 +327,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func toggleSelection(_ item: PhotoQueueItem) {
-        selection = item.id
-        guard !isBusy, !sharing, item.isConvertible else { return }
+        guard !isBusy, !sharing else { return }
         hasExplicitSelection = true
         if selectedIDs.remove(item.id) == nil {
             selectedIDs.insert(item.id)
@@ -231,7 +340,7 @@ final class WorkspaceModel: ObservableObject {
     }
     var manualItems: [PhotoQueueItem] { items.filter { category($0) == .manual } }
     private var conversionItems: [PhotoQueueItem] {
-        items.filter { $0.isConvertible && category($0) != .manual &&
+        items.filter { $0.isConvertible && ($0.row.burst == nil || settings.direction == .toApple) && category($0) != .manual &&
             (hasExplicitSelection ? selectedIDs.contains($0.id) : [.ready,.converted].contains(category($0))) }
     }
     func confirmManualMidpoint(_ item: PhotoQueueItem) {
@@ -295,8 +404,20 @@ final class WorkspaceModel: ObservableObject {
     @Published var settingsPresented = false
     @Published var advancedExpanded = false
     @Published var detailExpanded = false
-    @Published var previewVisible = false
+    @Published var previewVisible = true
     @Published var sourceMenuRequested = false
+    @Published private(set) var migrationTargetConfirmed = false
+    @Published var migrationReviewPresented = false
+    @Published var migrationFeatureFilters: Set<MigrationPhotoFeature> = []
+    @Published var migrationSearch = ""
+    @Published var migrationSearchExpanded = false
+    @Published var migrationSource: String?
+    @Published var unconvertedExport: UnconvertedExportChoice = .none
+    @Published var unconvertedExportLocation: UnconvertedExportChoice = .sameLocation
+    @Published var unconvertedOutput: URL?
+    @Published var resultExportAvailable = false
+    @Published var reviewedMigration: MigrationReviewSnapshot?
+    private(set) var migrationOriginalRows: [ScanRow] = []
     private(set) var isPreview = false
 
     var prepareConversion: (ConversionSettings, URL) throws -> URL = { _, output in output }
@@ -319,7 +440,7 @@ final class WorkspaceModel: ObservableObject {
 
     init(service: ConversionServing = ConversionService()) { self.service = service }
     var isBusy: Bool { phase.isBusy }
-    var manualDecisionPending: Bool { manualPlan != nil }
+    var manualDecisionPending: Bool { manualPlan != nil || migrationReviewPresented || reviewedMigration != nil }
     var outputIsChosen: Bool { settings.destination != .ask && (settings.direction != .toApple || settings.outputConfirmed == true) && (settings.destination.usesCache || output != nil) }
     var canStart: Bool { manualPlan == nil && !isBusy && !sharing && !manualPreparation && !manualPromptPresented && scanComplete && outputIsChosen && (!conversionItems.isEmpty || !manualItems.isEmpty) }
     var canSwitchDirection: Bool { !sharing && (!isBusy || phase == .scanning || phase == .projecting) }
@@ -335,6 +456,10 @@ final class WorkspaceModel: ObservableObject {
     var selectedItem: PhotoQueueItem? { items.first { $0.id == selection } }
     var motionCount: Int { items.filter { $0.isConvertible }.count }
     func category(_ item: PhotoQueueItem) -> PhotoState { item.category(settings:settings) }
+    func displayState(_ item: PhotoQueueItem) -> PhotoState {
+        let category = category(item)
+        return category == .converted && item.state == .copied ? .copied : category
+    }
     var issueCount: Int { items.filter { category($0) == .inspect }.count }
 
     func selectCover(_ index: Int?, for source: URL, expectedVersion: SourceVersion? = nil) {
@@ -358,8 +483,7 @@ final class WorkspaceModel: ObservableObject {
         guard !isBusy || directionChanged else { return }
         if directionChanged {
             candidateCapabilities = [:]
-            cancelManualPreparation(); selectedIDs = []; selectionVersions = [:]; hasExplicitSelection = false
-            manualVersions = [:]; next.manualMidpoints = nil; next.manualCovers = nil; next.coverSelections = nil; coverVersions = [:]
+            cancelManualPreparation()
             outputChoices[settings.direction] = OutputChoice(destination:settings.destination,confirmed:settings.outputConfirmed,folder:output,albumID:settings.albumID,albumTitle:settings.albumTitle)
             if let saved = outputChoices[next.direction] {
                 next.destination = saved.destination; next.outputConfirmed = saved.confirmed
@@ -370,7 +494,7 @@ final class WorkspaceModel: ObservableObject {
             }
         }
         next.normalize()
-        let changed = next.options.json as NSDictionary != settings.options.json as NSDictionary || next.coverSelections != settings.coverSelections || next.manualMidpoints != settings.manualMidpoints || next.manualCovers != settings.manualCovers
+        let changed = next.options.json as NSDictionary != settings.options.json as NSDictionary || next.coverSelections != settings.coverSelections || next.manualMidpoints != settings.manualMidpoints || next.manualCovers != settings.manualCovers || next.burstChoices != settings.burstChoices
         settings = next
         if changed {
             report = nil
@@ -388,7 +512,8 @@ final class WorkspaceModel: ObservableObject {
         sourceLabel = label ?? (sources.count == 1 ? sources[0].lastPathComponent : "\(sources.count) 个文件／文件夹")
         let base = NativeBatch.root(NativeBatch.normalized(first))
         output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction.exportsAndroid ? " Motion Photos" : " Live Photos"))
-        items = []; selection = nil; report = nil; sourceOrigins = [:]
+        items = []; burstGroups = []; burstReviewPresented = false; burstOutput = nil; settings.burstChoices = nil
+        selection = nil; report = nil; sourceOrigins = [:]
         settings.coverSelections = nil
         candidateCapabilities = [:]; coverVersions = [:]; manualVersions = [:]; settings.manualMidpoints = nil; settings.manualCovers = nil; clearSelection(); cancelManualPreparation()
         rescan()
@@ -427,7 +552,9 @@ final class WorkspaceModel: ObservableObject {
     func clearSources() {
         guard !isBusy, !sharing else { return }
         operation = UUID(); token.cancel(); service.clearInspections()
-        sources = []; items = []; selection = nil; rowIndices = [:]; sourceOrigins = [:]; scanComplete = false
+        migrationSource = nil; migrationSearch = ""; migrationFeatureFilters = []; reviewedMigration = nil
+        sources = []; items = []; burstGroups = []; burstReviewPresented = false; burstOutput = nil; settings.burstChoices = nil
+        selection = nil; rowIndices = [:]; sourceOrigins = [:]; scanComplete = false
         sourceLabel = "尚未选择原片"; settings.coverSelections = nil
         candidateCapabilities = [:]; coverVersions = [:]; manualVersions = [:]; settings.manualMidpoints = nil; settings.manualCovers = nil; clearSelection(); cancelManualPreparation()
         phase = .idle; status = "选择照片或文件夹，开始转换"
@@ -541,7 +668,8 @@ final class WorkspaceModel: ObservableObject {
                 if !currentToken.isCancelled { self.invalidateCoverSelections(Set(versions.keys).subtracting(rows.map { $0.source.path })) }
                 self.scanComplete = !currentToken.isCancelled
                 self.items = currentToken.isCancelled ? merge(rows).filter { $0.row.version == nil || SourceVersion.read($0.source) == $0.row.version } : rows.map(queueItem)
-                let valid = Set(self.items.filter { $0.isConvertible }.map(\.id))
+                self.rebuildBurstGroups()
+                let valid = Set(self.items.map(\.id))
                 self.selectedIDs.formIntersection(valid)
                 self.invalidateCoverSelections(Set(self.manualVersions.keys).subtracting(valid))
                 self.rowIndices = Dictionary(self.items.enumerated().map { ($0.element.relative, $0.offset) }, uniquingKeysWith: { first, _ in first })
@@ -556,6 +684,9 @@ final class WorkspaceModel: ObservableObject {
 
     func start(outputOverride: URL? = nil) {
         guard canStart, !isPreview, !manualPromptPresented, !manualPreparation else { return }
+        if !burstApproved && !selectedBurstGroups.isEmpty {
+            burstOutput = outputOverride; burstReviewPresented = true; return
+        }
         followsConversionResults = queueScope == .ready
         if queueScope == .ready && !manualItems.isEmpty {
             pendingOutput = outputOverride
@@ -597,7 +728,10 @@ final class WorkspaceModel: ObservableObject {
         let destination: URL
         do { destination = try prepareConversion(capturedSettings,output) }
         catch { errorMessage = error.localizedDescription; return }
-        let job = ConversionJob(sources: targets.map(\.source), output: destination, options: capturedSettings.options, scanRows: targets.map(\.row))
+        var options = capturedSettings.options
+        options.burstPlans = burstGroups
+        for group in burstGroups { options.burstChoices[group.id] = burstChoice(group) }
+        let job = ConversionJob(sources: targets.map(\.source), output: destination, options: options, scanRows: targets.map(\.row))
         let id = begin(.converting, message: "正在准备转换…"), currentToken = token
         report = nil; progress = 0
         for index in items.indices where targets.contains(where:{ $0.id == items[index].id }) { items[index].resultState = nil; items[index].resultDetail = nil }
@@ -613,7 +747,7 @@ final class WorkspaceModel: ObservableObject {
         }, progress: { [weak self] update in
             guard let self = self, self.operation == id else { return }
             if self.phase != .stopping && self.phase != .awaitingDecision {
-                self.status = "转换 \(update.index) / \(update.total)；\(self.items.filter { $0.state == .static }.count) 张静态已跳过"
+                self.status = "处理 \(update.index) / \(update.total)；\(self.items.filter { $0.state == .static }.count) 张静态已跳过"
                 self.currentFile = update.relative
             }
             self.progress = Double(update.index) / Double(max(update.total, 1))
@@ -628,8 +762,11 @@ final class WorkspaceModel: ObservableObject {
             switch result {
             case .success(let outcome):
                 let report = ConversionReport(outcome); self.report = report
+                for entry in report.entries where entry.state == .copied {
+                    if let index = self.items.firstIndex(where:{ $0.id == entry.source }) { self.items[index].resultState = .copied }
+                }
                 self.phase = outcome.cancelled ? .stopped : .completed
-                self.status = outcome.cancelled ? "任务已停止" : report.counts["failed", default: 0] > 0 ? "已完成，部分文件需要检查" : "转换完成"
+                self.status = outcome.cancelled ? "任务已停止" : report.counts["failed", default: 0] > 0 ? "已完成，部分文件需要检查" : "处理完成"
                 if !outcome.cancelled && !currentToken.isCancelled && self.followsConversionResults { self.queueScope = .completed }
                 self.followsConversionResults = false
                 self.onConversionFinished(outcome, capturedSettings)
@@ -710,7 +847,7 @@ final class WorkspaceModel: ObservableObject {
         output = URL(fileURLWithPath:"/转换结果/旅行照片与家庭相册_用于验证长输出文件夹名称")
     }
     func loadPreview(count: Int, progressPreview: Bool) {
-        isPreview = true
+        isPreview = true; migrationTargetConfirmed = count > 0
         items = (0..<count).map { index in
             let names = ["海边日落", "城市夜景", "山间清晨", "街角咖啡", "一张用于检查中文长文件名显示与截断方式的动态照片"]
             let row = ScanRow(source: URL(fileURLWithPath: "/示例照片/\(names[index % names.count])_\(index + 1).jpg"), relative: "示例_\(index + 1).jpg", isMotion: true,
@@ -726,4 +863,121 @@ final class WorkspaceModel: ObservableObject {
         currentFile = progressPreview ? "城市夜景_12.jpg" : ""
     }
     #endif
+}
+
+// Presentation plans use the existing checked scan rows. Media decisions and
+// resource-copy plans remain owned by the Rust engine.
+extension WorkspaceModel {
+    var migrationTarget: MigrationTargetPreset { MigrationTargetPreset.current(settings) }
+    func selectMigrationTarget(_ target: MigrationTargetPreset) {
+        guard canSwitchDirection else { return }
+        migrationTargetConfirmed = true
+        reviewedMigration = nil
+        updateSettings { $0.direction = target.direction; $0.vendor = target.vendor }
+    }
+    var canReviewMigration: Bool {
+        migrationTargetConfirmed && scanComplete && !isBusy && !sharing &&
+            (!hasExplicitSelection || !selectedIDs.isEmpty) && !items.isEmpty
+    }
+    var migrationScopeItems: [PhotoQueueItem] {
+        items.filter { (hasExplicitSelection ? selectedIDs.contains($0.id) : category($0) != .converted) }
+    }
+    var migrationReadyItems: [PhotoQueueItem] {
+        migrationScopeItems.filter { item in
+            guard item.isConvertible, category(item) == .ready else { return false }
+            if let group = burstGroups.first(where:{ $0.members.contains(where:{ $0.source == item.id }) }) {
+                return burstBlockingReason(group) == nil
+            }
+            return true
+        }
+    }
+    var migrationUnconvertedItems: [PhotoQueueItem] {
+        let ready = Set(migrationReadyItems.map(\.id))
+        return migrationScopeItems.filter { !ready.contains($0.id) && category($0) != .converted }
+    }
+    func visibleMigrationItems(in scope: PhotoQueueScope) -> [PhotoQueueItem] {
+        items.filter { item in
+            scope.includes(item,settings:settings) && migrationFeatureFilters.allSatisfy { $0.includes(item) } &&
+            (migrationSearch.isEmpty || (item.name + " " + item.relative + " " + item.manufacturer).localizedCaseInsensitiveContains(migrationSearch)) &&
+            (migrationSource.map { path in item.id == path || item.id.hasPrefix(path.hasSuffix("/") ? path : path + "/") } ?? true)
+        }
+    }
+    var migrationFilterKey: String {
+        migrationFeatureFilters.map(\.rawValue).sorted().joined(separator:",") + "|" + (migrationSource ?? "") + "|" + migrationSearch
+    }
+    var hiddenMigrationSelectionCount: Int {
+        selectedIDs.subtracting(visibleMigrationItems(in:queueScope).map(\.id)).count
+    }
+    func migrationPlanSummary(_ item: PhotoQueueItem) -> String {
+        if displayState(item) == .copied { return "独立照片原样输出；未转换连拍标记。已有已校验结果，本轮不重复处理。" }
+        if category(item) == .converted { return "已有已校验结果；不作为本次新转换" }
+        if sourceOrigins[item.id] != nil && !item.isMotion && item.row.burst == nil {
+            return "系统照片图库中的静态图片当前不转换或原样导出；可先将原件保存到文件，再添加该文件。"
+        }
+        if let frame = item.row.burst {
+            if !frame.supported { return frame.reason }
+            if let group = burstGroups.first(where:{ $0.members.contains(where:{ $0.source == item.id }) }) {
+                if let reason = burstBlockingReason(group) { return reason }
+                return burstChoice(group).independent ? "原样输出所选独立照片，不写连拍标记" : "连拍标记转换 · 保留现有原序号与全部所选帧；允许缺帧，不猜原总数"
+            }
+        }
+        if category(item) == .manual { return "需人工确认动态封面；未确认可在本轮跳过，原静态图不变" }
+        if !item.isConvertible || category(item) == .inspect { return item.detail.isEmpty ? "当前不能转换；可选择原样导出，不承诺目标兼容" : item.detail }
+        if !item.isMotion { return "静态 HDR：独立单图处理；没有视频、封面或实况配对" }
+        var parts = [settings.direction == .toApple ? "实况转换为 Apple 配对资源" : "实况转换为目标动态格式", "保留动态、声音与可信封面"]
+        if item.hdr.localizedCaseInsensitiveContains("HDR") { parts.append("HDR 按已支持结构保留或转换；不猜未知数据") }
+        if settings.coverIndex(for:item.source) != nil { parts.append("自选高清封面为 JPEG，不保留原封面的 HDR") }
+        return parts.joined(separator:"；")
+    }
+    var canApproveMigration: Bool {
+        canReviewMigration && outputIsChosen &&
+            (unconvertedExport != .separateLocation || unconvertedOutput != nil) &&
+            (!migrationReadyItems.isEmpty || unconvertedExport != .none && !migrationUnconvertedItems.isEmpty)
+    }
+    func approveMigrationReview() {
+        guard canApproveMigration else { return }
+        let ready = migrationReadyItems
+        let originals = unconvertedExport == .none ? [] : migrationUnconvertedItems
+        let tracked = ready + originals
+        let versions = Dictionary(tracked.compactMap { item in item.row.version.map { (item.id,$0) } },uniquingKeysWith:{ first,_ in first })
+        reviewedMigration = MigrationReviewSnapshot(settings:settings,readyIDs:Set(ready.map(\.id)),originalRows:originals.map(\.row),
+            choice:unconvertedExport,originalsOutput:unconvertedOutput,versions:versions,followsResults:queueScope == .ready)
+        migrationReviewPresented = false
+    }
+    func validateReviewedMigration(_ review: MigrationReviewSnapshot) -> Bool {
+        guard review.settings == settings, !isBusy, !sharing else { return false }
+        let changed = Set(review.versions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) == $0.value ? nil : $0.key })
+        guard changed.isEmpty else {
+            invalidateCoverSelections(changed); notice = "本轮来源发生变化，请重新检查迁移计划"; return false
+        }
+        return true
+    }
+    func startReviewedMigration(_ review: MigrationReviewSnapshot, outputOverride: URL?) {
+        guard validateReviewedMigration(review), !review.readyIDs.isEmpty else { return }
+        migrationOriginalRows = review.originalRows
+        launchConversion(outputOverride:outputOverride,following:review.followsResults,targetIDs:review.readyIDs)
+    }
+    func setUnconvertedOutput(_ url: URL) {
+        guard !isBusy, !sharing else { return }
+        do { try NativeBatch.validateOutput(sources:sources,output:url); unconvertedOutput = NativeBatch.normalized(url) }
+        catch { errorMessage = error.localizedDescription }
+    }
+    func recordOriginalExport(_ data: Data?) {
+        guard let data = data, let report = try? JSONSerialization.jsonObject(with:data) as? [String:Any],
+              let files = report["files"] as? [[String:Any]] else { return }
+        for entry in files {
+            var sources = Set(entry["sources"] as? [String] ?? [])
+            if let source = entry["source"] as? String { sources.insert(source) }
+            let status = entry["status"] as? String ?? "未完成"
+            let title = ["copied":"已生成副本","resumed":"已校验复用","skipped":"已跳过","failed":"失败"][status] ?? status
+            for index in items.indices where sources.contains(items[index].id) {
+                items[index].originalDelivery = "原样导出：" + title + (entry["detail"].flatMap { $0 as? String }.map { " · " + $0 } ?? "")
+            }
+        }
+    }
+    func awaitingExportDecision(_ waiting: Bool) {
+        guard phase == .delivering || phase == .awaitingDecision else { return }
+        phase = waiting ? .awaitingDecision : .delivering
+        status = waiting ? "等待处理已有导出" : "正在导出完整文件…"
+    }
 }

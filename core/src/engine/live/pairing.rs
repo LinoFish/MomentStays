@@ -164,7 +164,7 @@ pub fn scan_file_with_native(
         },
         Err(e) => {
             let row = crate::engine::scanrow::scan_file(native, path, relative, None);
-            if row.is_static_hdr() {
+            if row.is_static_hdr() || row.burst.is_some() {
                 return row;
             }
             ScanRow {

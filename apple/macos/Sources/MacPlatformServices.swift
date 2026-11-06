@@ -18,8 +18,13 @@ final class MacPlatformServices: NSObject {
     private let deliveryStore = DeliveryStore()
     private let sharingService = SystemSharingService()
     private var activeTask: DeliveryTask?
+    private var pendingOriginalExport: FileExportRecord?
+    private var consumingMigration = false
     private var lastTask: DeliveryTask? {
-        didSet { model.recentOutput = lastTask.map { URL(fileURLWithPath: $0.output) } }
+        didSet {
+            model.recentOutput = lastTask.map { URL(fileURLWithPath:$0.output) }
+            model.resultExportAvailable = lastTask?.results.isEmpty == false || deliveryStore.tasks().contains { !$0.results.isEmpty }
+        }
     }
     private var origins: [String: LibraryOrigin] = [:]
     private var libraryMonitor: PhotoLibraryMonitor?
@@ -38,6 +43,9 @@ final class MacPlatformServices: NSObject {
             guard let self = self else { throw Failure("窗口已关闭") }
             var task = DeliveryTask(settings:settings,output:output.path)
             if settings.destination.usesCache { task.output = self.deliveryStore.taskFolder(task.id).appendingPathComponent("Converted").path }
+            task.originalExport = self.pendingOriginalExport
+            self.pendingOriginalExport = nil
+            if var record = task.originalExport, record.output.isEmpty { record.output = task.output; task.originalExport = record }
             try self.deliveryStore.save(task)
             self.activeTask = task; self.model.deliverySummary = ""; self.model.shareReady = false
             return URL(fileURLWithPath:task.output)
@@ -48,15 +56,18 @@ final class MacPlatformServices: NSObject {
         }.store(in: &subscriptions)
         NotificationCenter.default.publisher(for: NSWindow.didEndSheetNotification).receive(on: DispatchQueue.main).sink { [weak self] notification in
             guard let self = self, let window = notification.object as? NSWindow, window === self.window else { return }
+            self.consumeMigration()
             self.drainLibraryUpdates()
         }.store(in: &subscriptions)
         model.$settings.map(\.direction).removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] direction in
             if let self = self, let scope = self.lastScope, scope.direction != direction { self.stopMonitoring() }
         }.store(in: &subscriptions)
-        lastTask = deliveryStore.tasks().first(where: { !$0.results.isEmpty })
+        model.$reviewedMigration.receive(on: DispatchQueue.main).sink { [weak self] _ in self?.consumeMigration() }.store(in:&subscriptions)
+        lastTask = deliveryStore.tasks().first(where: { $0.hasRecord })
         model.recentOutput = lastTask.map { URL(fileURLWithPath: $0.output) }
         model.recentTasksAvailable = lastTask != nil
-        model.shareReady = lastTask?.settings.direction.exportsAndroid == true
+        model.resultExportAvailable = deliveryStore.tasks().contains { !$0.results.isEmpty }
+        model.shareReady = lastTask?.canShare == true
         model.presentExistingOutput = { [weak self] source, target, reply in
             guard let self = self else { reply(.cancel); return }
             self.presentExistingOutput(source: source, target: target, reply: reply)
@@ -77,6 +88,8 @@ final class MacPlatformServices: NSObject {
             copy: { NSPasteboard.general.clearContents(); NSPasteboard.general.setString($0, forType: .string) },
             acceptDrop: { [weak self] providers, output in self?.acceptDrop(providers, output: output) ?? false },
             shareResults: { [weak self] in self?.shareResults() },
+            exportResults: { [weak self] in self?.exportResults() },
+            chooseUnconvertedOutput: { [weak self] in self?.chooseUnconvertedOutput() },
             chooseAlbum: { [weak self] in self?.chooseAlbum() },
             recentResults: { [weak self] in self?.showRecentTasks() },
             toggleLibraryMonitoring: { [weak self] in self?.stopMonitoring() })
@@ -96,9 +109,9 @@ final class MacPlatformServices: NSObject {
     }
 
     func chooseSources() {
-        guard model.canAppendSources, let window = window, window.attachedSheet == nil else { return }
+        guard model.migrationTargetConfirmed, model.canAppendSources, let window = window, window.attachedSheet == nil else { return }
         let panel = NSOpenPanel()
-        panel.title = model.settings.direction == .toAndroid ? "选择完整实况配对（图片与 MOV）或文件夹" : "选择 Android 原始动态照片"
+        panel.title = model.settings.direction == .toAndroid ? "选择完整实况配对（图片与 MOV）或文件夹" : "选择照片或来源文件夹"
         panel.canChooseDirectories = true; panel.canChooseFiles = true; panel.allowsMultipleSelection = true
         panel.prompt = "选择并扫描"
         panel.beginSheetModal(for: window) { [weak self] response in
@@ -114,7 +127,7 @@ final class MacPlatformServices: NSObject {
     private var settingsDialogParent: NSWindow? {
         guard let window = window else { return nil }
         if let sheet = window.attachedSheet {
-            guard model.settingsPresented, sheet.attachedSheet == nil else { return nil }
+            guard model.settingsPresented || model.migrationReviewPresented, sheet.attachedSheet == nil else { return nil }
             return sheet
         }
         return window
@@ -132,7 +145,7 @@ final class MacPlatformServices: NSObject {
     }
 
     func importPhotos() {
-        guard model.settings.direction != .androidToAndroid else { return }
+        guard model.migrationTargetConfirmed, model.settings.direction != .androidToAndroid else { return }
         guard let window = window, window.attachedSheet == nil, let id = model.beginLibraryImport() else { return }
         dropRequest = UUID(); stopMonitoring()
         let direction = model.settings.direction
@@ -155,33 +168,171 @@ final class MacPlatformServices: NSObject {
     }
 
     func start() {
-        guard window?.attachedSheet == nil, model.canStart, !model.sharing else { return }
+        guard window?.attachedSheet == nil, !model.sharing else { return }
+        model.approveMigrationReview()
+    }
+
+    private func consumeMigration() {
+        guard !consumingMigration, let review = model.reviewedMigration,
+              window?.attachedSheet == nil, !model.isBusy, !model.sharing else { return }
+        consumingMigration = true
+        model.reviewedMigration = nil
+        defer { consumingMigration = false }
+        guard model.validateReviewedMigration(review) else { return }
         batchDecision = nil
-        model.start(outputOverride:model.output ?? deliveryStore.root)
+        do {
+            pendingOriginalExport = nil
+            if review.choice != .none {
+                let candidates = model.items.filter { review.readyIDs.contains($0.id) }.map(\.row) + review.originalRows
+                let request = FileExportRequest.originals(candidates,direction:review.settings.direction,photos:Set(origins.keys))
+                pendingOriginalExport = FileExportRecord(kind:"originals",output:review.choice == .sameLocation ? "" : review.originalsOutput?.path ?? "",
+                    request:try JSONSerialization.data(withJSONObject:request,options:.sortedKeys))
+            }
+            if !review.readyIDs.isEmpty {
+                model.startReviewedMigration(review,outputOverride:model.output ?? deliveryStore.root)
+                pendingOriginalExport = nil
+            } else if let record = pendingOriginalExport {
+                pendingOriginalExport = nil
+                var task = DeliveryTask(settings:review.settings,output:model.output?.path ?? deliveryStore.root.path)
+                if review.settings.destination.usesCache { task.output = deliveryStore.taskFolder(task.id).appendingPathComponent("Converted").path }
+                var record = record
+                if record.output.isEmpty { record.output = task.output }
+                if review.choice == .separateLocation { task.output = record.output }
+                task.originalExport = record
+                try deliveryStore.save(task)
+                finishTaskFiles(task)
+            }
+        } catch { pendingOriginalExport = nil; model.errorMessage = error.localizedDescription }
+    }
+
+    func chooseUnconvertedOutput() {
+        guard !model.isBusy, !model.sharing, let parent = settingsDialogParent else { return }
+        let panel = NSOpenPanel(); panel.title = "选择未转换照片的导出位置"; panel.prompt = "选择"
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.directoryURL = model.unconvertedOutput
+        panel.beginSheetModal(for:parent) { [weak self] response in
+            if response == .OK, let url = panel.url { self?.model.setUnconvertedOutput(url) }
+        }
     }
 
     private func converted(_ outcome: BatchOutcome, settings: ConversionSettings) {
         guard var task = activeTask else { return }; activeTask = nil
         task.settings = settings
+        task.processingCounts = ConversionReport(outcome).counts
         let capturedOrigins = origins
         let token = model.beginDelivery("正在校验和保存交付记录…")
-        if outcome.cancelled { token.cancel() }
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos:.userInitiated).async {
             let result = Result { () -> DeliveryTask in
-                task.results = try DeliveryStore.collect(outcome, settings: settings, origins: capturedOrigins)
-                task.cancelled = outcome.cancelled; try self.deliveryStore.save(task)
+                if let record = task.originalExport {
+                    task.originalExport = try FileExportRequest.remainingOriginals(record,outcome:outcome)
+                    try self.deliveryStore.save(task)
+                }
+                task.results = try DeliveryStore.collect(outcome,settings:settings,origins:capturedOrigins)
+                task.cancelled = outcome.cancelled
+                try self.deliveryStore.save(task)
                 return task
             }
             DispatchQueue.main.async {
                 switch result {
-                case .failure(let error): self.model.finishDelivery("转换结果保留，但交付准备失败", error: error)
+                case .failure(let error): self.model.finishDelivery("转换结果保留，但交付准备失败",error:error)
                 case .success(let task):
-                    self.lastTask = task; self.model.recentTasksAvailable = !task.results.isEmpty || self.model.recentTasksAvailable
-                    self.model.shareReady = settings.direction.exportsAndroid && !task.results.isEmpty
-                    self.model.finishDelivery("已记录 \(task.results.count) 张转换结果")
-                    guard !token.isCancelled, !task.results.isEmpty else { return }
-                    if settings.destination.importsPhotos { self.importTask(task) }
-                    else if settings.destination.shares { self.shareResults() }
+                    let stopped = token.isCancelled || outcome.cancelled
+                    self.finishTaskFiles(task,cancelled:stopped)
+                }
+            }
+        }
+    }
+
+    // Runs original export after ready conversions, never blocks those conversions
+    // on a manual/unsupported item and never imports originals into Photos.
+    private func finishTaskFiles(_ initial: DeliveryTask, cancelled: Bool = false, deliverResults: Bool = true) {
+        let token = model.beginDelivery("正在处理原样导出与任务记录…")
+        if cancelled { token.cancel() }
+        DispatchQueue.global(qos:.userInitiated).async {
+            var task = initial
+            if var record = task.originalExport {
+                if token.isCancelled { record.state = "待继续（本轮已停止）" }
+                else {
+                    do {
+                        try self.runExport(&record,token:token) { checkpoint in
+                            var saved = task; saved.originalExport = checkpoint; try self.deliveryStore.save(saved)
+                        }
+                    } catch { record.state = token.isCancelled ? "已停止" : "未完成"; record.detail = error.localizedDescription }
+                }
+                task.originalExport = record
+            }
+            let save = Result { try self.deliveryStore.save(task) }
+            DispatchQueue.main.async {
+                self.lastTask = task; self.model.recentTasksAvailable = task.hasRecord || self.model.recentTasksAvailable
+                self.model.shareReady = task.canShare
+                var summary = "生成结果：" + task.resultSummary
+                if !task.processingSummary.isEmpty { summary += "；" + task.processingSummary }
+                if let record = task.originalExport {
+                    summary += "；" + record.summary + (record.detail.map { "；" + $0 } ?? "")
+                    self.model.recordOriginalExport(record.report)
+                }
+                switch save {
+                case .failure(let error): self.model.finishDelivery("文件保留，但任务记录保存失败",error:error)
+                case .success:
+                    self.model.finishDelivery(summary)
+                    guard deliverResults, !token.isCancelled, !task.cancelled, !task.results.isEmpty else { return }
+                    if task.settings.destination.importsPhotos { self.importTask(task) }
+                    else if task.settings.destination.shares { self.shareResults() }
+                }
+            }
+        }
+    }
+
+    private func runExport(_ record: inout FileExportRecord, token: StopToken,
+                           checkpoint: (FileExportRecord) throws -> Void) throws {
+        try FileExportRequest.run(&record,token:token,progress:{ update in
+            DispatchQueue.main.async { self.model.deliveryProgress("导出 \(update.index) / \(update.total) · " + update.relative) }
+        },existing:{ source,target in
+            let latch = OutputDecisionLatch()
+            DispatchQueue.main.async {
+                guard !token.isCancelled else { latch.resolve(.cancel); return }
+                self.model.awaitingExportDecision(true)
+                self.presentExistingOutput(source:source,target:target) { decision in
+                    self.model.awaitingExportDecision(false); latch.resolve(decision)
+                }
+            }
+            return latch.wait(token:token)
+        },checkpoint:checkpoint)
+    }
+
+    func exportResults(_ selected: DeliveryTask? = nil) {
+        guard !model.isBusy, !model.sharing, let window = window, window.attachedSheet == nil,
+              let task = selected ?? (lastTask?.results.isEmpty == false ? lastTask : deliveryStore.tasks().first { !$0.results.isEmpty }), !task.results.isEmpty else { return }
+        let panel = NSOpenPanel(); panel.title = "导出完整转换结果"; panel.prompt = "导出到此位置"
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.beginSheetModal(for:window) { [weak self] response in
+            guard let self = self, response == .OK, let output = panel.url else { return }
+            do {
+                try NativeBatch.validateOutput(sources:self.model.sources,output:output)
+                let request = try FileExportRequest.results(task.results)
+                let record = FileExportRecord(kind:"results",output:output.path,request:try JSONSerialization.data(withJSONObject:request,options:.sortedKeys))
+                self.runResultExport(task,record:record)
+            } catch { self.model.errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func runResultExport(_ initial: DeliveryTask, record: FileExportRecord) {
+        batchDecision = nil
+        let token = model.beginDelivery("正在校验完整转换结果…")
+        DispatchQueue.global(qos:.userInitiated).async {
+            var task = initial, record = record
+            do {
+                try self.runExport(&record,token:token) { checkpoint in
+                    var saved = task; saved.resultExport = checkpoint; try self.deliveryStore.save(saved)
+                }
+            } catch { record.state = token.isCancelled ? "已停止" : "未完成"; record.detail = error.localizedDescription }
+            task.resultExport = record
+            let save = Result { try self.deliveryStore.save(task) }
+            DispatchQueue.main.async {
+                self.lastTask = task
+                switch save {
+                case .failure(let error): self.model.finishDelivery("文件保留，导出记录保存失败",error:error)
+                case .success: self.model.finishDelivery(record.summary + (record.detail.map { "；" + $0 } ?? ""))
                 }
             }
         }
@@ -205,7 +356,7 @@ final class MacPlatformServices: NSObject {
                     DispatchQueue.main.async {
                         self.libraryReader = nil; self.lastTask = task
                         switch result {
-                        case .success(let summary): self.model.finishDelivery(summary)
+                        case .success(let summary): self.model.finishDelivery(summary + (task.originalExport.map { "；" + $0.summary } ?? ""))
                         case .failure(let error): self.model.finishDelivery("入册未完成；可在最近结果中重试", error: error)
                         }
                     }
@@ -216,7 +367,7 @@ final class MacPlatformServices: NSObject {
 
     func shareResults() {
         guard !model.isBusy, !model.sharing, let window = window, window.attachedSheet == nil,
-              var task = lastTask, task.settings.direction.exportsAndroid, !task.results.isEmpty else { return }
+              var task = lastTask, task.canShare else { return }
         let token = model.beginDelivery("正在准备完整文件共享…")
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result { try self.deliveryStore.stageShare(&task, token: token) }
@@ -365,25 +516,32 @@ final class MacPlatformServices: NSObject {
         panel.contentMinSize = WindowSizing.recent
         panel.isReleasedWhenClosed = false
         var retryTask: DeliveryTask?
+        var exportTask: DeliveryTask?
+        var originalsTask: DeliveryTask?
         panel.contentView = NSHostingView(rootView: RecentTasksView(
-            model: model, initialTasks: deliveryStore.tasks().filter { !$0.results.isEmpty },
+            model: model, initialTasks: deliveryStore.tasks().filter { $0.hasRecord },
             close: { window.endSheet(panel) },
             retry: { task in retryTask = task; window.endSheet(panel) },
+            export: { task in exportTask = task; window.endSheet(panel) },
+            originals: { task in originalsTask = task; window.endSheet(panel) },
             remove: { [weak self] task in
                 guard let self = self, !self.model.isBusy, !self.model.sharing else { throw Failure("请先完成当前任务或共享") }
                 try self.deliveryStore.removeTask(task, active: [])
-                let tasks = self.deliveryStore.tasks().filter { !$0.results.isEmpty }
+                let tasks = self.deliveryStore.tasks().filter { $0.hasRecord }
                 self.lastTask = tasks.first
-                self.model.shareReady = self.lastTask?.settings.direction.exportsAndroid == true
+                self.model.shareReady = self.lastTask?.canShare == true
                 self.model.recentTasksAvailable = !tasks.isEmpty
                 return tasks
             }))
         window.beginSheet(panel) { [weak self] _ in
             panel.orderOut(nil)
             panel.contentView = nil
-            guard let self = self, let task = retryTask, !self.model.isBusy, !self.model.sharing else { return }
+            guard let self = self, !self.model.isBusy, !self.model.sharing else { return }
+            if let task = exportTask { self.exportResults(task); return }
+            if let task = originalsTask { self.batchDecision = nil; self.finishTaskFiles(task,deliverResults:false); return }
+            guard let task = retryTask else { return }
             self.lastTask = task
-            self.model.shareReady = task.settings.direction.exportsAndroid
+            self.model.shareReady = task.canShare
             if task.settings.direction.exportsAndroid { self.shareResults() }
             else { self.importTask(task) }
         }
@@ -399,7 +557,7 @@ final class MacPlatformServices: NSObject {
         if let old = reportWindow { old.close() }
         let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
             styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
-        panel.title = "转换报告"; panel.isReleasedWhenClosed = false
+        panel.title = "处理报告"; panel.isReleasedWhenClosed = false
         panel.contentMinSize = WindowSizing.report
         panel.contentView = NSHostingView(rootView:ReportView(report:report,actions:actions)
             .frame(minWidth:WindowSizing.report.width,minHeight:WindowSizing.report.height))
@@ -411,19 +569,21 @@ final class MacPlatformServices: NSObject {
         guard let window = window, model.phase == .awaitingDecision else { reply(.cancel); return }
         if let decision = batchDecision { reply(decision); return }
         let alert = NSAlert(); outputAlert = alert
-        alert.messageText = "已有转换结果"
-        alert.informativeText = "照片：\(source.lastPathComponent)\n已有输出：\(target.path)\n\n跳过会保留已有文件。覆盖会在新结果完成并通过校验后替换此照片的输出文件夹；失败时保留旧结果。"
+        alert.messageText = "已有输出"
+        alert.informativeText = "照片：\(source.lastPathComponent)\n已有输出：\(target.path)\n\n校验并复用会核对来源、范围、设置和输出文件，匹配时继续且不重新处理。跳过会保留已有文件。覆盖会在新结果完成并通过校验后替换输出文件夹；失败时保留旧结果。"
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "跳过")
+        alert.addButton(withTitle: "校验并复用")
         alert.addButton(withTitle: "覆盖")
+        alert.addButton(withTitle: "跳过")
         alert.addButton(withTitle: "停止本次任务").keyEquivalent = "\u{1b}"
         alert.showsSuppressionButton = true
         alert.suppressionButton?.title = "将此选择应用于本次所有已有输出"
         alert.beginSheetModal(for: window) { [weak self, weak alert] response in
             let choice: ExistingOutputDecision
             switch response {
-            case .alertFirstButtonReturn: choice = .skip
+            case .alertFirstButtonReturn: choice = .resume
             case .alertSecondButtonReturn: choice = .overwrite
+            case .alertThirdButtonReturn: choice = .skip
             default: choice = .cancel
             }
             if choice != .cancel && alert?.suppressionButton?.state == .on { self?.batchDecision = choice }
@@ -490,19 +650,22 @@ struct RecentTasksView: View {
     @State private var cleanupError: String?
     let close: () -> Void
     let retry: (DeliveryTask) -> Void
+    let export: (DeliveryTask) -> Void
+    let originals: (DeliveryTask) -> Void
     let remove: (DeliveryTask) throws -> [DeliveryTask]
 
     init(model: WorkspaceModel, initialTasks: [DeliveryTask], close: @escaping () -> Void,
-         retry: @escaping (DeliveryTask) -> Void, remove: @escaping (DeliveryTask) throws -> [DeliveryTask]) {
+         retry: @escaping (DeliveryTask) -> Void, export: @escaping (DeliveryTask) -> Void, originals: @escaping (DeliveryTask) -> Void, remove: @escaping (DeliveryTask) throws -> [DeliveryTask]) {
         self.model = model
         _tasks = State(initialValue: initialTasks)
         _selection = State(initialValue: initialTasks.first?.id)
-        self.close = close; self.retry = retry; self.remove = remove
+        self.close = close; self.retry = retry; self.export = export; self.originals = originals; self.remove = remove
     }
 
     private var selectedTask: DeliveryTask? { tasks.first { $0.id == selection } }
     private func existingFiles(_ task: DeliveryTask) -> [URL] {
-        task.results.flatMap(\.files).filter { FileManager.default.fileExists(atPath: $0) }
+        let paths = task.results.flatMap(\.files) + (task.originalExport?.outputs ?? []) + (task.resultExport?.outputs ?? [])
+        return paths.filter { FileManager.default.fileExists(atPath: $0) }
             .map { URL(fileURLWithPath: $0) }
     }
     private func filesAvailable(_ task: DeliveryTask) -> Bool {
@@ -511,9 +674,10 @@ struct RecentTasksView: View {
         }
     }
     private func canRedeliver(_ task: DeliveryTask) -> Bool {
-        task.settings.direction.exportsAndroid || task.settings.exportMode != .auxiliaryOnly
+        !task.results.isEmpty && (task.settings.direction.exportsAndroid || task.settings.exportMode != .auxiliaryOnly)
     }
     private func deliveryStatus(_ task: DeliveryTask) -> String {
+        if task.results.isEmpty, let record = task.originalExport { return record.summary }
         if task.settings.direction.exportsAndroid { return task.shareState }
         if !task.importSummary.isEmpty { return task.importSummary }
         return task.cancelled ? "任务已停止，已完成结果保留" : "转换结果已保存"
@@ -524,7 +688,7 @@ struct RecentTasksView: View {
             HStack {
                 VStack(alignment:.leading,spacing:4) {
                     Text("最近结果").font(.title3.weight(.semibold))
-                    Text(tasks.isEmpty ? "转换后的结果会保留在这里" : "\(tasks.count) 次转换")
+                    Text(tasks.isEmpty ? "处理与导出任务会保留在这里" : "\(tasks.count) 次任务")
                         .font(.callout).foregroundColor(.secondary)
                 }
                 Spacer()
@@ -582,7 +746,7 @@ struct RecentTasksView: View {
                 Text(task.created,style:.date)
                 Text(task.created,style:.time).foregroundColor(.secondary)
             }
-            Text("\(task.results.count) 张 · \(task.settings.direction.title) · \(task.settings.destination.title)")
+            Text((task.results.isEmpty ? "原样导出任务" : task.resultSummary) + " · " + MigrationTargetPreset.current(task.settings).title)
                 .font(.callout).foregroundColor(.secondary)
         }.padding(.vertical,6)
     }
@@ -590,21 +754,52 @@ struct RecentTasksView: View {
     private func taskDetails(_ task: DeliveryTask) -> some View {
         ScrollView {
             VStack(alignment:.leading,spacing:12) {
+              Group {
                 Label(deliveryStatus(task),systemImage:task.cancelled ? "stop.circle" : "tray.full")
                     .font(.headline).textSelection(.enabled)
                 Text(task.settings.direction.title).font(.callout).foregroundColor(.secondary)
+                if !task.processingSummary.isEmpty { Text(task.processingSummary).font(.caption).foregroundColor(.secondary) }
                 Divider()
                 Text("保存位置").font(.callout.weight(.semibold))
                 Text(task.output).font(.callout).textSelection(.enabled).fixedSize(horizontal:false,vertical:true)
                 if task.settings.destination.importsPhotos { Text("相册：" + task.settings.albumTitle).font(.callout) }
                 if task.cancelled { Text("仅保留已完成的结果。").font(.callout).foregroundColor(.secondary) }
-                if !filesAvailable(task) {
+              }
+              Group {
+                if let record = task.originalExport { exportDetails(record) }
+                if let record = task.resultExport { exportDetails(record) }
+                if !task.results.isEmpty && !filesAvailable(task) {
                     Label("部分文件已移走或清理，请重新转换后重试。",systemImage:"exclamationmark.triangle")
                         .font(.callout).foregroundColor(.secondary)
                 }
                 if let error = cleanupError { Text(error).foregroundColor(.red).textSelection(.enabled) }
+              }
             }.frame(maxWidth:.infinity,alignment:.leading).padding(16)
         }.frame(maxHeight:.infinity)
+    }
+
+    private func exportDetails(_ record: FileExportRecord) -> some View {
+        VStack(alignment:.leading,spacing:6) {
+            Divider()
+            Text(record.summary).font(.callout.weight(.semibold))
+            Text(record.output).font(.caption).textSelection(.enabled)
+            if let detail = record.detail { Text(detail).font(.callout).foregroundColor(.secondary).textSelection(.enabled) }
+            ForEach(Array(exportLines(record).enumerated()),id:\.offset) { line in
+                Text(line.element).font(.caption).foregroundColor(.secondary).textSelection(.enabled)
+            }
+        }
+    }
+    private func exportLines(_ record: FileExportRecord) -> [String] {
+        guard let data = record.report,
+              let report = try? JSONSerialization.jsonObject(with:data) as? [String:Any],
+              let files = report["files"] as? [[String:Any]] else { return [] }
+        let titles = ["copied":"已生成副本","resumed":"导出复用","skipped":"已跳过","failed":"失败"]
+        return files.map { file in
+            let source = file["source"] as? String ?? "项目"
+            let state = file["status"] as? String ?? "未完成"
+            let detail = file["detail"] as? String ?? ""
+            return source + " · " + (titles[state] ?? state) + " · " + detail
+        }
     }
 
     private func taskActions(_ task: DeliveryTask) -> some View {
@@ -616,6 +811,11 @@ struct RecentTasksView: View {
             Spacer(minLength:0)
             Button("查看文件") { NSWorkspace.shared.activateFileViewerSelecting(existingFiles(task)) }
                 .disabled(existingFiles(task).isEmpty)
+            Button("导出转换结果…") { export(task) }
+                .disabled(task.results.isEmpty || model.isBusy || model.sharing)
+            if task.originalExport != nil {
+                Button("继续原样导出") { originals(task) }.disabled(model.isBusy || model.sharing)
+            }
             if canRedeliver(task) {
                 Button(task.settings.direction.exportsAndroid ? "再次共享…" : "再次导入图库…") { retry(task) }
                     .disabled(!filesAvailable(task) || model.isBusy || model.sharing)

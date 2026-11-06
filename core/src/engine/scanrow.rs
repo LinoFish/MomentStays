@@ -19,6 +19,7 @@ pub struct ScanRow {
     pub manufacturer_detail: String,
     pub confirmed_static: bool,
     pub version: Option<SourceVersion>,
+    pub burst: Option<Value>,
 }
 
 impl Default for ScanRow {
@@ -34,6 +35,7 @@ impl Default for ScanRow {
             manufacturer_detail: String::new(),
             confirmed_static: false,
             version: None,
+            burst: None,
         }
     }
 }
@@ -47,7 +49,7 @@ impl ScanRow {
             )
     }
     pub fn needs_inspection(&self) -> bool {
-        !self.is_motion && !self.confirmed_static
+        !self.is_motion && !self.confirmed_static && self.burst.is_none()
     }
     /// The NativeDriver `scan` row shape.
     pub fn json(&self) -> Value {
@@ -60,6 +62,7 @@ impl ScanRow {
             "manufacturer_detail": self.manufacturer_detail,
             "detail": self.detail,
             "static": self.confirmed_static,
+            "burst": self.burst,
         })
     }
     pub(crate) fn changed(source: &Path, relative: &str) -> Self {
@@ -82,6 +85,22 @@ pub fn scan_file(
     bytes: Option<&[u8]>,
 ) -> ScanRow {
     let before = SourceVersion::read(file);
+    if before.is_some_and(|v| v.size > super::burst::MAX_IMAGE)
+        && super::burst::filename(&super::paths::file_name(file), "").is_some()
+    {
+        let mut burst = super::burst::inspect(file, &[]);
+        if let Some(frame) = burst.as_mut() {
+            frame["reason"] = json!("连拍单图超过 256 MiB 安全上限");
+        }
+        return ScanRow {
+            source: file.to_path_buf(),
+            relative: relative.into(),
+            version: before,
+            burst,
+            detail: "连拍单图超过安全上限，未读取或转换".into(),
+            ..ScanRow::default()
+        };
+    }
     let owned;
     let data: Result<&[u8], String> = match bytes {
         Some(b) => Ok(b),
@@ -121,6 +140,7 @@ pub fn scan_file(
                 manufacturer_detail: r.manufacturer_detail,
                 confirmed_static: r.confirmed_static,
                 version: None,
+                burst: None,
             };
             if !row.is_motion {
                 match crate::engine::static_hdr::inspect(native, data) {
@@ -137,10 +157,25 @@ pub fn scan_file(
                     Ok(None) => {}
                 }
             }
+            row.burst = super::burst::inspect(file, data);
+            if let Some(burst) = &row.burst {
+                row.detail = if burst["supported"] == true {
+                    "荣耀 JPEG 连拍成员；按原帧序保留，需检查整组与代表帧".into()
+                } else {
+                    burst["reason"]
+                        .as_str()
+                        .unwrap_or("不支持的连拍组合")
+                        .into()
+                };
+            }
             // The pixel half of Swift `confirmedStatic` (ImageIO decode).
             if row.confirmed_static && native.image_decodes(data) == Some(false) {
                 row.confirmed_static = false;
                 row.detail = format::NOT_MOTION.to_string();
+                if let Some(burst) = row.burst.as_mut() {
+                    burst["supported"] = json!(false);
+                    burst["reason"] = json!("JPEG 原图无法解码");
+                }
             }
             row
         }

@@ -23,6 +23,8 @@ struct ConversionOptions {
     var coverIndex: Int?
     var coverSelections: [String:Int] = [:]
     var candidateDelivery = "static"
+    var burstPlans: [BurstGroup] = []
+    var burstChoices: [String:BurstChoice] = [:]
     var manualCover: ManualCoverChoice?
     var manualCovers: [String:ManualCoverChoice] = [:]
     var json: [String:Any] {
@@ -37,7 +39,7 @@ struct ConversionOptions {
     }
 }
 
-enum ExistingOutputDecision { case skip, overwrite, cancel }
+enum ExistingOutputDecision { case resume, skip, overwrite, cancel }
 
 final class StopToken {
     let rustToken = ms_stop_new()!
@@ -48,6 +50,45 @@ final class StopToken {
         ms_stop_cancel(rustToken)
  lock.unlock() }
     var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return stopped }
+}
+
+// Rust owns grouping, evidence, ordering and plans; these are transport/UI values.
+struct BurstFrame: Codable, Equatable {
+    let group_id: String
+    let source_group: String
+    let index: Int
+    let source_cover: Bool
+    let source_sha256: String?
+    let supported: Bool
+    let reason: String
+}
+struct BurstMember: Codable, Equatable, Identifiable {
+    let source: String
+    let index: Int
+    let source_cover: Bool
+    let version: String?
+    let source_sha256: String?
+    var id: String { source }
+}
+struct BurstGroup: Codable, Equatable, Identifiable {
+    let id: String
+    let label: String
+    let members: [BurstMember]
+    let signature: String
+    let representative: String?
+    let reason: String
+    let ordered: Bool
+    let has_gaps: Bool?
+    let supported: Bool
+    let source_cover_count: Int
+}
+struct BurstChoice: Codable, Equatable {
+    var signature: String
+    var representative: String?
+    var independent = false
+}
+func transportJSON<T: Encodable>(_ value: T) -> Any? {
+    (try? JSONEncoder().encode(value)).flatMap { try? JSONSerialization.jsonObject(with:$0) }
 }
 
 struct ScanRow {
@@ -61,9 +102,10 @@ struct ScanRow {
     var manufacturerDetail: String = ""
     var confirmedStatic = false
     var version: SourceVersion?
+    var burst: BurstFrame? = nil
     var isStaticHDR: Bool { confirmedStatic && ["Ultra HDR","ISO HDR","旧 Apple HDR","荣耀私有 HDR","HEIC HDR"].contains(hdr) }
-    var isConvertible: Bool { isMotion || isStaticHDR }
-    var needsInspection: Bool { !isMotion && !confirmedStatic }
+    var isConvertible: Bool { burst.map { $0.supported } ?? (isMotion || isStaticHDR) }
+    var needsInspection: Bool { burst.map { !$0.supported } ?? (!isMotion && !confirmedStatic) }
 }
 
 // A batch-local reuse check, including inode and change time. Never persisted as

@@ -561,8 +561,12 @@ fn scan_row_for(found: &files::Found, root: &Option<PathBuf>) -> Value {
         files::Found::File(p) => Mapped::open(p).map_err(|e| e.to_string()),
         files::Found::Unreadable(_, e) => Err(e.clone()),
     };
+    let mut burst = None;
     let row = match opened {
-        Ok(mapped) => momentstays_core::scan::scan_row(mapped.bytes()),
+        Ok(mapped) => {
+            burst = momentstays_core::engine::burst::inspect(file, mapped.bytes());
+            momentstays_core::scan::scan_row(mapped.bytes())
+        }
         Err(e) => {
             let maker = momentstays_core::scan::identify(&[], "");
             momentstays_core::scan::ScanRow {
@@ -586,6 +590,7 @@ fn scan_row_for(found: &files::Found, root: &Option<PathBuf>) -> Value {
         "manufacturer": row.manufacturer,
         "manufacturer_detail": row.manufacturer_detail,
         "confirmed_static": row.confirmed_static,
+        "burst": burst,
     })
 }
 

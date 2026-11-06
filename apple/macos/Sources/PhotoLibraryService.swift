@@ -193,6 +193,94 @@ final class PhotoLibraryService {
         guard let id = id, let created = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [id], options: nil).firstObject else { throw Failure("相册创建后无法读取") }
         return created
     }
+    // Public PhotoKit boundary, adapted from MomentPort cb927369 (upstream GPL-3.0-or-later).
+    // Neither burstIdentifier nor representsBurst can be set through public APIs.
+    private func importBurst(_ file: DeliveredFile, collection: PHAssetCollection, store: DeliveryStore, token: StopToken) throws {
+        guard let burst = file.burst, !burst.members.isEmpty, file.files.count == burst.members.count else { throw Failure("连拍交付成员不完整") }
+        try file.verify()
+        _ = try RustCore.engine(["mode":"verify","input":file.folder])
+        let fetchOptions = PHFetchOptions(); fetchOptions.includeAllBurstAssets = true
+        var record = store.records()[file.key]
+        if record?.assetIDs == nil {
+            guard record == nil || (record?.state == "pending" && record?.assetID == nil) else { throw Failure("连拍上次入库状态待核对，未重复创建") }
+            if token.isCancelled { throw Failure("入库已停止") }
+            // One PhotoKit change transaction for all members. Persist every
+            // placeholder before attaching resources, for safe interrupted retries.
+            var ordered = burst.members
+            if let index = ordered.firstIndex(where:{ $0.representative }), index != 0 { ordered.insert(ordered.remove(at:index),at:0) }
+            let metadata = ordered.map { Self.fileMetadata(URL(fileURLWithPath:$0.source)) }
+            var pending = LibraryImportRecord(key:file.key,state:"pending")
+            try store.save(pending)
+            var persistenceError: Error?
+            do {
+                try change {
+                    let requests = ordered.map { _ in PHAssetCreationRequest.forAsset() }
+                    let ids = requests.compactMap { $0.placeholderForCreatedAsset?.localIdentifier }
+                    guard ids.count == ordered.count else { persistenceError = Failure("连拍资产标识不完整"); return }
+                    pending.assetIDs = ids; pending.state = "submitting"
+                    do { try store.save(pending) } catch { persistenceError = error; return }
+                    for (index,request) in requests.enumerated() {
+                        let url = URL(fileURLWithPath:file.folder).appendingPathComponent(ordered[index].file)
+                        let options = PHAssetResourceCreationOptions(); options.shouldMoveFile = false; options.originalFilename = url.lastPathComponent
+                        request.creationDate = metadata[index].0; request.location = metadata[index].1
+                        request.addResource(with:.photo,fileURL:url,options:options)
+                    }
+                }
+            } catch {
+                pending.state = "pending"; pending.assetIDs = nil; pending.message = error.localizedDescription
+                try store.save(pending); throw error
+            }
+            if let error = persistenceError { throw error }
+            pending.state = "created"; try store.save(pending); record = pending
+        }
+        guard var completed = record, let ids = completed.assetIDs, ids.count == burst.members.count else { throw Failure("连拍入库记录缺少成员，需核对") }
+        let fetched = PHAsset.fetchAssets(withLocalIdentifiers:ids,options:fetchOptions)
+        var assets: [PHAsset] = []; fetched.enumerateObjects { a,_,_ in assets.append(a) }
+        guard assets.count == ids.count, Set(assets.map(\.localIdentifier)) == Set(ids) else { throw Failure("连拍已提交，但部分资产已删除或不可读；未自动重复创建") }
+        let filenames = Set(burst.members.map { $0.file.lowercased() })
+        var observed: Set<String> = []
+        for asset in assets {
+            guard let photo = PHAssetResource.assetResources(for:asset).first(where:{ $0.type == .photo }), filenames.contains(photo.originalFilename.lowercased()) else { throw Failure("连拍入库资源文件名不匹配") }
+            observed.insert(photo.originalFilename.lowercased())
+            if let member = burst.members.first(where:{ $0.file.caseInsensitiveCompare(photo.originalFilename) == .orderedSame }) {
+                let expected = Self.fileMetadata(URL(fileURLWithPath:member.source))
+                if let date = expected.0, abs((asset.creationDate ?? .distantPast).timeIntervalSince(date)) > 1 { throw Failure("连拍成员拍摄时间不一致") }
+                if let location = expected.1 {
+                    guard let actual = asset.location, abs(actual.coordinate.latitude-location.coordinate.latitude) < 0.00001,
+                        abs(actual.coordinate.longitude-location.coordinate.longitude) < 0.00001 else { throw Failure("连拍成员位置不一致") }
+                }
+            }
+        }
+        guard observed == filenames else { throw Failure("连拍入库资源数量不完整") }
+        if burst.uuid != nil {
+            let identifiers = assets.map(\.burstIdentifier)
+            var groupMembers: Set<String> = []
+            if let first = identifiers.compactMap({ $0 }).first, !first.isEmpty {
+                PHAsset.fetchAssets(withBurstIdentifier:first,options:fetchOptions).enumerateObjects { a,_,_ in groupMembers.insert(a.localIdentifier) }
+            }
+            let facts = BurstLibraryFacts(expectedIDs:ids,actualIDs:assets.map(\.localIdentifier),identifiers:identifiers,
+                representativeCount:assets.filter(\.representsBurst).count,groupMembers:groupMembers)
+            guard facts.recognized else {
+                completed.state = "created"; completed.message = "文件已入库；图库尚未确认全部成员成组，可重试回查，不重复导入"
+                try store.save(completed); throw Failure(completed.message)
+            }
+            completed.burstIdentifier = identifiers.compactMap { $0 }.first
+            let representative = assets.first(where:{ $0.representsBurst })
+            completed.representativeAssetID = representative?.localIdentifier
+            let actualName = representative.flatMap { PHAssetResource.assetResources(for:$0).first(where:{ $0.type == .photo })?.originalFilename } ?? "未知"
+            let chosenName = burst.members.first(where:{ $0.representative })?.file
+            completed.message = "图库已确认连拍：\(ids.count) 帧；Photos 代表图：" + actualName + (chosenName == actualName ? "" : "（与所选代表帧不同）")
+        } else { completed.message = "已作为独立照片入库，未声明连拍成组" }
+        if token.isCancelled { throw Failure("入库已完成；相册关联已停止，可重试") }
+        var inAlbum: Set<String> = []
+        PHAsset.fetchAssets(in:collection,options:fetchOptions).enumerateObjects { a,_,_ in inAlbum.insert(a.localIdentifier) }
+        if !Set(ids).isSubset(of:inAlbum) { try change { PHAssetCollectionChangeRequest(for:collection)?.addAssets(assets as NSArray) } }
+        var confirmed: Set<String> = []
+        PHAsset.fetchAssets(in:collection,options:fetchOptions).enumerateObjects { a,_,_ in confirmed.insert(a.localIdentifier) }
+        guard Set(ids).isSubset(of:confirmed) else { throw Failure("连拍已入库但相册关联未完整确认，可重试") }
+        completed.albumID = collection.localIdentifier; completed.state = "completed"; try store.save(completed)
+    }
+
     // Each media pair is one Photos transaction. Album association is retriable separately.
     func importResults(_ task: inout DeliveryTask, store: DeliveryStore, token: StopToken,
                        progress: @escaping (String) -> Void) throws -> String {
@@ -204,6 +292,12 @@ final class PhotoLibraryService {
             if token.isCancelled { break }
             progress("导入相册 \(index + 1) / \(task.results.count)")
             do {
+                if file.burst != nil {
+                    let hadAssets = store.records()[file.key]?.assetIDs != nil
+                    try importBurst(file,collection:collection,store:store,token:token)
+                    if hadAssets { existing += 1 } else { imported += 1 }
+                    continue
+                }
                 let standalone = file.files.count == 1 && (file.standaloneHDR == true || task.settings.exportMode == .withCandidates)
                 guard standalone || file.files.count == 2 else { throw Failure("缺少完整实况配对") }
                 var record = store.records()[file.key]
@@ -274,10 +368,16 @@ final class PhotoLibraryService {
                 var completed = record ?? LibraryImportRecord(key: file.key, assetID: asset.localIdentifier, state: "created")
                 completed.albumID = collection.localIdentifier; completed.state = "completed"; completed.message = ""
                 try store.save(completed)
-            } catch { failures.append(URL(fileURLWithPath: file.source).lastPathComponent + "：" + error.localizedDescription) }
+            } catch {
+                if file.burst != nil, var record = store.records()[file.key] {
+                    record.state = "needs-review"; record.message = error.localizedDescription; try? store.save(record)
+                }
+                failures.append(URL(fileURLWithPath: file.source).lastPathComponent + "：" + error.localizedDescription)
+            }
         }
         let summary = "入库新增 \(imported) · 已有 \(existing) · 未完成 \(failures.count)" + (token.isCancelled ? " · 已停止" : "")
-        task.importSummary = summary + (failures.isEmpty ? "" : "\n" + failures.joined(separator: "\n")); try store.save(task)
+        let burstMessages = task.results.filter { $0.burst != nil }.compactMap { store.records()[$0.key]?.message }.filter { !$0.isEmpty }
+        task.importSummary = summary + (burstMessages.isEmpty ? "" : "\n" + burstMessages.joined(separator:"\n")) + (failures.isEmpty ? "" : "\n" + failures.joined(separator: "\n")); try store.save(task)
         return task.importSummary
     }
 }

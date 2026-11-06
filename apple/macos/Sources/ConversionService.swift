@@ -193,7 +193,7 @@ final class SourceInspectionCache {
     }
     private func rebase(_ row:ScanRow, relative:String, version:SourceVersion) -> ScanRow {
         ScanRow(source:row.source,relative:relative,isMotion:row.isMotion,hdr:row.hdr,cover:row.cover,detail:row.detail,
-            manufacturer:row.manufacturer,manufacturerDetail:row.manufacturerDetail,confirmedStatic:row.confirmedStatic,version:version)
+            manufacturer:row.manufacturer,manufacturerDetail:row.manufacturerDetail,confirmedStatic:row.confirmedStatic,version:version,burst:row.burst)
     }
     private func neutral(_ file:URL, relative:String, entry:Entry, bytes:[UInt8]) throws -> Result<NativeMotionPhoto,Error> {
         if entry.neutralReady {
@@ -241,6 +241,12 @@ final class SourceInspectionCache {
             else {
                 if let payload = entries[file]?.payload { try? FileManager.default.removeItem(at:payload) }
                 entry = Entry(version); entries[file] = entry
+            }
+            if version.size > 256 * 1024 * 1024,
+               (try RustCore.engine(["mode":"burst-filename","filename":file.lastPathComponent])["candidate"] as? Bool) == true {
+                let limited = rebase(NativeBatch.scanFile(file,relative:relative),relative:relative,version:version)
+                entry.projections[direction] = limited; result.append(limited); pending.append(limited)
+                progress(index + 1,selected.entries.count); continue
             }
             if direction == .toAndroid {
                 let versions = try siblings(file)

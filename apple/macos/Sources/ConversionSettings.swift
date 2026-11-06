@@ -7,7 +7,7 @@ protocol SettingsChoice: RawRepresentable, CaseIterable, Hashable, Codable where
 
 enum ConversionDirection: String, SettingsChoice {
     case toApple = "to-apple", toAndroid = "to-android", androidToAndroid = "android-to-android"
-    var title: String { switch self { case .toApple: return "安卓 → 苹果实况"; case .toAndroid: return "苹果实况 → 安卓"; case .androidToAndroid: return "安卓 → 安卓" } }
+    var title: String { switch self { case .toApple: return "照片 → Apple"; case .toAndroid: return "苹果实况 → 安卓"; case .androidToAndroid: return "安卓 → 安卓" } }
     var exportsAndroid: Bool { self != .toApple }
 }
 
@@ -25,6 +25,60 @@ enum AndroidVendor: String, SettingsChoice {
         }
     }
     var supportsHEIC: Bool { self == .samsung }
+}
+
+// Destination presets describe the actual supported format route. Keep the
+// engine directions internal and retain their stored values for old tasks.
+enum MigrationTargetPreset: String, SettingsChoice {
+    case apple, google, xiaomi, samsung, huawei, honor, oppo, vivo, googleToHonor
+    var title: String {
+        switch self {
+        case .apple: return "Apple 照片兼容"
+        case .google: return "Android · Google / 通用"
+        case .xiaomi: return "Android · 小米"
+        case .samsung: return "Android · 三星"
+        case .huawei: return "Android · 华为"
+        case .honor: return "荣耀兼容 · Apple 实况来源"
+        case .oppo: return "Android · OPPO"
+        case .vivo: return "Android · vivo V2"
+        case .googleToHonor: return "荣耀兼容 · Google 动态 JPEG 来源"
+        }
+    }
+    var direction: ConversionDirection { self == .apple ? .toApple : self == .googleToHonor ? .androidToAndroid : .toAndroid }
+    var vendor: AndroidVendor {
+        switch self {
+        case .xiaomi: return .xiaomi
+        case .samsung: return .samsung
+        case .huawei: return .huawei
+        case .honor: return .honor
+        case .oppo: return .oppo
+        case .vivo: return .vivo
+        default: return .google
+        }
+    }
+    var detail: String {
+        switch self {
+        case .apple: return "受支持实况、静态 HDR 与荣耀 JPEG 连拍 → Apple；连拍允许缺帧，保留原序号。"
+        case .googleToHonor: return "仅支持已验证结构的 Google Motion Photo JPEG → 荣耀，不代表全部安卓互转。"
+        default: return "Apple 实况 → 目标兼容格式；本地静态 HDR 独立处理。具体支持以照片检查结果为准。"
+        }
+    }
+    static func current(_ settings: ConversionSettings) -> Self {
+        if settings.direction == .toApple { return .apple }
+        if settings.direction == .androidToAndroid { return .googleToHonor }
+        return Self(rawValue:settings.vendor.rawValue) ?? .google
+    }
+}
+
+enum UnconvertedExportChoice: String, SettingsChoice {
+    case none, sameLocation, separateLocation
+    var title: String {
+        switch self {
+        case .none: return "否"
+        case .sameLocation: return "导出到相同位置"
+        case .separateLocation: return "导出到不同位置"
+        }
+    }
 }
 
 enum PhotoContainer: String, SettingsChoice {
@@ -116,6 +170,7 @@ struct ConversionSettings: Equatable, Codable {
     var manualMidpoints: [String:Bool]?
     var manualCovers: [String:ManualCoverChoice]?
     var candidateDelivery: CandidateDelivery?
+    var burstChoices: [String:BurstChoice]?
 
     func coverIndex(for source: URL) -> Int? { direction == .toApple ? coverSelections?[NativeBatch.normalized(source).path] : nil }
 
@@ -142,6 +197,7 @@ struct ConversionSettings: Equatable, Codable {
             timeDomain: timeDomain.rawValue, videoTrack: track.rawValue, outputMode: exportMode.rawValue,
             repairAuxiliaryDuration: repairAuxiliaryDuration, exportDataFiles: exportDataFiles)
         result.direction = direction.rawValue
+        result.burstChoices = burstChoices ?? [:]
         result.manualCovers = direction == .toApple ? manualCovers ?? [:] : [:]
         result.coverSelections = exportMode == .auxiliaryOnly ? [:] : coverSelections ?? [:]
         result.candidateDelivery = (candidateDelivery ?? .staticPhotos).rawValue

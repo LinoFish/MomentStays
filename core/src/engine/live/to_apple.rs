@@ -188,7 +188,7 @@ pub fn convert(
         return Ok(json!({
             "status": "converted", "source": s(source), "output": s(target),
             "detail": format!("辅助轨已单独导出：{} × {}，{} 帧，{} 秒；无音频，未重新编码{repaired}", num("width"), num("height"), num("frames"), num("duration_seconds")),
-            "auxiliary_video": aux,
+            "auxiliary_video": aux, "verification": manifest,
         }));
     }
 
@@ -435,6 +435,6 @@ pub fn convert(
     Ok(json!({
         "status": "converted", "source": s(source), "output": s(target), "timing": timing,
         "hdr": Value::Object(hdr), "warnings": warnings, "output_files": names_json(&names),
-        "detail": detail,
+        "detail": detail, "verification": manifest,
     }))
 }

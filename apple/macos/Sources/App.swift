@@ -80,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         command(file, "选择照片或文件夹…", #selector(chooseSources), "o")
         command(file, "扫描系统照片图库…", #selector(importPhotos))
         command(file, "更改输出位置…", #selector(chooseOutput))
+        command(file, "导出转换结果…", #selector(exportResults))
         command(file, "共享输出文件…", #selector(shareResults))
         command(file, "最近结果与交付…", #selector(recentResults))
         command(file, "停止图库自动监测", #selector(stopMonitoring))
@@ -95,10 +96,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         let task = section("任务")
-        command(task, "开始转换", #selector(start), "\r")
+        command(task, "开始处理", #selector(start), "\r")
         command(task, "停止任务", #selector(stop), ".")
         command(task, "重新扫描", #selector(rescan), "r")
-        command(task, "导出设置…", #selector(showSettings), ",")
+        command(task, "迁移选项…", #selector(showSettings), ",")
         let windowMenu = section("窗口")
         windowMenu.addItem(withTitle: "最小化", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: "缩放", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
@@ -116,12 +117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
-        case #selector(start): return model.canStart && !model.sharing && window?.attachedSheet == nil
+        case #selector(start): return model.canApproveMigration && !model.sharing && window?.attachedSheet == nil
         case #selector(stop): return model.canStop
         case #selector(rescan): return model.canRescan
-        case #selector(importPhotos): return model.settings.direction != .androidToAndroid && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
-        case #selector(chooseSources): return model.canAppendSources && window?.attachedSheet == nil
+        case #selector(importPhotos): return model.migrationTargetConfirmed && model.settings.direction != .androidToAndroid && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
+        case #selector(chooseSources): return model.migrationTargetConfirmed && model.canAppendSources && window?.attachedSheet == nil
         case #selector(chooseOutput): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
+        case #selector(exportResults): return model.resultExportAvailable && !model.isBusy && !model.sharing
         case #selector(shareResults): return model.shareReady && !model.isBusy && !model.sharing
         case #selector(recentResults): return !model.isBusy && !model.sharing
         case #selector(stopMonitoring): return model.libraryMonitoring
@@ -132,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
 
+    @objc private func exportResults() { platform.exportResults() }
     @objc private func shareResults() { platform.shareResults() }
     @objc private func recentResults() { platform.showRecentTasks() }
     @objc private func stopMonitoring() { platform.stopMonitoring() }

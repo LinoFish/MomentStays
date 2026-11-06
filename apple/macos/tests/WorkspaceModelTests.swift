@@ -295,7 +295,7 @@ struct WorkspaceModelTests {
         var allocations = 0
         m.prepareConversion = { _,output in allocations += 1; return output }
         m.toggleSelection(m.items[0]); m.selectQueueScope(.manual); m.toggleSelection(m.items[1])
-        check(m.selectedIDs == Set([a.path,b.path]) && m.selection == b.path,"ordinary clicks accumulate across tabs independently of focus")
+        check(m.selectedIDs == Set([a.path,b.path]) && m.selection == nil,"ordinary clicks accumulate across tabs independently of focus")
         m.toggleSelection(m.items[1]); m.selectQueueScope(.ready)
         check(m.selectedIDs == [a.path],"single deselection retains hidden selections")
         m.start(); check(m.queueScope == .manual && m.manualPromptPresented && s.runs.isEmpty,"preflight navigates before prompting")
@@ -383,6 +383,216 @@ struct WorkspaceModelTests {
         check(ss.runs.isEmpty && stale.notice != nil,"late source changes block an already confirmed manual transaction")
     }
 
+    static func burstCopyIntegrationChecks(root: URL, still: URL) throws {
+        let input = root.appendingPathComponent("input")
+        try FileManager.default.createDirectory(at:input,withIntermediateDirectories:true)
+        let names = ["IMG_20230108_205201_BURST002_COVER.JPG","IMG_20230108_205201_BURST005.JPG"]
+        let bytes = try Data(contentsOf:still)
+        let sources = names.map { input.appendingPathComponent($0) }
+        for source in sources { try bytes.write(to:source) }
+        func plans(_ rows: [ScanRow]) throws -> [BurstGroup] {
+            let value = try RustCore.engine(["mode":"burst-plan","scan_rows":rows.map(RustCore.rowJSON)])
+            return try JSONDecoder().decode([BurstGroup].self,from:JSONSerialization.data(withJSONObject:value["groups"]!))
+        }
+        let rows = try NativeBatch.scan(sources:sources,token:StopToken(),progress:{_,_ in})
+        let group = try plans(rows)[0]
+        check(group.has_gaps == true && group.members.map(\.index) == [2,5],"copy classification retains real non-001 gapped source indices")
+        var options = ConversionOptions(); options.exportDataFiles = false; options.burstPlans = [group]
+        options.burstChoices[group.id] = BurstChoice(signature:group.signature,representative:group.representative,independent:true)
+        let output = root.appendingPathComponent("independent")
+        let result = try NativeBatch.run(sources:sources,output:output,options:options,token:StopToken(),scanRows:rows,progress:{_ in})
+        check(result.counts["converted",default:0] == 0 && result.counts["copied"] == 2,"real independent burst outputs count as original copies and never conversions")
+        let report = ConversionReport(result)
+        check(report.entries.count == 2 && report.entries.allSatisfy { $0.state == .copied },"Swift report classifies actual independent outputs separately")
+        let service = ControlledService()
+        let queue = WorkspaceModel(service:service); queue.selectMigrationTarget(.apple)
+        queue.chooseSources(sources); service.scans[0].completion(.success(rows))
+        queue.setOutput(output); queue.setBurstChoice(queue.burstGroups[0],independent:true)
+        queue.approveMigrationReview(); let snapshot = queue.reviewedMigration!; queue.reviewedMigration = nil
+        queue.startReviewedMigration(snapshot,outputOverride:nil); service.runs[0].completion(.success(result))
+        check(queue.items.allSatisfy { queue.displayState($0) == .copied && queue.category($0) == .converted } && queue.queueScope == .completed,"actual copy results appear as original outputs in the completed queue")
+        let delivered = try DeliveryStore.collect(result,settings:ConversionSettings(),origins:[:])
+        check(delivered.count == 1 && delivered[0].burst?.independent == true && delivered[0].verification != nil,"independent output keeps real transaction verification and history")
+        let file = URL(fileURLWithPath:delivered[0].files[0]), version = SourceVersion.read(URL(fileURLWithPath:delivered[0].files[0]))
+        let actual = try Data(contentsOf:file)
+        check(actual == bytes,"independent media is byte-identical to source")
+        let resumed = try NativeBatch.run(sources:sources,output:output,options:options,token:StopToken(),scanRows:rows,existingOutput:{_,_ in .resume},progress:{_ in})
+        check(resumed.counts["converted",default:0] == 0 && resumed.counts["copied"] == 2 && SourceVersion.read(file) == version,"independent resume retains the copy classification and does not rewrite media")
+        let single = root.appendingPathComponent("single-input").appendingPathComponent(names[0])
+        try FileManager.default.createDirectory(at:single.deletingLastPathComponent(),withIntermediateDirectories:true)
+        try bytes.write(to:single)
+        let oneRow = try NativeBatch.scan(sources:[single],token:StopToken(),progress:{_,_ in})
+        var oneOptions = ConversionOptions(); oneOptions.burstPlans = try plans(oneRow)
+        let one = try NativeBatch.run(sources:[single],output:root.appendingPathComponent("single-output"),options:oneOptions,token:StopToken(),scanRows:oneRow,progress:{_ in})
+        check(one.counts["converted",default:0] == 0 && one.counts["copied"] == 1 && ConversionReport(one).entries[0].state == .copied,"real single-frame output is preserved, not called a burst-marker conversion")
+    }
+
+    static func exportIntegrationChecks(root: URL, motion: URL, still: URL) throws {
+        try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+        let input = root.appendingPathComponent("original-input"), destination = root.appendingPathComponent("original-export")
+        try FileManager.default.createDirectory(at:input,withIntermediateDirectories:true)
+        let selected = input.appendingPathComponent("selected.jpg"), hidden = input.appendingPathComponent("unselected.jpg")
+        let bytes = try Data(contentsOf:still); try bytes.write(to:selected); try bytes.write(to:hidden)
+        let rows = try NativeBatch.scan(sources:[selected],token:StopToken(),progress:{_,_ in})
+        check(rows.count == 1,"real source scanning freezes one explicitly selected original")
+        func record(_ kind: String, _ output: URL, _ request: [String:Any]) throws -> FileExportRecord {
+            FileExportRecord(kind:kind,output:output.path,request:try JSONSerialization.data(withJSONObject:request,options:.sortedKeys))
+        }
+        func run(_ record: inout FileExportRecord, token: StopToken = StopToken()) throws {
+            try FileExportRequest.run(&record,token:token,progress:{_ in},existing:{_,_ in .resume},checkpoint:{_ in})
+        }
+        func files(_ record: FileExportRecord) throws -> [[String:Any]] {
+            let report = try JSONSerialization.jsonObject(with:record.report!) as! [String:Any]
+            return report["files"] as! [[String:Any]]
+        }
+        var original = try record("originals",destination,FileExportRequest.originals(rows,direction:.toApple,photos:[]))
+        try run(&original)
+        check(original.counts["copied"] == 1 && original.counts["failed",default:0] == 0,"Swift adapter performs real verified original export with separate copied counts")
+        let originalOutput = URL(fileURLWithPath:try files(original)[0]["output"] as! String)
+        let originalCopy = try Data(contentsOf:originalOutput.appendingPathComponent("selected.jpg"))
+        check(originalCopy == bytes,"original media bytes and filename survive export")
+        check(!FileManager.default.fileExists(atPath:originalOutput.appendingPathComponent("unselected.jpg").path),"unselected sources never enter original export")
+        let oldVersion = SourceVersion.read(originalOutput.appendingPathComponent("selected.jpg"))
+        try run(&original)
+        check(original.counts["resumed"] == 1 && original.counts["copied"] == 0 && SourceVersion.read(originalOutput.appendingPathComponent("selected.jpg")) == oldVersion,"export resume preserves bytes and mtime and is not a conversion")
+        var photos = try record("originals",root.appendingPathComponent("photos-export"),FileExportRequest.originals(rows,direction:.toApple,photos:[selected.path]))
+        try run(&photos)
+        check(photos.counts["failed"] == 1 && photos.counts["copied",default:0] == 0,"Photos static original fails explicitly without broadening library support")
+        let photosReport = try JSONSerialization.jsonObject(with:photos.report!) as! [String:Any]
+        check(photosReport["counts"] as? [String:Int] == photos.counts,"rejected-only export persists the same report counts as its task")
+        let partialInput = root.appendingPathComponent("partial-input")
+        try FileManager.default.createDirectory(at:partialInput,withIntermediateDirectories:true)
+        let validPartial = partialInput.appendingPathComponent("valid.jpg"), badPartial = partialInput.appendingPathComponent("broken.jpg")
+        try bytes.write(to:validPartial); try Data([0xff,0xd8,0xff,0xd9]).write(to:badPartial)
+        let partialRows = try NativeBatch.scan(sources:[validPartial,badPartial],token:StopToken(),progress:{_,_ in})
+        var partial = try record("originals",root.appendingPathComponent("partial-export"),FileExportRequest.originals(partialRows,direction:.toApple,photos:[]))
+        try run(&partial)
+        let partialReport = try JSONSerialization.jsonObject(with:partial.report!) as! [String:Any]
+        let partialFiles = try files(partial)
+        check(partial.counts["copied"] == 1 && partial.counts["failed"] == 1,"valid originals export while a damaged selected original fails preflight")
+        check(partialReport["counts"] as? [String:Int] == partial.counts && partialFiles.count == 2,"mixed export report retains preflight failures alongside copied results")
+        var changed = try record("originals",root.appendingPathComponent("stale-export"),FileExportRequest.originals(rows,direction:.toApple,photos:[]))
+        try Data([1,2,3]).write(to:selected); try run(&changed)
+        check(changed.counts["failed"] == 1 && changed.counts["copied",default:0] == 0,"changed frozen original cannot become copied success")
+        try bytes.write(to:selected)
+        let fresh = try NativeBatch.scan(sources:[selected],token:StopToken(),progress:{_,_ in})
+        var cancelled = try record("originals",root.appendingPathComponent("cancel-export"),FileExportRequest.originals(fresh,direction:.toApple,photos:[]))
+        let token = StopToken(); token.cancel()
+        try run(&cancelled,token:token)
+        check(cancelled.state == "已停止" && cancelled.counts["copied",default:0] == 0 && !FileManager.default.fileExists(atPath:cancelled.output),"cancelled original export publishes no unit and does not continue")
+        var settings = ConversionSettings(); settings.exportDataFiles = false
+        let outcome = try NativeBatch.run(sources:[motion],output:root.appendingPathComponent("converted"),options:settings.options,token:StopToken(),progress:{_ in})
+        check(outcome.counts["converted"] == 1,"one real codec conversion supplies the inline-verification result fixture")
+        let delivered = try DeliveryStore.collect(outcome,settings:settings,origins:[:])
+        check(delivered.count == 1 && delivered[0].verification != nil,"real conversion verification survives Swift collection when JSON attachments are off")
+        let folder = URL(fileURLWithPath:delivered[0].folder)
+        check(!FileManager.default.fileExists(atPath:folder.appendingPathComponent("manifest.json").path),"result fixture follows the actual no-sidecar output rule")
+        let extra = Data("synthetic-private-attachment".utf8)
+        try extra.write(to:folder.appendingPathComponent("sample-sidecar.bin"))
+        var results = try record("results",root.appendingPathComponent("results-export"),FileExportRequest.results(delivered))
+        try run(&results)
+        check(results.counts["copied"] == 1 && results.counts["failed",default:0] == 0,"real result export accepts the persisted inline verification")
+        let resultOutput = URL(fileURLWithPath:try files(results)[0]["output"] as! String)
+        let extraCopy = try Data(contentsOf:resultOutput.appendingPathComponent("sample-sidecar.bin"))
+        check(extraCopy == extra,"result export retains complete attachments without a sharing ZIP")
+        for path in delivered[0].files {
+            let actual = try NativeBatch.hashFile(resultOutput.appendingPathComponent(URL(fileURLWithPath:path).lastPathComponent))
+            let expected = try NativeBatch.hashFile(URL(fileURLWithPath:path))
+            check(actual == expected,"real exported result media remains byte-identical")
+        }
+        try run(&results)
+        check(results.counts["resumed"] == 1 && results.counts["copied"] == 0,"real result export resume has its own counts")
+        var historic = delivered[0]; historic.verification = nil
+        var noProof = try record("results",root.appendingPathComponent("history-export"),FileExportRequest.results([historic]))
+        try run(&noProof)
+        check(noProof.counts["failed"] == 1 && noProof.counts["copied",default:0] == 0,"historical results with neither manifest nor retained verification fail clearly")
+        let sourceBytes = try Data(contentsOf:selected)
+        check(sourceBytes == bytes,"export leaves original source bytes intact")
+    }
+
+    static func migrationWorkbenchChecks(root: URL) throws {
+        let folder = root.appendingPathComponent("migration-workbench")
+        try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        let urls = ["live.jpg","hdr.jpg","manual.jpg","ordinary.jpg"].map { folder.appendingPathComponent($0) }
+        for (i,url) in urls.enumerated() { try Data([UInt8(i),1]).write(to:url) }
+        let rows = [
+            ScanRow(source:urls[0],relative:"live.jpg",isMotion:true,hdr:"Ultra HDR",cover:"0.4 秒",detail:"",version:SourceVersion.read(urls[0])),
+            ScanRow(source:urls[1],relative:"hdr.jpg",isMotion:false,hdr:"Ultra HDR",cover:"不适用",detail:"",confirmedStatic:true,version:SourceVersion.read(urls[1])),
+            ScanRow(source:urls[2],relative:"manual.jpg",isMotion:true,hdr:"SDR",cover:"未记录",detail:"",version:SourceVersion.read(urls[2])),
+            ScanRow(source:urls[3],relative:"ordinary.jpg",isMotion:false,hdr:"SDR",cover:"不适用",detail:"",confirmedStatic:true,version:SourceVersion.read(urls[3]))]
+        let service = ControlledService(), model = WorkspaceModel(service:ControlledService())
+        check(!model.canReviewMigration && !model.migrationTargetConfirmed,"target is chosen before the source workflow")
+        let m = WorkspaceModel(service:service)
+        m.selectMigrationTarget(.apple); m.chooseSources(urls); service.scans[0].completion(.success(rows))
+        let output = root.appendingPathComponent("migration-workbench-output")
+        try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
+        m.setOutput(output)
+        check(Set(m.migrationReadyItems.map(\.source)) == Set(urls.prefix(2)),"live+HDR and static HDR are ready together without manual items")
+        m.selection = urls[1].path
+        m.toggleSelection(m.items[0]); m.toggleSelection(m.items[2])
+        check(m.selection == urls[1].path,"ordinary selection never changes preview focus")
+        m.migrationFeatureFilters = [.hdr]; m.migrationSearch = "live"
+        check(m.visibleMigrationItems(in:.all).map(\.source) == [urls[0]] && m.hiddenMigrationSelectionCount == 1,"features and collapsed search filter display without dropping hidden selection")
+        m.unconvertedExport = .sameLocation
+        check(m.canApproveMigration,"a selected ready/manual scope with a confirmed output can start directly")
+        m.approveMigrationReview()
+        let review = m.reviewedMigration!
+        check(review.readyIDs == [urls[0].path] && review.originalRows.map(\.source) == [urls[2]],"original export freezes only selected unconverted items, never unselected SDR")
+        m.reviewedMigration = nil; m.startReviewedMigration(review,outputOverride:nil)
+        check(service.runs.count == 1 && service.runs[0].job.sources == [urls[0]] && !m.manualPromptPresented && !m.migrationReviewPresented,"main workflow starts supported mixed scope directly with no extra manual or plan question")
+        m.selectQueueScope(.all)
+        service.runs[0].completion(.success(BatchOutcome(counts:[:],report:nil,reportData:[:],cancelled:false)))
+        check(m.queueScope == .all,"background completion does not steal an explicitly changed view")
+        m.clearSelection(); m.toggleSelection(m.items[0]); m.toggleSelection(m.items[0])
+        check(m.hasExplicitSelection && m.selectedIDs.isEmpty && !m.canApproveMigration,"explicit zero disables processing and original export")
+        m.clearSelection(); m.unconvertedExport = .separateLocation
+        check(!m.canApproveMigration,"different original export location must be chosen before starting")
+        m.setUnconvertedOutput(root.appendingPathComponent("migration-originals")); m.approveMigrationReview()
+        let stale = m.reviewedMigration!; m.reviewedMigration = nil
+        try Data([9,8,7]).write(to:urls[2])
+        check(!m.validateReviewedMigration(stale),"changed unconverted source cannot reuse a frozen export plan")
+        let request = FileExportRequest.originals([rows[2]],direction:.toApple,photos:[urls[2].path])
+        let items = request["items"] as! [[String:Any]]
+        check(items.count == 1 && items[0]["source_kind"] as? String == "photos" && items[0]["scan_row"] is [String:Any],"original planning passes complete scan facts and provenance to Rust")
+        let verification = try JSONSerialization.data(withJSONObject:["opaque":["identity":42]])
+        let result = DeliveredFile(source:urls[0].path,folder:"/result",files:[],key:"x",verification:verification)
+        let exported = try FileExportRequest.results([result,result])
+        let exportItems = exported["items"] as! [[String:Any]]
+        check(exportItems.count == 1 && exportItems[0]["verification"] is [String:Any],"result export preserves opaque verification and deduplicates canonical result folders")
+        var task = DeliveryTask(settings:m.settings,output:"/result",results:[result])
+        task.processingCounts = ["converted":0,"copied":2]
+        task.originalExport = FileExportRecord(kind:"originals",output:"/originals",request:try JSONSerialization.data(withJSONObject:request))
+        let roundtrip = try JSONDecoder().decode(DeliveryTask.self,from:JSONEncoder().encode(task))
+        check(roundtrip.results[0].verification == verification && roundtrip.originalExport?.request == task.originalExport?.request && roundtrip.processingCounts?["copied"] == 2,"task persistence retains verification and frozen original scope")
+        var legacy = try JSONSerialization.jsonObject(with:JSONEncoder().encode(task)) as! [String:Any]
+        legacy.removeValue(forKey:"originalExport"); legacy.removeValue(forKey:"resultExport"); legacy.removeValue(forKey:"processingCounts")
+        let old = try JSONDecoder().decode(DeliveryTask.self,from:JSONSerialization.data(withJSONObject:legacy))
+        check(old.originalExport == nil && old.processingCounts == nil && old.results.count == 1,"existing task history decodes without new export fields")
+        let kinds: [[String:Any]] = [["source":"a","status":"converted","processing_kind":"original-copy"],["source":"b","status":"converted","processing_kind":"burst-marker-conversion"],["source":"c","status":"failed","processing_kind":"original-copy"]]
+        let classified = ConversionReport(BatchOutcome(counts:["converted":1,"copied":1,"failed":1],report:nil,reportData:["files":kinds],cancelled:false))
+        check(classified.counts["converted"] == 1 && classified.entries.map(\.state) == [.copied,.converted,.failed],"explicit processing classification never calls a copy or a failure a conversion")
+        let historical = ConversionReport(BatchOutcome(counts:["converted":1],report:nil,reportData:["files":[["source":"a","status":"converted","burst":["independent":true]]]],cancelled:false))
+        check(historical.counts["converted"] == 0 && historical.counts["copied"] == 1,"historical independent output has an honest display count without changing old transaction status")
+        check(!ConversionReport.isOriginalCopy(["processing_kind":"future-kind","burst":["uuid":NSNull(),"members":[[:]]]]),"explicit unknown future processing kinds do not inherit a guessed copy classification")
+        check(ConversionReport.isOriginalCopy(["burst":["uuid":NSNull(),"members":[[:]]]]) && !ConversionReport.isOriginalCopy(["burst":[:]]),"legacy null UUID is preserved only with actual member facts")
+        // Selection-only unit fixture: recognition/marking stays in real engine tests.
+        let member = BurstMember(source:urls[0].path,index:1,source_cover:true,version:nil,source_sha256:nil)
+        let group = BurstGroup(id:"selection-only",label:"selection-only",members:[member],signature:"selection-only",representative:member.source,reason:"",ordered:true,has_gaps:false,supported:true,source_cover_count:1)
+        m.clearSelection(); m.selectBurst(group,selected:false)
+        check(m.selectedIDs == Set(urls.dropFirst().map(\.path)),"deselecting a group materializes the complete default scope and preserves unrelated manual/static rows")
+        m.clearSelection(); m.setBurstMember(member,selected:false)
+        check(m.selectedIDs == Set(urls.dropFirst().map(\.path)),"member deselection uses the same explicit-scope semantics as the whole group")
+        let frozen = FileExportRecord(kind:"originals",output:"/originals",request:try JSONSerialization.data(withJSONObject:FileExportRequest.originals(rows,direction:.toApple,photos:[])))
+        let outcome = BatchOutcome(counts:[:],report:nil,reportData:["files":[
+            ["source":urls[0].path,"status":"converted"],
+            ["source":urls[1].path,"status":"skipped"],
+            ["source":urls[2].path,"status":"failed"]]],cancelled:false)
+        let remaining = try FileExportRequest.remainingOriginals(frozen,outcome:outcome)
+        let remainingRequest = try JSONSerialization.jsonObject(with:remaining.request) as! [String:Any]
+        let remainingItems = remainingRequest["items"] as! [[String:Any]]
+        check(Set(remainingItems.compactMap { $0["source"] as? String }) == Set(urls.dropFirst().map(\.path)),"only frozen failed/skipped/unprocessed rows remain; converted results never get copied as originals")
+    }
+
     static func staticHDRChecks(root: URL) throws {
         let input = root.appendingPathComponent("static-input")
         try FileManager.default.createDirectory(at:input,withIntermediateDirectories:true)
@@ -410,7 +620,7 @@ struct WorkspaceModelTests {
         let motionItem=libraryModel.items.first { $0.source == motion }!
         check(!staticItem.isConvertible && libraryModel.category(staticItem) == .static,"Photos-origin static HDR stays outside the conversion queue")
         libraryModel.toggleSelection(staticItem)
-        check(libraryModel.selectedIDs.isEmpty,"Photos-origin static HDR cannot enter a manual multiselection")
+        check(libraryModel.selectedIDs == [hdr.path],"Photos static can be explicitly scoped but never enters conversion")
         libraryModel.toggleSelection(motionItem); libraryModel.setOutput(output); libraryModel.start()
         check(photosService.runs.count == 1 && photosService.runs[0].job.sources == [motion],"mixed Photos selection processes only actual motion photos")
 
@@ -437,7 +647,83 @@ struct WorkspaceModelTests {
         }
     }
 
+    static func burstChecks(root: URL, still: URL) throws {
+        let requested = root.appendingPathComponent("burst-input")
+        try FileManager.default.createDirectory(at:requested,withIntermediateDirectories:true)
+        let input = NativeBatch.normalized(requested)
+        let names = ["IMG_20230108_205201_BURST001_COVER.JPG","IMG_20230108_205201_BURST002.JPG","IMG_20230108_205201_BURST003.JPG"]
+        let media = try Data(contentsOf:still)
+        let sources = names.map { input.appendingPathComponent($0) }
+        for source in sources { try media.write(to:source) }
+        let model = WorkspaceModel(); model.chooseSources([input]); pump(until:{ !model.isBusy })
+        check(model.burstGroups.count == 1 && model.items.count == 3,"production Rust scan and cache expose a burst group")
+        check(model.items.allSatisfy { !$0.isMotion && $0.isConvertible && model.category($0) == .ready },"burst members do not impersonate motion or skipped SDR")
+        let group = model.burstGroups[0]
+        check(group.members.map(\.index) == [1,2,3] && model.burstChoice(group).representative == group.members[0].source && group.members[0].source_cover,"source frame order and COVER remain facts: indexes=\(group.members.map(\.index)) representative=\(String(describing:model.burstChoice(group).representative)) expected=\(sources[0].path)")
+        model.selectBurst(group,selected:true); model.setBurstChoice(group,representative:group.members[2].source)
+        model.updateSettings { $0.direction = .androidToAndroid }; pump(until:{ !model.isBusy })
+        check(model.selectedIDs.count == 3 && model.items.allSatisfy { model.category($0) == .inspect },"unsupported direction retains selection and accurately blocks burst")
+        model.updateSettings { $0.direction = .toApple }; pump(until:{ !model.isBusy })
+        check(model.selectedIDs.count == 3 && model.burstChoice(model.burstGroups[0]).representative == group.members[2].source,"returning to Apple retains applicable representative")
+        model.setBurstMember(group.members[1],selected:false)
+        check(model.burstBlockingReason(group) != nil,"partial group is blocked until independent policy is explicit")
+        model.setBurstChoice(group,independent:true); check(model.burstBlockingReason(group) == nil,"explicit independent mode admits partial selection")
+        model.setBurstChoice(group,independent:false); model.selectBurst(group,selected:true)
+        let out = root.appendingPathComponent("burst-output"); try FileManager.default.createDirectory(at:out,withIntermediateDirectories:true)
+        model.setOutput(out); model.start()
+        check(model.burstReviewPresented && !model.isBusy,"start presents the actual group preflight")
+        model.continueBurstConversion(); pump(until:{ !model.isBusy })
+        check(model.report?.counts["converted"] == 3,"group plan reaches the existing real batch engine")
+        let entries = model.report!.entries.map { ["source":$0.source,"output":$0.output ?? "","status":"converted"] }
+        // Reuse the actual integrity manifest to build a delivery outcome, as the batch does.
+        let folder = URL(fileURLWithPath:entries[0]["output"]!)
+        let manifest = try RustCore.engine(["mode":"verify","input":folder.path])
+        let result: [String:Any] = ["source":sources[0].path,"output":folder.path,"status":"converted","output_files":manifest["output_files"]!,"burst":manifest["burst"]!]
+        let outcome = BatchOutcome(counts:["converted":3],report:nil,reportData:["files":[result,result,result]],cancelled:false)
+        let delivered = try DeliveryStore.collect(outcome,settings:model.settings,origins:[:])
+        check(delivered.count == 1 && delivered[0].files.count == 3 && delivered[0].hashes.count == 7,"delivery deduplicates per-frame results and verifies the complete group plus originals")
+        var task = DeliveryTask(settings:model.settings,output:out.path,results:delivered)
+        let store = DeliveryStore(root:root.appendingPathComponent("burst-share"))
+        let shares = try store.stageShare(&task)
+        check(shares.count == 1 && shares[0].pathExtension == "zip","shared burst preserves all media, archive resources and manifest together")
+        model.presentExistingOutput = { _,_,reply in reply(.resume) }
+        model.start(); model.continueBurstConversion(); pump(until:{ !model.isBusy })
+        check(model.report?.counts["resumed"] == 3,"same group plan resumes without re-encoding")
+        let oldSignature = model.burstGroups[0].signature
+        try (media + Data([0])).write(to:sources[1]); model.rescan(preservingResults:true); pump(until:{ !model.isBusy })
+        check(model.burstGroups[0].signature != oldSignature && model.settings.burstChoices?[group.id] == nil,"source changes invalidate the related group confirmation")
+        check(!model.selectedIDs.contains(group.members[1].source),"changed member loses its selected version")
+        let ids = ["one","two","three"]
+        let valid = BurstLibraryFacts(expectedIDs:ids,actualIDs:ids,identifiers:["group","group","group"],representativeCount:1,groupMembers:Set(ids))
+        check(valid.recognized,"PhotoKit facts require complete membership, shared ID and one representative")
+        var bad = valid; bad.identifiers[1] = nil; check(!bad.recognized,"imported without every burst ID is not grouped")
+        bad = valid; bad.representativeCount = 2; check(!bad.recognized,"multiple representatives cannot confirm grouping")
+        bad = valid; bad.groupMembers.remove("two"); check(!bad.recognized,"group lookup must include every imported asset")
+        bad = valid; bad.actualIDs.removeLast(); check(!bad.recognized,"partial fetch is not complete")
+        bad = valid; bad.identifiers[1] = "other"; check(!bad.recognized,"mixed group IDs cannot confirm grouping")
+    }
+
     static func main() throws {
+        if let i = CommandLine.arguments.firstIndex(of:"--burst-copy-integration"), i + 2 < CommandLine.arguments.count {
+            try burstCopyIntegrationChecks(root:URL(fileURLWithPath:CommandLine.arguments[i+2]),still:URL(fileURLWithPath:CommandLine.arguments[i+1]))
+            print("PASS \(checks) real Swift/Rust copy classification checks")
+            return
+        }
+        if let i = CommandLine.arguments.firstIndex(of:"--export-integration"), i + 3 < CommandLine.arguments.count {
+            try exportIntegrationChecks(root:URL(fileURLWithPath:CommandLine.arguments[i+3]),motion:URL(fileURLWithPath:CommandLine.arguments[i+1]),still:URL(fileURLWithPath:CommandLine.arguments[i+2]))
+            print("PASS \(checks) real Swift/Rust export integration checks")
+            return
+        }
+        if CommandLine.arguments.contains("--workbench-only") {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("momentstays-workbench-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at:root.appendingPathComponent("input"),withIntermediateDirectories:true)
+            defer { try? FileManager.default.removeItem(at:root) }
+            try migrationWorkbenchChecks(root:root)
+            try staticHDRChecks(root:root)
+            try manualChecks(root:root)
+            print("PASS \(checks) focused workbench, mixed-scope and selection checks")
+            return
+        }
         // Evaluate fetch predicates without requesting permission or accessing a real library.
         for direction: ConversionDirection in [.toApple,.toAndroid] {
             let scope = LibraryScope(direction: direction, version: .original, networkAllowed: false)
@@ -585,6 +871,7 @@ struct WorkspaceModelTests {
         workspace.finishLibraryImport(id: UUID(), urls: [], error: Failure("stale"), output: root)
         check(workspace.errorMessage == nil, "stale library callback ignored")
 
+        try migrationWorkbenchChecks(root:root)
         try staticHDRChecks(root:root)
         try manualChecks(root:root)
         try navigationChecks(source:source,row:row,root:root)
@@ -773,6 +1060,7 @@ struct WorkspaceModelTests {
         let movieBytes = try Data(contentsOf:movie); try movieBytes.write(to:movie)
         _ = try cache.rows(sources:[still],direction:.toAndroid,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
         check(cache.pairValidationCount == pairBefore + 1, "paired video modifications invalidate only Apple pair validation")
+        try burstChecks(root:root,still:URL(fileURLWithPath:CommandLine.arguments[1]).deletingLastPathComponent().appendingPathComponent("still.jpg"))
         let finalHash = try NativeBatch.hashFile(source)
         check(finalHash == originalHash, "UI integration leaves original unchanged")
     }

@@ -10,11 +10,11 @@ struct ReportView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
-                Text(report.cancelled ? "已停止的任务" : "转换报告").font(.title2).fontWeight(.semibold)
+                Text(report.cancelled ? "已停止的任务" : "处理报告").font(.title2).fontWeight(.semibold)
                 Text(report.summary).font(.callout).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                 Picker("显示", selection: $filter) {
                     Text("全部").tag("all")
-                    ForEach([PhotoState.converted, .resumed, .static, .skipped, .failed], id: \.self) { Text($0.title).tag($0.rawValue) }
+                    ForEach([PhotoState.converted, .copied, .resumed, .static, .skipped, .failed], id: \.self) { Text($0.title).tag($0.rawValue) }
                 }.frame(maxWidth: 240)
             }.padding(16)
             Divider()

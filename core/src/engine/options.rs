@@ -63,6 +63,8 @@ pub struct ConversionOptions {
     /// Normalized source path -> candidate index.
     pub cover_selections: BTreeMap<String, i64>,
     pub candidate_delivery: String,
+    pub burst_plans: Vec<Value>,
+    pub burst_choices: BTreeMap<String, Value>,
     pub manual_cover: Option<crate::engine::manual::Selection>,
     pub manual_covers: BTreeMap<String, crate::engine::manual::Selection>,
 }
@@ -82,6 +84,8 @@ impl Default for ConversionOptions {
             cover_index: None,
             cover_selections: BTreeMap::new(),
             candidate_delivery: "static".into(),
+            burst_plans: Vec::new(),
+            burst_choices: BTreeMap::new(),
             manual_cover: None,
             manual_covers: BTreeMap::new(),
         }
@@ -182,6 +186,11 @@ impl ConversionOptions {
             cover_index: req["cover_candidate_index"].as_i64(),
             cover_selections: selections,
             candidate_delivery: s("candidate_delivery", "static"),
+            burst_plans: req["burst_plans"].as_array().cloned().unwrap_or_default(),
+            burst_choices: req["burst_choices"]
+                .as_object()
+                .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                .unwrap_or_default(),
             manual_cover: crate::engine::manual::Selection::from_json(&req["manual_cover"]),
             manual_covers: req["manual_covers"]
                 .as_object()
