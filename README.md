@@ -131,8 +131,7 @@ Bursts from Xiaomi, OPPO, vivo and other brands, and HEIC bursts, are not suppor
 | Direction | Formats and targets |
 | --- | --- |
 | Android → Apple | Google-compatible Motion Photo JPEG, supported Huawei/Honor, Samsung SEF, OPPO and vivo V2 containers; validated Samsung HEIC layouts → JPEG/HEIC + MOV |
-| Apple → Android, JPEG | Google/generic (recommended for newer Honor), Xiaomi, Samsung, Huawei, Honor (fallback), OPPO, vivo V2 |
-| Apple → Android, HEIC | Samsung; retains the existing HEIC encoding (Google and Xiaomi Motion Photos do not use HEIC) |
+| Apple → Android | JPEG: Google/generic (recommended for newer Honor), Xiaomi, Samsung, Huawei, Honor (fallback), OPPO, vivo V2. HEIC: Samsung only, retaining the existing HEIC encoding (Google and Xiaomi Motion Photos do not use HEIC) |
 | Android → Android | Google → Honor: validated Google Motion Photo JPEG, preserving the complete original video and source cover; Honor → Google: recognized Honor Motion Photo JPEG. No HEIC |
 | Burst, Android → Apple (experimental) | JPEG bursts from Google, Samsung and known Huawei/Honor formats → JPEG with Apple burst markers, or independent photos |
 

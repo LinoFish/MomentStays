@@ -131,8 +131,7 @@
 | 方向 | 格式与目标 |
 | --- | --- |
 | 安卓 → 苹果 | Google 兼容 Motion Photo JPEG，支持的华为/荣耀、三星 SEF、OPPO、vivo V2 容器，以及已验证的三星 HEIC 布局 → JPEG/HEIC + MOV |
-| 苹果 → 安卓，JPEG | Google/通用（新款荣耀推荐）、小米、三星、华为、荣耀（备用）、OPPO、vivo V2 |
-| 苹果 → 安卓，HEIC | 仅三星；保留已有 HEIC 编码（Google 与小米的动态照片不使用 HEIC） |
+| 苹果 → 安卓 | JPEG：Google/通用（新款荣耀推荐）、小米、三星、华为、荣耀（备用）、OPPO、vivo V2。HEIC：仅三星，保留已有 HEIC 编码（Google 与小米的动态照片不使用 HEIC） |
 | 安卓 → 安卓 | Google → 荣耀：可安全验证的 Google Motion Photo JPEG，保留完整原视频和源封面；荣耀 → Google：已识别的荣耀实况 JPEG。均不支持 HEIC |
 | 连拍，安卓 → 苹果（实验性） | Google、三星及已知华为/荣耀格式的 JPEG 连拍 → 带 Apple 连拍标记的 JPEG，或独立照片 |
 
