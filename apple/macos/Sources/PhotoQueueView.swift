@@ -337,7 +337,7 @@ struct PhotoQueueView: View {
     private func scopeFilters(_ layout: QueueLayout) -> some View {
         HStack(spacing:4) {
             ForEach([PhotoQueueScope.ready,.completed,.manual,.attention,.all]) { value in scopeButton(value) }
-        }.frame(maxWidth:.infinity).recordLayout("queue-scopes")
+        }.frame(maxWidth:.infinity,alignment:.leading).recordLayout("queue-scopes")
     }
     private func browserControls(_ layout: QueueLayout) -> some View {
         HStack(spacing:8) {
@@ -394,7 +394,7 @@ struct PhotoQueueView: View {
                 Text(value.title).fontWeight(scope == value ? .semibold : .regular)
                 Text("\(count)").monospacedDigit().foregroundColor(.secondary)
             }
-            .font(.callout).lineLimit(1).frame(maxWidth:.infinity,minHeight:short ? 22 : 28)
+            .font(.callout).lineLimit(1).padding(.horizontal,10).frame(minHeight:short ? 22 : 28)
             .foregroundColor(.primary)
             .background(RoundedRectangle(cornerRadius:InterfaceStyle.controlRadius)
                 .fill(scope == value ? InterfaceStyle.selection : Color.clear)
