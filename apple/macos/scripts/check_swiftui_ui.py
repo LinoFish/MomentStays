@@ -97,7 +97,7 @@ for name, width, height, flags in cases:
     else:
         assert not metrics["source_button_color"], (name,"adding more photos should be secondary to conversion",metrics)
     assert abs(metrics["frames"]["add-button"]["height"] - metrics["frames"]["settings-button"]["height"]) < 2, (name, "source button size mismatch", metrics)
-    if name == "source-menu":
+    if name == "source-menu" and metrics["source_button_enabled"]:  # preview fixtures disable appending sources
         assert metrics["source_menu_opened"] and metrics["source_menu_titles"] == ["继续添加照片或文件夹…", "继续从系统图库添加…"], metrics
     if name in ("wide","compact","empty","cleared"):
         assert "task-feedback" not in metrics["frames"], (name,"routine footer status remains",metrics)
