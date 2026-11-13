@@ -155,6 +155,16 @@ pub fn handle(
             }
             Ok(result)
         }
+        "audio-check" => {
+            let file = first()?;
+            let movie = crate::mp4::Movie::parse(&read(&file)?)?;
+            let count = movie.tracks.iter().filter(|t| t.samples.handler == "soun").count();
+            match native.audio_decodes(&file, count)? {
+                Some(true) => Ok(json!({"audio_tracks":count,"native_decode":"completed"})),
+                Some(false) => Err(Error::new("Apple 原生音频解码失败，请重新转换后交付；未导入可能无声的旧结果")),
+                None => Err(Error::new("当前平台缺少原生音频校验能力")),
+            }
+        }
         "burst-filename" => Ok(
             json!({"candidate":crate::engine::burst::filename(req["filename"].as_str().unwrap_or(""), "").is_some()}),
         ),
@@ -196,6 +206,9 @@ pub fn handle(
             let row = match req["direction"].as_str().unwrap_or("to-apple") {
                 "to-android" => {
                     crate::engine::live::pairing::scan_file_with_native(native, &file, relative)
+                }
+                "honor-to-google" => {
+                    crate::engine::live::honor_to_google::scan_file(native, &file, relative)
                 }
                 "android-to-android" => {
                     crate::engine::transfer::scan_file(native, &file, relative, None)
@@ -259,11 +272,16 @@ pub fn handle(
             let source = first()?;
             let target = path(req, "output")?;
             let overwrite = req["overwrite"].as_bool().unwrap_or(false);
-            let row = if options.direction == "to-android" {
+            let row = if options.direction == "honor-to-google" {
+                crate::engine::live::honor_to_google::scan_file(native, &source, "")
+            } else if options.direction == "to-android" {
                 crate::engine::live::pairing::scan_file_with_native(native, &source, "")
             } else {
                 crate::engine::scanrow::scan_file(native, &source, "", None)
             };
+            if options.direction == "honor-to-google" && !row.is_motion && !row.is_static_hdr() {
+                return Err(Error::new(row.detail));
+            }
             if row.burst.is_some() {
                 return Err(Error::new(
                     "连拍必须通过批次组计划执行，以检查完整成员和组事务",
@@ -275,6 +293,9 @@ pub fn handle(
                 );
             }
             match options.direction.as_str() {
+                "honor-to-google" => crate::engine::live::honor_to_google::convert(
+                    native, &source, &target, &options, token, overwrite, &timings,
+                ),
                 "to-android" => android::convert(
                     native, &source, &target, &options, token, overwrite, &timings,
                 ),
@@ -350,7 +371,12 @@ pub fn handle(
                 gain_quality: req["gain_quality"].as_f64().unwrap_or(0.95),
                 preserve_jpeg: req["preserve_jpeg"].as_bool().unwrap_or(true),
             };
-            let (bytes, hdr) = android::prepare_still(native, &first()?, &options)?;
+            let (bytes, hdr) = android::prepare_still(
+                native,
+                &first()?,
+                &options,
+                req["legacy_hdr"].as_str() != Some("preserve"),
+            )?;
             write(&path(req, "output")?, &bytes)?;
             Ok(json!({"hdr": hdr, "bytes": bytes.len()}))
         }

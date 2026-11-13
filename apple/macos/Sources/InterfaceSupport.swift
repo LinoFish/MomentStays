@@ -14,13 +14,14 @@ enum SourceMenuDiagnostics {
 }
 #endif
 
-// Adding the first photos is prominent; subsequent additions are secondary.
+// Standalone imports may be prominent; the workbench keeps processing as its primary action.
 struct SourceMenuButton: NSViewRepresentable {
     @Binding var requested: Bool
     let disabled: Bool
     var title = "添加照片"
     var details = ""
     var hasSources = false
+    var prominentWhenEmpty = true
     var allowsLibrary = true
     let addFiles: () -> Void
     let addLibrary: () -> Void
@@ -64,8 +65,9 @@ struct SourceMenuButton: NSViewRepresentable {
     func updateNSView(_ button: NSButton, context: Context) {
         button.isEnabled = !disabled
         button.title = title
-        let foreground = hasSources ? NSColor.controlTextColor : InterfaceStyle.nativeAccentForeground
-        button.bezelColor = hasSources ? nil : InterfaceStyle.nativeAccent
+        let prominent = prominentWhenEmpty && !hasSources
+        let foreground = prominent ? InterfaceStyle.nativeAccentForeground : NSColor.controlTextColor
+        button.bezelColor = prominent ? InterfaceStyle.nativeAccent : nil
         button.contentTintColor = foreground
         button.image = NSImage(systemSymbolName:"plus",accessibilityDescription:nil)?
             .withSymbolConfiguration(.init(paletteColors:[foreground]))
@@ -232,6 +234,7 @@ struct SourceMenuButton: View {
     var title = "添加照片"
     var details = ""
     var hasSources = false
+    var prominentWhenEmpty = true
     var allowsLibrary = true
     let addFiles: () -> Void
     let addLibrary: () -> Void

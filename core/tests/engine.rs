@@ -28,7 +28,7 @@ fn swift_option_json_is_kept() {
     assert_eq!(
         a.json(),
         json!({"direction":"to-android","android":{"vendor":"google","container":"jpeg","hdr":"ultra",
-               "image_quality":0.95,"gain_quality":0.95,"preserve_jpeg":true},"time_domain":"auto","export_data_files":true})
+               "image_quality":0.95,"gain_quality":0.95,"preserve_jpeg":true},"legacy_hdr":true,"hdr_policy":"supported-private-hdr-2","time_domain":"auto","export_data_files":true})
     );
     a.direction = "android-to-android".into();
     assert_eq!(a.json()["layout"], "google-to-honor-a-modern-1");
@@ -327,10 +327,14 @@ fn c_abi_runs_requests_and_reports_progress() {
     }
     let (src, out) = (Dir::new("src"), Dir::new("out"));
     inputs(&src.0);
+    // These framing fixtures intentionally have no decodable pixel data.
+    unsafe extern "C" fn unknown_decode(_: *mut std::ffi::c_void, _: *const u8, _: usize) -> i32 {
+        -1
+    }
     let seen = AtomicUsize::new(0);
     let table = MsNative {
         context: &seen as *const AtomicUsize as *mut _,
-        image_decodes: None,
+        image_decodes: Some(unknown_decode),
         srgb_icc: None,
         decode_gray_jpeg: None,
         encode_gray_jpeg: None,

@@ -102,11 +102,14 @@ pub fn convert(native: &dyn Native, image: &[u8]) -> Result<Vec<u8>> {
     if honor.luma.is_empty() {
         return unsupported("原片不含亮度 JPEG");
     }
-    if jpeg::image_ranges(image)?.len() != 1
-        || !profile::supports_header(honor.header)
-        || !supported_camera(image)?
-    {
-        return unsupported("设备、固件或 EHDR 参数配置尚未标定");
+    if jpeg::image_ranges(image)?.len() != 1 {
+        return unsupported("已存在辅助图，不对其叠加私有 HDR 重建");
+    }
+    if !supported_camera(image)? {
+        return unsupported("机型、固件或色彩声明不属于当前标定配置");
+    }
+    if !profile::supports_header(honor.header) {
+        return unsupported("EHDR 参数头未命中四组标定配置（含 ISO/曝光字段）；无法确认私有亮度图对应的标准增益参数，未直接封装为 Ultra HDR");
     }
     let (width, height, channels) = frame(image)?;
     if channels != 3

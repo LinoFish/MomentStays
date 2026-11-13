@@ -225,7 +225,7 @@ pub(crate) fn classify_hdr_from_segments(
     }
     let ranges = jpeg::image_ranges_from_segments(still, segs)?;
     let image_end = ranges.iter().map(|r| r.end).max().unwrap_or(still.len());
-    if hdr::honor_private(still, image_end)?.is_some() {
+    if hdr::honor_ehdr(still, image_end)?.is_some_and(|h| !h.header.is_empty()) {
         return Ok("荣耀私有 HDR");
     }
     if has_iso_from_segments(still, segs)? {

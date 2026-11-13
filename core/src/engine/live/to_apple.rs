@@ -226,6 +226,9 @@ pub fn convert(
             .as_object().cloned().unwrap_or_default();
     }
 
+    let mut hdr_value = Value::Object(hdr);
+    crate::engine::hdr::annotate(&mut hdr_value);
+    hdr = hdr_value.as_object().cloned().unwrap_or_default();
     let identifier = uuid();
     let live = still::live_still(&image, &identifier, true)?;
     if crate::engine::hdr::honor_private(&live)? != honor {
@@ -242,7 +245,9 @@ pub fn convert(
     if !static_ok {
         return failure("导出静态图片仍包含图片范围之外的数据");
     }
-    if format::coding_hash(&live)? != format::coding_hash(&image)? {
+    if format::coding_hash(&live)? != format::coding_hash(&image)?
+        || format::auxiliary_hashes(&live)? != format::auxiliary_hashes(&image)?
+    {
         return failure("静态主图压缩数据发生变化");
     }
     let still_path = stage.path().join(&names["still"]);
@@ -270,10 +275,18 @@ pub fn convert(
         request.timestamp_source = Some("video-metadata");
         warnings.push("主 XMP 缺失；已从内嵌视频元数据恢复原始封面时间".into());
     }
-    let (mov, timing) = timings.measure("media_remux_and_validation", || {
+    let (mov, mut timing) = timings.measure("media_remux_and_validation", || {
         movie::movie(video, &request)
     })?;
     write(&mov_path, &mov)?;
+    let expected_audio = timing["tracks"].as_array().map_or(0, |v| v.iter().filter(|t| t["type"] == "soun").count());
+    let audio_checked = native.audio_decodes(&mov_path, expected_audio)?;
+    if audio_checked == Some(false) {
+        return failure("Apple 原生音频解码校验失败；未发布可能无声的实况结果");
+    }
+    timing["audio_native_decode"] = json!(if expected_audio == 0 {
+        "not-applicable"
+    } else if audio_checked == Some(true) { "completed" } else { "unavailable" });
 
     // Extra candidate stills (and optional Live pairs for each).
     let mut candidate_photos: Vec<Value> = Vec::new();
@@ -308,6 +321,10 @@ pub fn convert(
             let (m, t) =
                 timings.measure("media_remux_and_validation", || movie::movie(video, &req))?;
             write(&stage.path().join(&movie_name), &m)?;
+            let expected_audio = t["tracks"].as_array().map_or(0, |v| v.iter().filter(|t| t["type"] == "soun").count());
+            if native.audio_decodes(&stage.path().join(&movie_name), expected_audio)? == Some(false) {
+                return failure("Apple 原生音频解码校验失败；未发布候选实况结果");
+            }
             names.insert(candidate_video_role(role), movie_name);
             Ok(Some(t))
         };
@@ -421,6 +438,11 @@ pub fn convert(
     } else {
         warnings.join("；")
     };
+    detail = format!(
+        "实况已转换；{}；{}",
+        crate::engine::hdr::summary(&Value::Object(hdr.clone())),
+        detail
+    );
     if options.output_mode == "livephoto+candidates" {
         detail += &format!(
             "；另存 {} 张{}",

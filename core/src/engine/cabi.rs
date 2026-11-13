@@ -179,6 +179,9 @@ impl Host {
 }
 
 impl Native for Host {
+    fn audio_decodes(&self, path: &Path, expected_tracks: usize) -> Result<Option<bool>> {
+        crate::platform::SystemNative.audio_decodes(path, expected_tracks)
+    }
     fn image_decodes(&self, data: &[u8]) -> Option<bool> {
         if self.table().image_decodes.is_none() {
             return crate::platform::SystemNative.image_decodes(data);

@@ -17,8 +17,9 @@ pub fn prepare_still(
     native: &dyn Native,
     path: &Path,
     options: &AndroidOptions,
+    enabled: bool,
 ) -> Result<(Vec<u8>, Value)> {
-    hdr::prepare_export(
+    hdr::prepare_with_policy(
         native,
         path,
         &hdr::ExportOptions {
@@ -27,6 +28,7 @@ pub fn prepare_still(
             image_quality: options.image_quality,
             gain_quality: options.gain_quality,
         },
+        enabled,
     )
 }
 
@@ -88,7 +90,7 @@ pub fn convert(
             return failure("已有输出的输入或设置不同，请选择覆盖或跳过");
         }
         return Ok(
-            json!({"status": "resumed", "source": source.to_string_lossy(), "output": target.to_string_lossy(), "detail": "已验证安卓动态照片，跳过重复转换"}),
+            json!({"status": "resumed", "source": source.to_string_lossy(), "output": target.to_string_lossy(), "hdr":previous["hdr"], "detail":format!("已验证安卓动态照片；{}",hdr::summary(&previous["hdr"]))}),
         );
     }
     let paired = pair(source, &options.time_domain)?;
@@ -99,12 +101,14 @@ pub fn convert(
     }
     let (video, mut timing) = remux(&read(&paired.movie)?)?;
     let time = paired.cover_us;
-    let (still_bytes, hdr) =
-        timings.measure("image_and_hdr", || prepare_still(native, source, config))?;
+    let (still_bytes, hdr) = timings.measure("image_and_hdr", || {
+        prepare_still(native, source, config, options.legacy_hdr)
+    })?;
     let result = assemble(&still_bytes, &video, config, time, paired.frame as i64)?;
     let decoded = format::parse(&result)?;
     if decoded.video(&result) != video.as_slice()
         || format::coding_hash(&decoded.still)? != format::coding_hash(&still_bytes)?
+        || format::auxiliary_hashes(&decoded.still)? != format::auxiliary_hashes(&still_bytes)?
     {
         return failure("安卓封装读回校验失败：图像或视频数据不同");
     }
@@ -184,7 +188,7 @@ pub fn convert(
         "status": "converted",
         "source": source.to_string_lossy(),
         "output": target.to_string_lossy(),
-        "detail": format!("已导出 {} {} 动态照片；封面 {} 秒", config.vendor, config.container.to_uppercase(), hdr::swift_double(time as f64 / 1_000_000.0)),
+        "detail": format!("已导出 {} {} 动态照片；封面 {} 秒；{}", config.vendor, config.container.to_uppercase(), hdr::swift_double(time as f64 / 1_000_000.0),hdr::summary(&hdr)),
         "hdr": hdr,
         "timing": timing,
         "warnings": warnings,

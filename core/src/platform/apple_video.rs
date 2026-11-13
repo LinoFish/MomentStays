@@ -47,10 +47,13 @@ extern "C" {
     fn CMTimeMapTimeFromRangeToRange(t: Time, from: Range, to: Range) -> Time;
     fn CMTimeSubtract(a: Time, b: Time) -> Time;
     fn CMTimeRangeContainsTime(range: Range, t: Time) -> u8;
+    fn CMSampleBufferGetNumSamples(sample: Ref) -> isize;
 }
 #[link(name = "AVFoundation", kind = "framework")]
 extern "C" {
     static AVMediaTypeVideo: Ref;
+    static AVMediaTypeAudio: Ref;
+    static AVFormatIDKey: Ref;
 }
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
@@ -115,6 +118,71 @@ unsafe fn error(error: Ref, fallback: &str) -> Error {
         }
     }
     Error::new(fallback)
+}
+
+/// Stream decoded PCM without playing or retaining it. Track presence alone
+/// does not prove that AVFoundation can open the QuickTime audio description.
+pub(super) fn audio_decodes(path: &Path, expected_tracks: usize) -> Result<bool> {
+    unsafe {
+        let _pool = Pool(objc_autoreleasePoolPush());
+        use std::os::unix::ffi::OsStrExt;
+        let p = path.as_os_str().as_bytes();
+        let url = Owned::new(CFURLCreateFromFileSystemRepresentation(
+            ptr::null(), p.as_ptr(), p.len() as isize, 0,
+        ), "音频校验 URL")?;
+        let one: unsafe extern "C" fn(Ref, Ref, Ref) -> Ref =
+            std::mem::transmute(objc_msgSend as *const ());
+        let two: unsafe extern "C" fn(Ref, Ref, Ref, Ref) -> Ref =
+            std::mem::transmute(objc_msgSend as *const ());
+        let yes: unsafe extern "C" fn(Ref, Ref) -> u8 =
+            std::mem::transmute(objc_msgSend as *const ());
+        let status: unsafe extern "C" fn(Ref, Ref) -> isize =
+            std::mem::transmute(objc_msgSend as *const ());
+        let command: unsafe extern "C" fn(Ref, Ref) =
+            std::mem::transmute(objc_msgSend as *const ());
+        let add_output: unsafe extern "C" fn(Ref, Ref, Ref) =
+            std::mem::transmute(objc_msgSend as *const ());
+        let asset = two(class("AVURLAsset"), selector("URLAssetWithURL:options:"), url.0, ptr::null());
+        if asset.is_null() { return Err(Error::new("音频校验无法打开 MOV")); }
+        let tracks = one(asset, selector("tracksWithMediaType:"), AVMediaTypeAudio);
+        if count(tracks) != expected_tracks { return Ok(false); }
+        if count(tracks) > 32 { return Err(Error::new("音频校验轨道数量超过限制")); }
+        let format = u32::from_be_bytes(*b"lpcm") as i64;
+        let number = Owned::new(CFNumberCreate(ptr::null(), 4, (&format as *const i64).cast()), "PCM 格式")?;
+        let settings = two(class("NSDictionary"), selector("dictionaryWithObject:forKey:"), number.0, AVFormatIDKey);
+        for i in 0..count(tracks) {
+            let mut error_ref: Ref = ptr::null();
+            let init: unsafe extern "C" fn(Ref, Ref, Ref, *mut Ref) -> Ref =
+                std::mem::transmute(objc_msgSend as *const ());
+            let reader = init(object(class("AVAssetReader"), "alloc"), selector("initWithAsset:error:"), asset, &mut error_ref);
+            if reader.is_null() { return Err(error(error_ref, "无法创建音频解码器")); }
+            object(reader, "autorelease");
+            let output = two(object(class("AVAssetReaderTrackOutput"), "alloc"), selector("initWithTrack:outputSettings:"), at(tracks, i), settings);
+            if output.is_null() { return Err(Error::new("无法创建 PCM 解码输出")); }
+            object(output, "autorelease");
+            let can_add: unsafe extern "C" fn(Ref, Ref, Ref) -> u8 =
+                std::mem::transmute(objc_msgSend as *const ());
+            if can_add(reader, selector("canAddOutput:"), output) == 0 { return Ok(false); }
+            add_output(reader, selector("addOutput:"), output);
+            if yes(reader, selector("startReading")) == 0 { return Ok(false); }
+            let started = std::time::Instant::now();
+            let mut frames = 0u64;
+            loop {
+                let sample = object(output, "copyNextSampleBuffer");
+                if sample.is_null() { break; }
+                let n = CMSampleBufferGetNumSamples(sample);
+                CFRelease(sample);
+                if n < 0 { return Ok(false); }
+                frames = frames.saturating_add(n as u64);
+                if frames > 100_000_000 || started.elapsed().as_secs() > 30 {
+                    command(reader, selector("cancelReading"));
+                    return Err(Error::new("原生音频校验超过资源限制，未发布结果"));
+                }
+            }
+            if status(reader, selector("status")) != 2 || frames == 0 { return Ok(false); }
+        }
+        Ok(true)
+    }
 }
 pub(super) fn frame(path: &Path, index: usize, seconds: f64) -> Result<(Vec<u8>, u32, u32)> {
     if !seconds.is_finite() || seconds.abs() > i64::MAX as f64 / 1e9 {

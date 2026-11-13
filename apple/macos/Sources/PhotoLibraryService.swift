@@ -300,6 +300,11 @@ final class PhotoLibraryService {
                 }
                 let standalone = file.files.count == 1 && (file.standaloneHDR == true || task.settings.exportMode == .withCandidates)
                 guard standalone || file.files.count == 2 else { throw Failure("缺少完整实况配对") }
+                if !standalone {
+                    // Hash-preserved audio is not proof of Apple decodability.
+                    // Check historical deliveries too, before any PhotoKit write.
+                    _ = try RustCore.engine(["mode":"audio-check","input":file.files[1]])
+                }
                 var record = store.records()[file.key]
                 var asset: PHAsset?
                 if let id = record?.assetID { asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject }

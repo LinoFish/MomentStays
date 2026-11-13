@@ -57,13 +57,13 @@ struct WorkspaceView: View {
     }
     private var addButton: some View {
         SourceMenuButton(requested:$model.sourceMenuRequested,disabled:!model.migrationTargetConfirmed || !model.canAppendSources,
-            title:"添加来源…",details:model.migrationTargetConfirmed ? model.sources.map(\.path).joined(separator:"\n") : "请先选择目标兼容格式",
-            hasSources:!model.sources.isEmpty,allowsLibrary:model.settings.direction != .androidToAndroid,
+            title:"添加来源…",details:model.migrationTargetConfirmed ? model.sources.map(\.path).joined(separator:"\n") : "请先选择转换方向",
+            hasSources:!model.sources.isEmpty,prominentWhenEmpty:false,allowsLibrary:model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle,
             addFiles:actions.chooseSources,addLibrary:actions.importPhotos)
-            .frame(width:132).fixedSize(horizontal:false,vertical:true).recordLayout("add-button")
+            .frame(maxWidth:.infinity).frame(height:22).recordLayout("add-button")
     }
     private var outputControl: some View {
-        OutputLocationControl(title:"输出：" + outputSummary,details:outputHelp,
+        OutputLocationControl(title:outputSummary,details:outputHelp,
             symbol:model.settings.destination.importsPhotos ? "photo.on.rectangle" : model.settings.destination.shares ? "square.and.arrow.up" : "folder",
             disabled:!model.migrationTargetConfirmed || model.isBusy || model.sharing,destination:destination,destinations:model.settings.destinations,
             outputPath:model.settings.destination.usesCache ? nil : model.output?.path,
@@ -80,50 +80,59 @@ struct WorkspaceView: View {
             }.recordLayout("output-control")
     }
     private func workspaceHeader(_ layout: WorkspaceLayout) -> some View {
-        VStack(alignment:.leading,spacing:10) {
-            HStack(alignment:.bottom,spacing:16) {
-                VStack(alignment:.leading,spacing:4) {
-                    Text("1  目标兼容格式").font(.caption).foregroundColor(.secondary)
-                    Picker("目标兼容格式",selection:target) {
-                        Text("先选择照片要使用的平台…").tag(Optional<MigrationTargetPreset>.none)
+        VStack(alignment:.leading,spacing:8) {
+            HStack(alignment:.top,spacing:16) {
+                VStack(alignment:.leading,spacing:3) {
+                    Text("转换方向").font(.caption).foregroundColor(.secondary)
+                    Picker("转换方向",selection:target) {
+                        Text("选择转换方向…").tag(Optional<MigrationTargetPreset>.none)
                         ForEach(MigrationTargetPreset.allCases,id:\.self) { Text($0.title).tag(Optional($0)) }
                     }.labelsHidden().disabled(!model.canSwitchDirection)
+                        .help(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先选择来源 → 去向的转换方向，再添加对应来源")
                         .accessibilityIdentifier("migration-target").recordLayout("conversion-directions")
-                }.frame(minWidth:240,maxWidth:360)
-                VStack(alignment:.leading,spacing:4) {
-                    Text("2  来源").font(.caption).foregroundColor(.secondary)
-                    addButton
-                }
-                Spacer(minLength:0)
-                primaryAction.frame(width:148)
+                }.frame(minWidth:180,maxWidth:300)
+                VStack(alignment:.leading,spacing:3) {
+                    Text(model.unconvertedExport == .none ? "输出位置" : "输出位置 · 含未转换原片")
+                        .font(.caption).foregroundColor(.secondary).lineLimit(1)
+                        .help(model.unconvertedExport == .none ? "文件生成与交付位置；可在选项中启用未转换照片原样导出" : originalExportHelp)
+                    outputControl
+                }.frame(maxWidth:.infinity,alignment:.leading)
+                VStack(alignment:.trailing,spacing:3) {
+                    Text(primaryActionHint).font(.caption).foregroundColor(.secondary)
+                        .lineLimit(1).truncationMode(.tail).help(primaryActionHint)
+                    primaryAction.frame(maxWidth:.infinity)
+                }.frame(width:148)
             }
             HStack(spacing:12) {
-                outputControl
-                Button("迁移选项…") { model.settingsPresented = true }
+                Text(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先选择转换方向，再从左侧添加来源。原片保持不变。")
+                    .font(.caption).foregroundColor(.secondary).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth:.infinity,alignment:.leading)
+                    .help(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先选择转换方向，再从左侧添加来源。原片保持不变。")
+                if model.settings.privateHDRExperimentEnabled {
+                    Text("实验功能已启用").font(.caption).foregroundColor(.secondary)
+                        .help("私有 HDR 转换为实验性功能，可在选项中的「实验性功能」查看和修改")
+                        .accessibilityIdentifier("experimental-enabled-summary")
+                }
+                Button { model.settingsPresented = true } label: { Label("选项…",systemImage:"slider.horizontal.3") }
                     .focused($settingsFocused).disabled(!model.migrationTargetConfirmed || model.isBusy || model.sharing)
                     .accessibilityIdentifier("settings-button").recordLayout("settings-button")
-                Button("导出结果…",action:actions.exportResults).disabled(!model.resultExportAvailable || model.isBusy || model.sharing)
-                    .accessibilityIdentifier("export-results-button")
-                resultMenu
+                    .help("处理、原样导出与实验性功能设置")
             }
-            UnconvertedExportControl(model:model,actions:actions)
-            Text(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先确定目标，再添加来源并处理。生成独立副本，原片保持不变。")
-                .font(.caption).foregroundColor(.secondary).lineLimit(2).fixedSize(horizontal:false,vertical:true)
-        }.padding(.horizontal,layout.margin).padding(.vertical,10).recordLayout("command-bar")
+        }.padding(.horizontal,layout.margin).padding(.vertical,8).recordLayout("command-bar")
     }
     private var resultMenu: some View {
         Menu {
-            Button("查看迁移计划…") { model.migrationReviewPresented = true }.disabled(!model.canReviewMigration)
-            Button("最近结果…",action:actions.recentResults).disabled(model.isBusy || model.sharing)
-            Button("打开输出文件夹",action:actions.openOutput).disabled(!model.canOpenOutput).help(model.outputOpenHelp)
+            Button("导出结果到其他位置…",action:actions.exportResults)
+                .disabled(!model.resultExportAvailable || model.isBusy || model.sharing)
+                .accessibilityIdentifier("export-results-button")
             if model.report != nil { Button("处理报告…",action:actions.showReport).disabled(model.isBusy) }
-            if model.shareReady { Button("共享结果…",action:actions.shareResults).disabled(model.isBusy || model.sharing) }
-            if model.errorMessage?.isEmpty == false { Button("查看错误原因…") { showingError = true } }
-            if model.libraryMonitoring { Button("停止图库监测",action:actions.toggleLibraryMonitoring) }
+            if model.shareReady { Button("共享完整结果…",action:actions.shareResults).disabled(model.isBusy || model.sharing) }
+            Button("打开输出文件夹",action:actions.openOutput).disabled(!model.canOpenOutput).help(model.outputOpenHelp)
             Divider()
             Link(UserGuide.title(for:locale),destination:UserGuide.url(for:locale))
-        } label: { Image(systemName:"ellipsis.circle") }
-            .menuStyle(.borderlessButton).fixedSize().help("结果与更多操作").accessibilityLabel("结果与更多操作")
+        } label: { Label("本轮结果",systemImage:"checkmark.rectangle.stack") }
+            .help("导出结果、处理报告、完整共享与打开输出；不重新转换")
+            .accessibilityLabel("本轮结果操作")
             .recordLayout("workspace-more-menu")
     }
     @ViewBuilder private var primaryAction: some View {
@@ -131,19 +140,52 @@ struct WorkspaceView: View {
             Button(action:model.stop) { Label(model.phase == .stopping ? "停止中" : "停止",systemImage:"stop.fill") }
                 .disabled(!model.canStop).recordLayout("primary-action").accessibilityIdentifier("stop-button")
         } else {
-            Button(model.hasExplicitSelection && model.selectedIDs.isEmpty ? "已选 0 张" : "开始处理") { model.approveMigrationReview() }
+            Button { model.approveMigrationReview() } label: {
+                Text(primaryActionTitle).lineLimit(1).frame(maxWidth:.infinity)
+            }
                 .buttonStyle(.borderedProminent).tint(InterfaceStyle.accent).foregroundColor(InterfaceStyle.accentForeground)
                 .disabled(!model.canApproveMigration).help("直接处理本轮就绪项，包含隐藏选中；未确认手动项与不支持项不阻断无关就绪照片")
                 .recordLayout("primary-action").accessibilityIdentifier("convert-button")
         }
     }
+    private var primaryActionTitle: String {
+        if model.hasExplicitSelection && model.selectedIDs.isEmpty { return "已选 0 张" }
+        let ready = model.migrationReadyItems.count
+        if ready > 0 { return "开始处理 \(ready) 张" }
+        if model.unconvertedExport != .none && !model.migrationUnconvertedItems.isEmpty {
+            return "原样导出 \(model.migrationUnconvertedItems.count) 张"
+        }
+        return "开始处理"
+    }
+    private var primaryActionHint: String {
+        if model.isBusy { return model.phase == .stopping ? "等待安全停止" : "任务进行中" }
+        if model.sharing { return "正在交付结果" }
+        if !model.migrationTargetConfirmed { return "请先选择转换方向" }
+        if model.sources.isEmpty { return "请在左侧添加来源" }
+        if model.hasExplicitSelection && model.selectedIDs.isEmpty { return "勾选照片或恢复默认范围" }
+        if !model.outputIsChosen { return "请选择输出位置" }
+        if model.unconvertedExport == .separateLocation && model.unconvertedOutput == nil { return "请选择原样导出目录" }
+        if model.canApproveMigration { return model.hasExplicitSelection ? "处理已勾选范围" : "处理全部待处理照片" }
+        if !model.canReviewMigration { return "请重新检查来源" }
+        return model.migrationScopeItems.isEmpty ? "本轮照片已处理" : "暂无就绪项，可查看计划"
+    }
     private var sourceSidebar: some View {
         ScrollView {
-            VStack(alignment:.leading,spacing:12) {
+            VStack(alignment:.leading,spacing:10) {
               Group {
-                Text("来源").font(.headline)
+                HStack {
+                    Text("来源").font(.headline)
+                    Spacer(minLength:0)
+                    sourceMenu
+                }
                 Text("\(model.sources.count) 个入口 · \(model.items.count) 张").font(.caption).foregroundColor(.secondary)
-                sidebarButton("全部来源",symbol:"square.stack",selected:model.migrationSource == nil) { model.migrationSource = nil }
+                addButton
+                if model.sources.isEmpty {
+                    Text(model.migrationTargetConfirmed ? "添加文件、文件夹或图库照片" : "先在顶部选择转换方向")
+                        .font(.caption).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
+                } else {
+                    sidebarButton("全部来源",symbol:"square.stack",selected:model.migrationSource == nil) { model.migrationSource = nil }
+                }
                 LazyVStack(alignment:.leading,spacing:4) {
                     ForEach(model.sources,id:\.path) { source in
                         sidebarButton(source.lastPathComponent,symbol:"folder",selected:model.migrationSource == source.path) { model.migrationSource = source.path }
@@ -151,24 +193,31 @@ struct WorkspaceView: View {
                     }
                 }
               }
-                Divider().padding(.vertical,4)
-                Text("操作顺序").font(.headline)
-                Text("选择目标\n添加来源\n查看计划（可选）\n处理与交付").font(.callout).foregroundColor(.secondary).lineSpacing(9)
-                Divider().padding(.vertical,4)
+                Divider().padding(.vertical,2)
               Group {
                 Text("任务与结果").font(.headline)
-                Text(model.isBusy ? model.status : !model.deliverySummary.isEmpty ? model.deliverySummary : model.report?.summary ?? "尚无本轮结果").font(.caption).foregroundColor(.secondary)
-                Button("导出转换结果…",action:actions.exportResults).disabled(!model.resultExportAvailable || model.isBusy || model.sharing)
-                Button("最近结果…",action:actions.recentResults).disabled(model.isBusy || model.sharing)
+                Text(model.isBusy ? model.status : !model.deliverySummary.isEmpty ? model.deliverySummary : model.report?.summary ?? "处理后的结果会保留在这里")
+                    .font(.caption).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
+                resultMenu
+                Button("最近结果与交付…",action:actions.recentResults).disabled(model.isBusy || model.sharing)
+                    .help("查看任务历史，重试未完成的图库导入、共享或其他交付")
                 if model.libraryMonitoring {
                     Label("正在监测图库",systemImage:"photo.on.rectangle").font(.caption).foregroundColor(.secondary)
                     Button("停止监测",action:actions.toggleLibraryMonitoring).disabled(model.isBusy)
                 }
-                Text("转换与原样导出分开计数。打开共享菜单不代表设备已接收。")
-                    .font(.caption).foregroundColor(.secondary).padding(.top,8)
               }
-            }.frame(maxWidth:.infinity,alignment:.leading).padding(14)
+            }.frame(maxWidth:.infinity,alignment:.leading).padding(12)
         }.background(InterfaceStyle.content).recordLayout("source-sidebar")
+    }
+    private var sourceMenu: some View {
+        Menu {
+            Button("重新检查来源") { model.rescan() }.disabled(!model.canRescan)
+            Divider()
+            Button("清空来源与列表",role:.destructive,action:actions.clearSources)
+                .disabled(model.sources.isEmpty || model.isBusy || model.sharing)
+        } label: { Image(systemName:"ellipsis.circle") }
+            .menuStyle(.borderlessButton).fixedSize().help("重新检查或清空来源")
+            .accessibilityLabel("来源操作").accessibilityIdentifier("source-more-menu")
     }
     private func sidebarButton(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action:action) {
@@ -178,7 +227,13 @@ struct WorkspaceView: View {
         }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
     }
     private var outputHelp: String {
-        "输出：" + outputSummary + "\n" + (model.settings.destination.usesCache ? "使用持久任务缓存；可在结果中再次导出" : model.output?.path ?? "尚未选择文件夹")
+        "输出：" + outputSummary + "\n" + (model.settings.destination.usesCache ? "使用持久任务缓存；可在结果中再次导出" : model.output?.path ?? "尚未选择文件夹") +
+            (model.unconvertedExport == .none ? "" : "\n" + originalExportHelp)
+    }
+    private var originalExportHelp: String {
+        model.unconvertedExport == .separateLocation
+            ? "未转换照片原样导出到不同位置：" + (model.unconvertedOutput?.path ?? "尚未选择；请在选项中设置")
+            : "未转换照片原样导出到本轮输出位置；另建原文件目录，不覆盖来源"
     }
     private var outputSummary: String {
         if !model.outputIsChosen { return "选择输出位置…" }
@@ -209,24 +264,27 @@ struct UnconvertedExportControl: View {
     }
     var body: some View {
         VStack(alignment:.leading,spacing:7) {
-            HStack(spacing:10) {
-                Toggle("原样导出未转换照片",isOn:enabled).toggleStyle(.checkbox).fixedSize()
-                if model.unconvertedExport != .none {
+            Toggle("原样导出未转换照片",isOn:enabled).toggleStyle(.checkbox)
+                .accessibilityIdentifier("unconverted-export-toggle")
+                .recordLayout("unconverted-export-toggle")
+            if model.unconvertedExport != .none {
+                HStack(spacing:10) {
                     Picker("原样导出位置",selection:location) {
                         Text("导出到相同位置").tag(UnconvertedExportChoice.sameLocation)
                         Text("导出到不同位置").tag(UnconvertedExportChoice.separateLocation)
-                    }.labelsHidden().frame(maxWidth:220)
+                    }.labelsHidden().frame(maxWidth:220).accessibilityIdentifier("unconverted-export-location")
                     if model.unconvertedExport == .separateLocation {
-                        Button("选择目录…",action:actions.chooseUnconvertedOutput)
+                        Button("选择目录…",action:actions.chooseUnconvertedOutput).accessibilityIdentifier("unconverted-export-folder")
+                            .recordLayout("unconverted-export-folder")
                     }
+                    Spacer(minLength:0)
                 }
-                Spacer(minLength:0)
-            }.font(.callout).disabled(model.isBusy || model.sharing)
-            if model.unconvertedExport != .none {
                 Text(model.unconvertedExport == .separateLocation ? model.unconvertedOutput?.path ?? "请选择不同的原文件导出目录" : "使用本次转换输出位置，另建原文件目录，不覆盖来源；原样导出不会计为转换成功。")
-                    .font(.caption).foregroundColor(.secondary).lineLimit(2).textSelection(.enabled)
+                    .font(.caption).foregroundColor(.secondary).lineLimit(2).truncationMode(.middle)
+                    .textSelection(.enabled).help(model.unconvertedOutput?.path ?? "原样导出不会计为转换成功")
             }
-        }.accessibilityIdentifier("unconverted-export-options")
+        }.font(.callout).disabled(model.isBusy || model.sharing).accessibilityIdentifier("unconverted-export-options")
+            .recordLayout("unconverted-export-options")
     }
 }
 
@@ -237,8 +295,12 @@ struct MigrationPlanSheet: View {
     var body: some View {
         VStack(alignment:.leading,spacing:0) {
             VStack(alignment:.leading,spacing:5) {
-                Text("本轮迁移计划").font(.title3.weight(.semibold))
+                Text("本轮转换计划").font(.title3.weight(.semibold))
                 Text(model.migrationTarget.title).font(.callout).foregroundColor(.secondary)
+                if model.settings.privateHDRExperimentEnabled {
+                    Text("实验功能已启用；实际处理结果和原因按照片记录。")
+                        .font(.caption).foregroundColor(.secondary)
+                }
                 Text(model.hasExplicitSelection ? "已选 \(model.selectedIDs.count) 张 · 隐藏选中 \(model.hiddenMigrationSelectionCount) 张" : "范围：全部待处理照片")
                     .font(.caption).foregroundColor(.secondary)
             }.padding(16)
@@ -360,8 +422,7 @@ private struct WorkspaceTaskFeedback: View {
                                 .monospacedDigit().foregroundColor(.secondary)
                         }
                         if hasError { Button("查看原因",action:showError) }
-                        if hasFailures { Button("查看报告",action:actions.showReport).disabled(model.isBusy) }
-                        if model.libraryMonitoring && !busy { Button("停止监测",action:actions.toggleLibraryMonitoring) }
+                        else if hasFailures { Button("查看报告",action:actions.showReport).disabled(model.isBusy) }
                     }.font(.callout)
                     if busy {
                         taskProgress

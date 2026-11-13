@@ -94,6 +94,9 @@ impl Default for ConversionOptions {
 
 impl ConversionOptions {
     pub fn json(&self) -> Value {
+        if self.direction == "honor-to-google" {
+            return json!({"direction":self.direction,"legacy_hdr":self.legacy_hdr,"hdr_policy":super::hdr::POLICY,"export_data_files":self.export_data_files});
+        }
         if self.direction == "android-to-android" {
             return json!({
                 "direction": self.direction,
@@ -108,6 +111,7 @@ impl ConversionOptions {
             return json!({
                 "direction": self.direction,
                 "android": self.android.json(),
+                "legacy_hdr":self.legacy_hdr, "hdr_policy":super::hdr::POLICY,
                 "time_domain": self.time_domain,
                 "export_data_files": self.export_data_files,
             });

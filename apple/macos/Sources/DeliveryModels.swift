@@ -78,7 +78,7 @@ struct DeliveryTask: Codable, Identifiable {
     }
     var processingSummary: String {
         guard let counts = processingCounts else { return "" }
-        return "转换 \(counts["converted",default:0]) · 独立照片原样输出 \(counts["copied",default:0]) · 已有 \(counts["resumed",default:0]) · 跳过 \(counts["skipped",default:0]) · 失败 \(counts["failed",default:0])"
+        return "转换 \(counts["converted",default:0]) · 原样输出 \(counts["copied",default:0]) · 已有 \(counts["resumed",default:0]) · 跳过 \(counts["skipped",default:0]) · 失败 \(counts["failed",default:0])"
     }
     var canShare: Bool { !results.isEmpty && (settings.direction.exportsAndroid || results.contains { $0.burst != nil }) }
     var hasRecord: Bool { !results.isEmpty || originalExport != nil }
@@ -259,7 +259,7 @@ final class DeliveryStore {
         var options = settings.options; options.coverIndex = settings.coverIndex(for:source)
         options.manualCover = settings.manualCovers?[NativeBatch.normalized(source).path]
         var values = options.json
-        values["delivery_revision"] = "1.3.0"
+        values["delivery_revision"] = settings.direction == .toApple ? "1.3.1" : "1.3.0"
         if let origin = origin {
             values["asset"] = origin.assetID; values["version"] = origin.version; values["edited"] = origin.edited
         } else { values["source_sha256"] = try NativeBatch.hashFile(source) }

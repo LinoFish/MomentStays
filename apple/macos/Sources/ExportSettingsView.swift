@@ -35,12 +35,13 @@ struct ExportSettingsView: View {
                     } else if model.settings.destination.shares {
                         note("转换后打开系统共享菜单，可选 LocalSend 等扩展。取消或失败后，可在「最近结果」重试。")
                     }
+                    UnconvertedExportControl(model:model,actions:actions)
                 }
                 Divider()
                 if model.settings.direction == .toApple { appleOptions } else if model.settings.direction == .toAndroid { androidOptions } else {
-                    settingsGroup("Google → 荣耀") {
-                        Text("暂仅支持 Google → 荣耀")
-                        note("仅接收可安全验证的 Google Motion Photo JPEG；保留完整原视频、源封面及真实拍摄设备信息。无法无损保留的结构会报告错误。")
+                    settingsGroup(model.settings.direction.title) {
+                        Text(model.migrationTarget.detail)
+                        note("仅开放 Google → 荣耀、荣耀 → Google 两条已验证 JPEG 路径；保留动态、可信封面和真实拍摄信息，其他厂商不作互转。")
                     }
                 }
                 Divider()
@@ -49,7 +50,9 @@ struct ExportSettingsView: View {
                     note("用于校验和续转。关闭后仍可查看本次报告。")
                 }
                 Divider()
-                if model.settings.direction != .androidToAndroid {
+                experimentalOptions
+                Divider()
+                if model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle {
                 DisclosureGroup(isExpanded: $model.advancedExpanded) {
                     VStack(alignment: .leading, spacing: 14) {
                         if model.settings.direction == .toApple {
@@ -73,6 +76,37 @@ struct ExportSettingsView: View {
         }
         .accessibilityIdentifier("export-settings")
         .background(InterfaceStyle.canvas)
+    }
+
+    private var experimentalOptions: some View {
+        VStack(alignment:.leading,spacing:8) {
+            Button { model.experimentalExpanded.toggle() } label: {
+                HStack(spacing:6) {
+                    Image(systemName:model.experimentalExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption).foregroundColor(.secondary).frame(width:12)
+                    Text("实验性功能").font(.headline)
+                    Spacer(minLength:8)
+                    if model.settings.privateHDRExperimentEnabled {
+                        Text("已启用").font(.caption).foregroundColor(.secondary)
+                    }
+                }.frame(maxWidth:.infinity,alignment:.leading).padding(.vertical,4).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityLabel("实验性功能")
+                .accessibilityValue(model.experimentalExpanded ? "已展开" : "已收起")
+                .help("展开或收起实验性功能；不改变已保存的开关偏好")
+                .accessibilityIdentifier("experimental-options").recordLayout("experimental-options")
+            if model.experimentalExpanded {
+                VStack(alignment:.leading,spacing:8) {
+                    Toggle("尝试转换私有 HDR（实验性）",isOn:binding(\.legacyHDR)).toggleStyle(.checkbox)
+                        .disabled(!model.settings.privateHDRExperimentAvailable)
+                        .accessibilityIdentifier("experimental-private-hdr-toggle")
+                        .recordLayout("experimental-private-hdr-toggle")
+                    note("仅适用于已支持配置，效果有局限，不保证原厂显示效果。不能处理的 HDR 会忽略，不阻断其他已支持步骤；标准 HDR 按原规则处理。")
+                    if !model.settings.privateHDRExperimentAvailable {
+                        note("当前转换方向或输出内容不使用此功能；保留你的开关偏好。")
+                    }
+                }.padding(.leading,18)
+                }
+        }
     }
 
     private var appleOptions: some View {
@@ -106,19 +140,15 @@ struct ExportSettingsView: View {
                     note("点击照片旁的「选择封面…」更换高清封面。新封面为 JPEG，不保留原封面的 HDR。")
                 }
             }
-            Divider()
-            settingsGroup("HDR 兼容") {
-                Toggle("尝试转换私有 HDR", isOn: binding(\.legacyHDR))
-                    .disabled(model.settings.exportMode == .auxiliaryOnly)
-                note("开启后尝试兼容旧增益图及荣耀 EHDR（无参考图、实验性，仅限已标定配置）。不支持时保留原格式；已有 Ultra HDR 和 SDR 保持不变。")
-            }
+
         }
     }
 
     private var androidOptions: some View {
         VStack(alignment: .leading, spacing: 20) {
             settingsGroup("目标格式") {
-                choice("目标厂商", selection: binding(\.vendor))
+                Text(model.migrationTarget.title).font(.callout)
+                note("更换转换方向或目标厂商，请使用工作台顶部的转换方向。")
                 if model.settings.vendor == .google || model.settings.vendor == .honor {
                     note("新款荣耀推荐选择 Google / 通用；荣耀格式仅作备用。")
                     note("新款荣耀已验证可识别留刻导出的 Google 格式，不代表能识别 Google 相机拍摄的原片。")
@@ -203,7 +233,7 @@ struct ExportSettingsSheet: View {
         VStack(spacing: 0) {
             HStack(alignment:.top) {
                 VStack(alignment:.leading,spacing:4) {
-                    Text("导出设置").font(.title3.weight(.semibold))
+                    Text("处理与导出设置").font(.title3.weight(.semibold))
                     Text(model.settings.direction.title).font(.callout).foregroundColor(.secondary)
                 }
                 Spacer()

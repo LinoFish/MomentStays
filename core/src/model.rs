@@ -111,14 +111,17 @@ fn is_motion_attr(ns: &str, local: &str) -> bool {
         || (ns == HDR && local == "Version")
 }
 
-/// Strip old motion metadata from one packet, mirroring Swift `liveStill` +
+/// Strip old motion metadata; opaque HDR version fields remain when the
+/// production HDR policy cannot identify a standard gain map. Mirrors `liveStill` +
 /// `unifiedJPEG`: GCamera motion keys, vendor motion keys, hdrgm Version,
 /// MotionPhoto directory items and whole Container directories.
-fn clean_packet(root: &mut Element) -> bool {
+fn clean_packet(root: &mut Element, rewrite_hdr: bool) -> bool {
     let mut touched = false;
     pymotion::visit_mut(root, &mut |el| {
         let before = el.attrib.len();
-        el.attrib.retain(|(n, l, _)| !is_motion_attr(n, l));
+        el.attrib.retain(|(n, l, _)| {
+            !(is_motion_attr(n, l) && (rewrite_hdr || n != HDR || l != "Version"))
+        });
         if el.attrib.len() != before {
             touched = true;
         }
@@ -197,7 +200,13 @@ fn li(item: Element) -> Element {
 /// The motion XMP document, mirroring Swift `AndroidExport.xmp`: one
 /// Description carrying the vendor extras, the GCamera motion keys and the
 /// Container directory (Primary, optional GainMap, MotionPhoto).
-fn motion_doc(target: Vendor, time: Option<i64>, video_len: usize, gain_len: usize) -> Element {
+fn motion_doc(
+    target: Vendor,
+    time: Option<i64>,
+    video_len: usize,
+    gain_len: usize,
+    declare_hdr: bool,
+) -> Element {
     let mut desc = Element::new(RDF, "Description");
     match target {
         Vendor::Oppo => {
@@ -214,7 +223,7 @@ fn motion_doc(target: Vendor, time: Option<i64>, video_len: usize, gain_len: usi
         }
         _ => {}
     }
-    if gain_len > 0 {
+    if gain_len > 0 && declare_hdr {
         desc.set_attr(HDR, "Version", "1.0");
     }
     desc.set_attr(CAMERA, "MotionPhoto", "1");
@@ -250,7 +259,9 @@ fn build_still(
     time: Option<i64>,
     video_len: usize,
     gain_len: usize,
+    strict_hdr: bool,
 ) -> Result<Vec<u8>> {
+    let rewrite_hdr = !strict_hdr || crate::hdr::known_ultra_version(still)?;
     let mut packets = pymotion::xmp_packets(still)?;
     let standard: Vec<usize> = packets
         .iter()
@@ -268,12 +279,12 @@ fn build_still(
     let mut copied_scopes = Vec::new();
     let mut changed: HashSet<usize> = HashSet::new();
     for (i, p) in packets.iter_mut().enumerate() {
-        if clean_packet(&mut p.root) {
+        if clean_packet(&mut p.root, rewrite_hdr) {
             changed.insert(i);
         }
     }
     let refs = extended_refs(&packets);
-    let mut doc = motion_doc(target, time, video_len, gain_len);
+    let mut doc = motion_doc(target, time, video_len, gain_len, rewrite_hdr);
     {
         let rdf = doc.find_child_mut(RDF, "RDF").unwrap();
         for g in &refs {
@@ -487,7 +498,7 @@ pub fn plan_swift(
         );
     }
     let gain_len = aux.get(1).map(|r| r.len()).unwrap_or(0);
-    let head = build_still(still, target, Some(time), video.len(), gain_len)?;
+    let head = build_still(still, target, Some(time), video.len(), gain_len, true)?;
     let (tail, cover) = match target {
         Vendor::Samsung => (samsung_sef(head.len(), video.len())?, Cover::Time(time)),
         Vendor::Huawei => (huawei_tail(frame, video.len())?, Cover::Frame(frame)),
@@ -529,7 +540,7 @@ pub fn plan(still: &[u8], video: &[u8], cover: Cover, target: Vendor) -> Result<
         );
     }
     let gain_len = aux.get(1).map(|r| r.len()).unwrap_or(0);
-    let head = build_still(still, target, time, video.len(), gain_len)?;
+    let head = build_still(still, target, time, video.len(), gain_len, false)?;
     let tail = match target {
         Vendor::Samsung => samsung_sef(head.len(), video.len())?,
         Vendor::Huawei => huawei_tail(frame, video.len())?,

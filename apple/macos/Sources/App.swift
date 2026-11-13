@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppIdentityMigration.migrate()
         if startupArgument("--direction") == "to-android" { model.updateSettings { $0.direction = .toAndroid } }
+        if startupArgument("--direction") == "honor-to-google" { model.updateSettings { $0.direction = .honorToGoogle } }
         if startupArgument("--direction") == "android-to-android" { model.updateSettings { $0.direction = .androidToAndroid } }
         buildMenu()
         AppIconAppearance.shared.start()
@@ -111,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         for item in menu.items where item.action == #selector(importPhotos) || item.action == #selector(stopMonitoring) {
-            item.isHidden = model.settings.direction == .androidToAndroid
+            item.isHidden = model.settings.direction == .androidToAndroid || model.settings.direction == .honorToGoogle
         }
     }
 
@@ -120,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         case #selector(start): return model.canApproveMigration && !model.sharing && window?.attachedSheet == nil
         case #selector(stop): return model.canStop
         case #selector(rescan): return model.canRescan
-        case #selector(importPhotos): return model.migrationTargetConfirmed && model.settings.direction != .androidToAndroid && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
+        case #selector(importPhotos): return model.migrationTargetConfirmed && model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
         case #selector(chooseSources): return model.migrationTargetConfirmed && model.canAppendSources && window?.attachedSheet == nil
         case #selector(chooseOutput): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
         case #selector(exportResults): return model.resultExportAvailable && !model.isBusy && !model.sharing

@@ -44,6 +44,11 @@ pub struct HeicGain {
 /// Host codecs and services. Every method has a refusing default, so a
 /// host implements only what it supports.
 pub trait Native: Sync {
+    /// Decode audio through the target platform; None on unavailable backends.
+    /// Silence is valid: this checks decodability, not perceived loudness.
+    fn audio_decodes(&self, _path: &Path, _expected_tracks: usize) -> Result<Option<bool>> {
+        Ok(None)
+    }
     /// ImageIO-style full decode check of a still (complete, positive size).
     /// None = not available; callers then rely on the byte checks alone.
     fn image_decodes(&self, _data: &[u8]) -> Option<bool> {

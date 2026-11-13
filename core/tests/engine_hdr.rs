@@ -204,3 +204,266 @@ fn legacy_apple_hdr_is_converted_through_host_codecs() {
         .unwrap()
         .starts_with("需要原生处理"));
 }
+
+#[test]
+fn unsupported_hdr_codec_is_ignored_without_mutating_live_resources() {
+    let original = b64("tests/fixtures-pycli/legacy-mpf.jpg.b64");
+    let clean = jpeg::static_only(&original).unwrap();
+    let out = hdr::process(
+        &momentstays_core::engine::NoNative,
+        clean.clone(),
+        hdr::Options {
+            try_private_hdr: true,
+            already_ultra_hdr: false,
+            allow_legacy_conversion: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(out.image, clean);
+    assert_eq!(out.report["outcome"], "ignored");
+    assert!(hdr::summary(&serde_json::Value::Object(out.report)).contains("HDR 已忽略"));
+    assert!(hdr::process(
+        &momentstays_core::engine::NoNative,
+        vec![255, 216],
+        hdr::Options {
+            try_private_hdr: true,
+            already_ultra_hdr: false,
+            allow_legacy_conversion: true
+        }
+    )
+    .is_err());
+}
+
+#[test]
+fn honor_to_google_has_own_admission_and_versioned_transaction() {
+    use momentstays_core::engine::{live::honor_to_google as route, output, NoNative};
+    use momentstays_core::{pyjpeg, tiff};
+    let mut t = b"II\x2a\0\x08\0\0\0".to_vec();
+    t.extend(tiff::serialize(
+        true,
+        &[tiff::entry(true, 0x10f, 2, 6, 26)],
+        0,
+    ));
+    t.extend(b"HONOR\0");
+    let mut payload = jpeg::EXIF.to_vec();
+    payload.extend(t);
+    let base = b64("tests/fixtures-pycli/base.jpg.b64");
+    let still = pyjpeg::edit_header(
+        &base,
+        &Default::default(),
+        &pyjpeg::app(0xe1, &payload).unwrap(),
+    )
+    .unwrap();
+    let bytes = model::write(
+        &MotionModel {
+            still,
+            video: video(),
+            cover: Cover::Frame(2),
+            source_format: "test".into(),
+        },
+        Vendor::Huawei,
+    )
+    .unwrap();
+    assert!(route::inspect(
+        &NoNative,
+        &engine_support::motion(Cover::Time(800_000), Vendor::Google)
+    )
+    .is_err());
+    let d = Dir::new("honor-google");
+    let input = d.0.join("input.jpg");
+    let out = d.0.join("out");
+    std::fs::write(&input, &bytes).unwrap();
+    let options = ConversionOptions {
+        direction: "honor-to-google".into(),
+        ..Default::default()
+    };
+    let row = route::scan_file(&NoNative, &input, "");
+    assert!(row.is_motion);
+    let token = StopToken::new();
+    token.cancel();
+    assert!(route::convert(
+        &NoNative,
+        &input,
+        &out,
+        &options,
+        &token,
+        false,
+        &Default::default()
+    )
+    .is_err());
+    assert!(!out.exists());
+    let first = route::convert(
+        &NoNative,
+        &input,
+        &out,
+        &options,
+        &StopToken::new(),
+        false,
+        &Default::default(),
+    )
+    .unwrap();
+    assert_eq!(first["status"], "converted");
+    let m = output::verify(&out).unwrap();
+    let result =
+        std::fs::read(out.join(m["output_files"]["motionphoto"].as_str().unwrap())).unwrap();
+    let before = format::parse(&bytes).unwrap();
+    let after = format::parse(&result).unwrap();
+    assert_eq!(before.video(&bytes), after.video(&result));
+    assert_eq!(after.timestamp, Some(800_000));
+    assert_eq!(
+        route::convert(
+            &NoNative,
+            &input,
+            &out,
+            &options,
+            &StopToken::new(),
+            false,
+            &Default::default()
+        )
+        .unwrap()["status"],
+        "resumed"
+    );
+    let mut off = options.clone();
+    off.legacy_hdr = false;
+    assert!(route::convert(
+        &NoNative,
+        &input,
+        &out,
+        &off,
+        &StopToken::new(),
+        false,
+        &Default::default()
+    )
+    .is_err());
+    std::fs::write(&input, [255, 216]).unwrap();
+    assert!(route::convert(
+        &NoNative,
+        &input,
+        &out,
+        &options,
+        &StopToken::new(),
+        false,
+        &Default::default()
+    )
+    .is_err());
+    output::verify(&out).unwrap();
+}
+
+#[test]
+fn hdr_codec_refusal_is_separate_from_primary_corruption() {
+    let base = b64("tests/fixtures-pycli/base.jpg.b64");
+    let image = hdr::ultra(&base, &base, 2.0).unwrap();
+    // The host intentionally refuses only the auxiliary JPEG, not the main.
+    struct RefuseGain(Vec<u8>);
+    impl momentstays_core::engine::Native for RefuseGain {
+        fn image_decodes(&self, data: &[u8]) -> Option<bool> {
+            Some(data != self.0.as_slice())
+        }
+    }
+    let maps = jpeg::auxiliary(&image).unwrap();
+    let host = RefuseGain(image[maps[1].clone()].to_vec());
+    let opts = hdr::Options {
+        try_private_hdr: true,
+        already_ultra_hdr: true,
+        allow_legacy_conversion: true,
+    };
+    let result = hdr::process(&host, image.clone(), opts).unwrap();
+    assert_eq!(result.image, image);
+    assert_eq!(result.report["outcome"], "ignored");
+    struct Broken;
+    impl momentstays_core::engine::Native for Broken {
+        fn image_decodes(&self, _: &[u8]) -> Option<bool> {
+            Some(false)
+        }
+    }
+    assert!(hdr::process(&Broken, base, opts).is_err());
+}
+
+#[test]
+fn hdr_fallback_does_not_swallow_invalid_container_or_quality_requests() {
+    let d = Dir::new("hdr-invalid-options");
+    let p = d.0.join("input.jpg");
+    std::fs::write(&p, b64("tests/fixtures-pycli/base.jpg.b64")).unwrap();
+    let mut options = hdr::ExportOptions {
+        preserve_heic: true,
+        preserve_jpeg: true,
+        image_quality: 0.95,
+        gain_quality: 0.95,
+    };
+    assert!(
+        hdr::prepare_with_policy(&momentstays_core::engine::NoNative, &p, &options, true).is_err()
+    );
+    options.preserve_heic = false;
+    options.gain_quality = 0.0;
+    assert!(
+        hdr::prepare_with_policy(&momentstays_core::engine::NoNative, &p, &options, false).is_err()
+    );
+}
+
+#[test]
+fn ignored_hdr_is_not_relabelled_as_standard_by_production_motion_writer() {
+    use momentstays_core::engine::{live::motion::assemble, options::AndroidOptions, NoNative};
+    let base = b64("tests/fixtures-pycli/base.jpg.b64");
+    let known = hdr::ultra(&base, &base, 2.0).unwrap();
+    let mut unknown = known.clone();
+    let mut at = 0;
+    while let Some(i) = unknown[at..]
+        .windows(19)
+        .position(|w| w == b"hdrgm:Version=\"1.0\"")
+    {
+        let pos = at + i + 15;
+        unknown[pos] = b'9';
+        at = pos + 1;
+    }
+    assert!(!momentstays_core::hdr::known_ultra_version(&unknown).unwrap());
+    let processed = hdr::process(
+        &NoNative,
+        unknown.clone(),
+        hdr::Options {
+            try_private_hdr: true,
+            already_ultra_hdr: true,
+            allow_legacy_conversion: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(processed.image, unknown);
+    assert_eq!(processed.report["outcome"], "ignored");
+    for still in [
+        unknown.clone(),
+        jpeg::static_only(&b64("tests/fixtures-pycli/legacy-mpf.jpg.b64")).unwrap(),
+    ] {
+        let video = video();
+        let result = assemble(
+            &still,
+            &video,
+            &AndroidOptions::vendor("google"),
+            800_000,
+            2,
+        )
+        .unwrap();
+        let after = format::parse(&result).unwrap();
+        assert_eq!(after.video(&result), video);
+        assert_eq!(
+            format::coding_hash(&after.still).unwrap(),
+            format::coding_hash(&still).unwrap()
+        );
+        assert_eq!(
+            format::auxiliary_hashes(&after.still).unwrap(),
+            format::auxiliary_hashes(&still).unwrap()
+        );
+        assert!(!momentstays_core::hdr::known_ultra_version(&after.still).unwrap());
+        let versions = momentstays_core::xmp::packets(&after.still).unwrap();
+        assert!(!versions.iter().any(|p| p
+            .values(momentstays_core::xmp::HDR, "Version")
+            .contains(&"1.0")));
+    }
+    let standard = assemble(
+        &known,
+        &video(),
+        &AndroidOptions::vendor("google"),
+        800_000,
+        2,
+    )
+    .unwrap();
+    assert!(format::parse(&standard).unwrap().ultra);
+}

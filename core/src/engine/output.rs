@@ -475,6 +475,9 @@ pub(crate) fn resume(
     source_hash: &str,
 ) -> Result<Value> {
     let manifest = verify(target)?;
+    if options.output_mode != "auxiliary-only" && manifest["hdr"]["policy"] != super::hdr::POLICY {
+        return failure("已有实况结果未执行当前 HDR 策略，请显式覆盖");
+    }
     let mut previous = manifest["options"].as_object().cloned().unwrap_or_default();
     for (k, v) in [
         ("video_track", json!("primary")),
@@ -500,6 +503,11 @@ pub(crate) fn resume(
     if implementation != REVISION && options.output_mode != "auxiliary-only" {
         let data = read(source)?;
         let original = format::parse(&data)?;
+        if crate::mp4::Movie::parse(original.video(&data))?
+            .tracks.iter().any(|t| t.samples.handler == "soun")
+        {
+            return failure("旧版实况未通过当前 Apple 音频兼容校验，请显式覆盖重新处理；未复用旧音频封装");
+        }
         if let Some(ext) = crate::engine::hdr::honor_private(&original.still)? {
             if manifest["hdr"]["private_extension_sha256"].as_str()
                 != Some(sha256_hex(&ext).as_str())
@@ -538,10 +546,13 @@ pub(crate) fn resume(
             "已恢复原始文件名，图片和视频未重新编码",
         ));
     }
-    Ok(resumed(
+    let mut result = resumed(
         source,
         target,
         names_json(&stored),
-        "已验证，跳过重复转换",
-    ))
+        &format!("已验证；{}", super::hdr::summary(&manifest["hdr"])),
+    );
+    result["hdr"] = manifest["hdr"].clone();
+    result["verification"] = manifest;
+    Ok(result)
 }

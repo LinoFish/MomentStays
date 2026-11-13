@@ -216,6 +216,9 @@ unsafe fn empty_dictionary() -> Result<Owned> {
 }
 pub struct SystemNative;
 impl Native for SystemNative {
+    fn audio_decodes(&self, path: &Path, expected_tracks: usize) -> Result<Option<bool>> {
+        video::audio_decodes(path, expected_tracks).map(Some)
+    }
     fn image_decodes(&self, input: &[u8]) -> Option<bool> {
         Some(source(input).and_then(|s| unsafe { image(s.0) }).is_ok())
     }

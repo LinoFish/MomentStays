@@ -451,6 +451,12 @@ fn standalone_private_hdr_obeys_switch_and_keeps_extension() {
             |_| {},
         )
         .unwrap();
+        if !enabled {
+            assert_eq!(result.counts["skipped"], 1);
+            assert_eq!(result.report_data["files"][0]["hdr"]["outcome"], "ignored");
+            assert!(!out.join("private.jpg.static-hdr").exists());
+            continue;
+        }
         assert_eq!(result.counts["converted"], 1, "{result:?}");
         let pair = out.join("private.jpg.static-hdr");
         let m = output::verify(&pair).unwrap();

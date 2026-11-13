@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='motionlive-multi-', dir=ROOT / '.build'
     for directory in ('来源 A', '来源 B'):
         pair = output / directory / 'same.MP.jpg.livephoto'
         manifest = json.loads((pair / 'manifest.json').read_text())
-        assert manifest['implementation'] == 'gui-native-1.1.7'
+        assert manifest['implementation'] == 'gui-native-1.1.8'
         assert manifest['source_sha256'] == hashlib.sha256(source_bytes).hexdigest()
         for name, digest in manifest['output_sha256'].items():
             assert hashlib.sha256((pair/name).read_bytes()).hexdigest() == digest

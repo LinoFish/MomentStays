@@ -284,17 +284,22 @@ fn single_frame_has_no_burst_marker_and_corrupt_jpeg_is_rejected() {
     assert_eq!(p["supported"], false);
 }
 #[test]
-fn hdr_and_motion_combinations_are_blocked_without_silent_loss() {
+fn hdr_members_are_processed_but_motion_pairing_still_blocked() {
     let d = Dir::new("burst-combinations");
     let inputs = fixture(&d.0.join("in"), &NAMES);
     let base = b64("tests/fixtures-pycli/base.jpg.b64");
-    let paired = momentstays_core::engine::still::live_still(&base,"CCA01975-5655-4A4C-88C6-D620975EF319",true).unwrap();
+    let paired = momentstays_core::engine::still::live_still(
+        &base,
+        "CCA01975-5655-4A4C-88C6-D620975EF319",
+        true,
+    )
+    .unwrap();
     std::fs::write(&inputs[1], &paired).unwrap();
     let combined = plan(&inputs);
-    assert_eq!(combined["supported"],false);
+    assert_eq!(combined["supported"], false);
     assert!(combined["reason"].as_str().unwrap().contains("配对"));
     std::fs::write(&inputs[1], hdr::ultra(&base, &base, 2.0).unwrap()).unwrap();
-    assert_eq!(plan(&inputs)["supported"], false);
+    assert_eq!(plan(&inputs)["supported"], true);
     assert_eq!(
         counts(&run(
             &inputs,
@@ -302,7 +307,19 @@ fn hdr_and_motion_combinations_are_blocked_without_silent_loss() {
             &ConversionOptions::default(),
             None
         )),
-        [0, 0, 0, 3]
+        [3, 0, 0, 0]
+    );
+    let output_dir = std::fs::read_dir(d.0.join("out"))
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().is_dir())
+        .unwrap()
+        .path();
+    let manifest = output::verify(&output_dir).unwrap();
+    assert_eq!(manifest["hdr"]["counts"]["preserved"], 1);
+    assert_eq!(
+        manifest["burst"]["members"][1]["hdr"]["outcome"],
+        "preserved"
     );
     std::fs::write(
         &inputs[1],

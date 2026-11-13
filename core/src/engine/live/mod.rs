@@ -6,3 +6,5 @@ pub mod pairing;
 pub mod to_android;
 pub mod to_apple;
 pub mod transfer;
+
+pub mod honor_to_google;

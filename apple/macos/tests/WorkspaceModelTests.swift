@@ -511,6 +511,17 @@ struct WorkspaceModelTests {
     }
 
     static func migrationWorkbenchChecks(root: URL) throws {
+        var honorSettings = ConversionSettings()
+        honorSettings.direction = .honorToGoogle
+        check(MigrationTargetPreset.honorToGoogle.direction == .honorToGoogle && MigrationTargetPreset.current(honorSettings) == .honorToGoogle,"Honor to Google is an explicit persisted route and preset")
+        check(honorSettings.options.json["direction"] as? String == "honor-to-google" && honorSettings.options.json["legacy_hdr"] as? Bool == true,"Honor route forwards the shared HDR policy and enabled switch")
+        honorSettings.legacyHDR = false
+        check(honorSettings.options.json["legacy_hdr"] as? Bool == false && honorSettings.destinations.allSatisfy { !$0.importsPhotos },"Honor route preserves disabled HDR and excludes Photos delivery")
+        honorSettings.direction = .toAndroid
+        let disabledApple = honorSettings.options.json
+        honorSettings.legacyHDR = true
+        check(disabledApple as NSDictionary != honorSettings.options.json as NSDictionary,"Apple export HDR switch is bound to resume options")
+
         let folder = root.appendingPathComponent("migration-workbench")
         try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
         let urls = ["live.jpg","hdr.jpg","manual.jpg","ordinary.jpg"].map { folder.appendingPathComponent($0) }
@@ -768,7 +779,7 @@ struct WorkspaceModelTests {
         transfer.vendor = .vivo; transfer.exportMode = .auxiliaryOnly; transfer.coverSelections = [source.path:2]
         check(transfer.options.json as NSDictionary == transferOptions, "hidden Apple/vendor/transcode options cannot alter transfer")
         check(transfer.options.direction == "android-to-android" && transfer.options.android.vendor == "google", "transfer uses independent fixed Google path")
-        check(transfer.summary.contains("暂仅支持 Google → 荣耀"), "transfer states its precise scope")
+        check(transfer.summary.hasPrefix("Google → 荣耀") && transfer.summary.contains("JPEG"), "transfer states its precise scope")
         let encodedTransfer = try JSONEncoder().encode(transfer)
         let restoredTransfer = try JSONDecoder().decode(ConversionSettings.self,from:encodedTransfer)
         check(restoredTransfer.direction == .androidToAndroid, "third direction settings restore")

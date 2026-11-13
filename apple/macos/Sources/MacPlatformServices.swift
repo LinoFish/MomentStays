@@ -145,7 +145,7 @@ final class MacPlatformServices: NSObject {
     }
 
     func importPhotos() {
-        guard model.migrationTargetConfirmed, model.settings.direction != .androidToAndroid else { return }
+        guard model.migrationTargetConfirmed, model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle else { return }
         guard let window = window, window.attachedSheet == nil, let id = model.beginLibraryImport() else { return }
         dropRequest = UUID(); stopMonitoring()
         let direction = model.settings.direction

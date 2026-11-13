@@ -28,8 +28,9 @@ struct ConversionOptions {
     var manualCover: ManualCoverChoice?
     var manualCovers: [String:ManualCoverChoice] = [:]
     var json: [String:Any] {
+        if direction == "honor-to-google" { return ["direction":direction,"legacy_hdr":legacyHDR,"hdr_policy":"supported-private-hdr-2","export_data_files":exportDataFiles] }
         if direction == "android-to-android" { return ["direction":direction,"target":"honor","layout":AndroidTransfer.revision,"vendor":"google","container":"jpeg","export_data_files":exportDataFiles] }
-        if direction == "to-android" { return ["direction":direction,"android":android.json,"time_domain":timeDomain,"export_data_files":exportDataFiles] }
+        if direction == "to-android" { return ["direction":direction,"android":android.json,"legacy_hdr":legacyHDR,"hdr_policy":"supported-private-hdr-2","time_domain":timeDomain,"export_data_files":exportDataFiles] }
         var result: [String:Any] = ["legacy_hdr": legacyHDR ? "auto" : "preserve", "missing_time": missingTime, "time_domain": timeDomain,
             "video_track":videoTrack,"output_mode":outputMode,"repair_auxiliary_duration":outputMode != "livephoto" && repairAuxiliaryDuration,"export_data_files":exportDataFiles]
         if let index = coverIndex { result["cover_candidate_index"] = index }

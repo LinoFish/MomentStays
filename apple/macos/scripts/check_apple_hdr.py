@@ -41,7 +41,7 @@ for item in report['files']:
  assert p==len(raw)
  if not edited:
   assert (images[0]+images[1])==raw[:sum(map(len,images))]
- manifest=json.loads((folder/'manifest.json').read_text());assert manifest['implementation']=='reverse-native-1.2.1'
+ manifest=json.loads((folder/'manifest.json').read_text());assert manifest['implementation']=='reverse-native-1.2.2'
  assert all(t['max_pts_shift_seconds']<.000002 for t in item['timing']['tracks'])
  # Simulate old release's sidecar: do not silently resume its faulty output.
  manifest['implementation']='reverse-native-1.2.0';(folder/'manifest.json').write_text(json.dumps(manifest))

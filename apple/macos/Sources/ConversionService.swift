@@ -264,7 +264,7 @@ final class SourceInspectionCache {
                 if direction == .toApple { row = rebase(entry.projections[.toApple]!,relative:relative,version:version) }
                 else {
                     transferValidationCount += 1
-                    row = AndroidTransfer.scanFile(file,relative:relative,bytes:bytes,parsed:parsed)
+                    row = AndroidTransfer.scanFile(file,relative:relative,bytes:bytes,parsed:parsed,direction:direction.rawValue)
                 }
             }
             guard SourceVersion.read(file) == version else {

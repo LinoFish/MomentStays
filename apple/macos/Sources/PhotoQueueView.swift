@@ -53,15 +53,6 @@ struct PhotoQueueView: View {
         VStack(spacing: 0) {
                 heading(layout)
                 taskFeedback
-                if !model.burstGroups.isEmpty {
-                    HStack {
-                        Label("连拍 \(model.burstGroups.count) 组 · \(model.burstGroups.reduce(0) { $0 + $1.members.count }) 帧",systemImage:"square.stack")
-                        Spacer()
-                        Button("检查连拍组与代表帧…") { model.burstReviewPresented = true }
-                            .accessibilityIdentifier("burst-review-button")
-                            .disabled(model.isBusy || model.sharing)
-                    }.font(.callout).padding(.horizontal,16).padding(.vertical,8)
-                }
                 if model.manualPreparation {
                     HStack {
                         Text("确认需要处理的照片，再继续转换；未确认的项目仅在本轮跳过。").font(.callout)
@@ -70,21 +61,20 @@ struct PhotoQueueView: View {
                         Button("继续转换",action:model.continueManualConversion)
                     }.padding(12).background(InterfaceStyle.content)
                 }
-                if !prefersGrid && !layout.twoLines && !visibleItems.isEmpty { columnHeadings(layout) }
                 Group {
-                    if model.previewVisible && layout.width >= 800 {
+                    if !model.items.isEmpty && model.previewVisible && layout.width >= 800 {
                         HSplitView {
-                            browser(layout).frame(minWidth:260,idealWidth:440,maxWidth:.infinity)
+                            browser.frame(minWidth:260,idealWidth:440,maxWidth:.infinity)
                             focusedPreview.frame(minWidth:280,idealWidth:330,maxWidth:380).transition(.opacity)
                         }.transition(.opacity)
-                    } else if narrowInspectorExpanded && layout.width < 800 {
+                    } else if !model.items.isEmpty && narrowInspectorExpanded && layout.width < 800 {
                         VStack(spacing:0) {
                             HStack { Button("返回照片列表") { narrowInspectorExpanded = false }; Spacer(); Text("照片检查器").font(.headline) }.padding(10)
                             Divider()
                             focusedPreview
                         }
                     }
-                    else { browser(layout) }
+                    else { browser }
                 }
                 .frame(maxWidth:.infinity,maxHeight:.infinity)
                 .subtleAnimation(model.previewVisible,duration:0.20)
@@ -94,10 +84,14 @@ struct PhotoQueueView: View {
                     guard model.migrationTargetConfirmed, !model.isBusy, !model.sharing else { return false }
                     return actions.acceptDrop(providers, false)
                 }
-                if let item = model.selectedItem, scope.includes(item,settings:model.settings) { detail(item) }
+                if !inspectorIsShown(layout), let item = model.selectedItem, scope.includes(item,settings:model.settings) { detail(item) }
+                queueStatusBar(layout)
             }
             .background(InterfaceStyle.gallery)
             .recordLayout("queue-scope-" + scope.rawValue)
+    }
+    private func inspectorIsShown(_ layout: QueueLayout) -> Bool {
+        !model.items.isEmpty && (layout.width >= 800 ? model.previewVisible : narrowInspectorExpanded)
     }
 
     @ViewBuilder private func coverSheet(_ item: PhotoQueueItem, size: CGSize) -> some View {
@@ -127,11 +121,14 @@ struct PhotoQueueView: View {
         }
     }
 
-    private func browser(_ layout: QueueLayout) -> some View {
-        ZStack {
-            if prefersGrid && !layout.twoLines { gridBrowser }
-            else { listBrowser(layout) }
-            if visibleItems.isEmpty { emptyState }
+    private var browser: some View {
+        GeometryReader { geometry in
+            let browserLayout = QueueLayout(width:geometry.size.width)
+            ZStack {
+                if prefersGrid { gridBrowser }
+                else { listBrowser(browserLayout) }
+                if visibleItems.isEmpty { emptyState }
+            }
         }
     }
     private var gridBrowser: some View {
@@ -148,6 +145,8 @@ struct PhotoQueueView: View {
                 .accessibilityIdentifier("photo-queue")
     }
     private func listBrowser(_ layout: QueueLayout) -> some View {
+        VStack(spacing:0) {
+            if !layout.twoLines && !visibleItems.isEmpty { columnHeadings(layout) }
                 List {
                     ForEach(visibleItems) { item in listPhoto(item,layout:layout) }
                 }
@@ -155,6 +154,7 @@ struct PhotoQueueView: View {
                 .environment(\.defaultMinListRowHeight, layout.twoLines ? 50 : 32)
                 .background(QueueScrollRestore(key:scope.rawValue + "-list-" + model.migrationFilterKey,memory:scrollMemory))
                 .accessibilityIdentifier("photo-queue")
+        }
     }
 
     private func coverRequestID(_ item: PhotoQueueItem) -> String {
@@ -225,11 +225,10 @@ struct PhotoQueueView: View {
             }
             if let frame = item.row.burst {
                 Text("连拍原序号：\(frame.index)；相机原始总帧数未知。").font(.caption).foregroundColor(.secondary)
-                Button("检查组成员与代表帧…") { model.burstReviewPresented = true }.disabled(model.isBusy || model.sharing)
             }
             coverButton(item)
             manualControls(item)
-            Button(model.selectedIDs.contains(item.id) ? "取消选择此照片" : "选择此照片") { model.toggleSelection(item) }
+            Button(model.selectedIDs.contains(item.id) ? "取消勾选此照片" : "勾选此照片") { model.toggleSelection(item) }
                 .disabled(model.isBusy || model.sharing)
         }
     }
@@ -244,8 +243,11 @@ struct PhotoQueueView: View {
     }
 
     private func heading(_ layout: QueueLayout) -> some View {
-        VStack(alignment:.leading,spacing:10) {
-            scopeFilters(layout)
+        VStack(alignment:.leading,spacing:8) {
+            HStack(spacing:12) {
+                scopeFilters(layout)
+                if layout.width >= 700 { browserControls(layout) }
+            }
             HStack(spacing:10) {
                 ForEach(MigrationPhotoFeature.allCases) { feature in
                     Toggle(feature.title,isOn:Binding(get:{ model.migrationFeatureFilters.contains(feature) },set:{ value in
@@ -254,35 +256,71 @@ struct PhotoQueueView: View {
                         .padding(.horizontal,6).padding(.vertical,4)
                         .background(InterfaceStyle.canvas).cornerRadius(InterfaceStyle.controlRadius)
                         .accessibilityIdentifier("feature-" + feature.rawValue)
+                        .help("多项勾选时，只显示同时包含这些特性的照片；不改变本轮处理范围")
+                }
+                if !model.burstGroups.isEmpty {
+                    Button("检查连拍组…") { model.burstReviewPresented = true }
+                        .font(.caption).fixedSize().accessibilityIdentifier("burst-review-button")
+                        .recordLayout("burst-review-button")
+                        .help("\(model.burstGroups.count) 组 · \(model.burstGroups.reduce(0) { $0 + $1.members.count }) 帧；检查组成员与代表帧")
+                        .disabled(model.isBusy || model.sharing)
                 }
                 Spacer(minLength:0)
-                if model.migrationSearchExpanded && layout.width >= 700 { searchField }
+                if model.migrationSearchExpanded && layout.width >= 700 { searchField.frame(maxWidth:240) }
                 Button {
-                    model.migrationSearchExpanded.toggle()
-                    if model.migrationSearchExpanded { searchFocused = true } else { model.migrationSearch = "" }
-                } label: { Image(systemName:model.migrationSearchExpanded ? "xmark.circle" : "magnifyingglass") }
-                    .accessibilityLabel(model.migrationSearchExpanded ? "收起并清除搜索" : "展开搜索")
+                    model.migrationSearchExpanded = true
+                    searchFocused = true
+                } label: { Image(systemName:"magnifyingglass") }
+                    .accessibilityLabel("搜索照片").accessibilityValue(model.migrationSearchExpanded ? "已展开" : "已收起")
                     .help("搜索文件名、来源或拍摄设备").keyboardShortcut("f",modifiers:.command)
                     .accessibilityIdentifier("queue-search-toggle")
+                if layout.width < 700 { browserControls(layout) }
             }
-            if model.migrationSearchExpanded && layout.width < 700 { HStack { Spacer(); searchField } }
-            HStack {
-                Text("就绪 \(model.migrationReadyItems.count) · 未转换 \(model.migrationUnconvertedItems.count)").font(.caption).foregroundColor(.secondary)
-                Button("查看计划…") { model.migrationReviewPresented = true }.font(.caption).disabled(!model.canReviewMigration)
-                Spacer(minLength:0)
-            }
-            HStack {
-                Text(model.hasExplicitSelection ? "已选 \(model.selectedIDs.count) 张 · 隐藏选中 \(model.hiddenMigrationSelectionCount) 张" : "范围：全部待处理")
-                    .font(.caption).foregroundColor(.secondary).monospacedDigit()
-                Spacer(minLength:0)
-                browserControls(layout)
-            }
-        }.padding(.horizontal,InterfaceStyle.Spacing.content).padding(.vertical,10)
+            if model.migrationSearchExpanded && layout.width < 700 { searchField }
+        }.padding(.horizontal,InterfaceStyle.Spacing.content).padding(.vertical,8)
             .frame(maxWidth:.infinity,alignment:.leading).background(InterfaceStyle.content)
     }
     private var searchField: some View {
-        TextField("搜索文件名或来源",text:$model.migrationSearch).textFieldStyle(.roundedBorder)
-            .frame(minWidth:120,maxWidth:210).focused($searchFocused).accessibilityIdentifier("queue-search")
+        HStack(spacing:4) {
+            TextField("搜索文件名、来源或设备",text:$model.migrationSearch).textFieldStyle(.roundedBorder)
+                .frame(minWidth:120,maxWidth:.infinity).focused($searchFocused).accessibilityIdentifier("queue-search")
+                .onAppear { searchFocused = true }
+                .dismissOnEscape(closeSearch)
+            Button(action:closeSearch) { Image(systemName:"xmark.circle.fill").foregroundColor(.secondary) }
+                .buttonStyle(.borderless).help("清除并收起搜索").accessibilityLabel("清除并收起搜索")
+        }
+    }
+    private func closeSearch() {
+        model.migrationSearch = ""
+        model.migrationSearchExpanded = false
+        searchFocused = false
+    }
+    private var selectionSummary: String {
+        if !model.hasExplicitSelection { return "范围：全部待处理照片" }
+        let hidden = model.hiddenMigrationSelectionCount
+        return "已选 \(model.selectedIDs.count) 张" + (hidden > 0 ? " · 隐藏选中 \(hidden) 张" : "")
+    }
+    private func queueStatusBar(_ layout: QueueLayout) -> some View {
+        VStack(spacing:0) {
+            Divider()
+            HStack(spacing:8) {
+                Text(selectionSummary).lineLimit(1).truncationMode(.tail).layoutPriority(1)
+                    .help(selectionSummary + "；筛选与预览不改变处理范围")
+                    .accessibilityIdentifier("queue-selection-summary")
+                if model.hasExplicitSelection {
+                    Button("恢复默认范围",action:model.clearSelection).disabled(model.isBusy || model.sharing)
+                        .help("清除显式勾选，恢复处理全部待处理照片；不会删除照片")
+                        .accessibilityIdentifier("queue-restore-default")
+                        .recordLayout("queue-restore-default")
+                }
+                Spacer(minLength:0)
+                if layout.width >= 700 || !model.hasExplicitSelection {
+                    Text("显示 \(visibleItems.count) / \(model.items.count)").foregroundColor(.secondary).lineLimit(1).monospacedDigit()
+                }
+                Button("查看计划…") { model.migrationReviewPresented = true }.disabled(!model.canReviewMigration)
+                    .help("查看就绪项、需人工处理和不能转换的照片；开始处理无需逐项确认")
+            }.font(.caption).padding(.horizontal,12).padding(.vertical,6)
+        }.background(InterfaceStyle.content).recordLayout("queue-status-bar")
     }
     private func scopeFilters(_ layout: QueueLayout) -> some View {
         HStack(spacing:4) {
@@ -294,24 +332,34 @@ struct PhotoQueueView: View {
             Button {
                 if layout.width >= 800 { model.previewVisible.toggle() } else { narrowInspectorExpanded.toggle() }
             } label: { Image(systemName:"sidebar.right") }
+                .disabled(model.items.isEmpty)
+                .help("展开或收起照片检查器（⌘⌥P）")
                 .keyboardShortcut("p",modifiers:[.command,.option]).accessibilityIdentifier("preview-button")
                 .recordLayout("preview-button").accessibilityLabel("开合照片检查器")
                 .accessibilityValue((layout.width >= 800 ? model.previewVisible : narrowInspectorExpanded) ? "已展开" : "已收起")
             Button { prefersGrid.toggle() } label: { Image(systemName:prefersGrid ? "list.bullet" : "square.grid.2x2") }
-                .help("切换网格或列表").accessibilityLabel("切换网格或列表").accessibilityIdentifier("queue-view-toggle")
+                .help(prefersGrid ? "切换为列表" : "切换为网格").accessibilityLabel("切换网格或列表")
+                .accessibilityValue(prefersGrid ? "当前为网格" : "当前为列表").accessibilityIdentifier("queue-view-toggle")
             Menu {
                 Button("选择当前筛选结果") { for item in visibleItems where !model.selectedIDs.contains(item.id) { model.toggleSelection(item) } }
                     .disabled(model.isBusy || model.sharing || visibleItems.isEmpty)
-                Button("取消选择（恢复默认范围）",action:model.clearSelection).disabled(!model.hasExplicitSelection || model.isBusy || model.sharing)
+                Button("取消全部勾选") { for item in model.items where model.selectedIDs.contains(item.id) { model.toggleSelection(item) } }
+                    .disabled(model.selectedIDs.isEmpty || model.isBusy || model.sharing)
+                Button("恢复默认处理范围",action:model.clearSelection).disabled(!model.hasExplicitSelection || model.isBusy || model.sharing)
                 Divider()
-                Button("重新检查来源") { model.rescan() }.disabled(!model.canRescan)
                 Button("查看静态照片") { scope = .still }
-                Divider()
-                Button("清空列表",role:.destructive,action:actions.clearSources).disabled(model.sources.isEmpty || model.isBusy || model.sharing)
+                Button("清除筛选并查看全部") { clearFilters() }
+                    .disabled(model.items.isEmpty)
             } label: { Image(systemName:"ellipsis.circle") }
-                .menuStyle(.borderlessButton).fixedSize().help("选择、来源与列表操作")
+                .menuStyle(.borderlessButton).fixedSize().help("勾选与筛选操作")
                 .accessibilityLabel("列表操作").accessibilityIdentifier("queue-more-menu").recordLayout("queue-more-menu")
         }.fixedSize()
+    }
+    private func clearFilters() {
+        model.migrationFeatureFilters = []
+        model.migrationSearch = ""
+        model.migrationSource = nil
+        scope = .all
     }
     private func showPreview(_ item: PhotoQueueItem) {
         model.selection = item.id
@@ -345,7 +393,11 @@ struct PhotoQueueView: View {
         // Sibling buttons keep opening the editor independent of card selection.
         VStack(spacing:0) {
           ZStack(alignment:.topTrailing) {
-            photoCardSelection(item)
+            PhotoThumbnail(source:item.source,isPreview:model.isPreview)
+                .frame(height:cardImageHeight).clipped().contentShape(Rectangle())
+                .onTapGesture { model.toggleSelection(item) }
+                .recordLayout("photo-image-" + item.id)
+                .accessibilityHidden(true)
             cardBadges(item).padding(8).frame(maxWidth:.infinity,alignment:.leading)
             VStack {
                 Spacer(minLength:0)
@@ -353,10 +405,12 @@ struct PhotoQueueView: View {
             }.frame(height:cardImageHeight)
           }
           Divider()
-          HStack {
-            Text(item.id == model.selection ? "当前预览" : item.manufacturer).font(.caption).foregroundColor(.secondary).lineLimit(1)
-            Spacer(minLength:0)
-            Button("预览") { showPreview(item) }.font(.caption)
+          HStack(spacing:6) {
+            photoCardSelection(item)
+            Button("预览") { showPreview(item) }
+                .buttonStyle(.borderless).font(.caption).padding(.vertical,4)
+                .help("预览与处理计划，不改变勾选")
+                .accessibilityLabel("预览「" + item.name + "」与处理计划")
           }.padding(.horizontal,10).padding(.vertical,7)
         }
             .background(InterfaceStyle.content).cornerRadius(InterfaceStyle.photoRadius)
@@ -365,6 +419,7 @@ struct PhotoQueueView: View {
                     lineWidth:model.selectedIDs.contains(item.id) ? 2 : 0.5).allowsHitTesting(false))
             .subtleAnimation(model.selectedIDs.contains(item.id),duration:0.12)
             .contextMenu { itemActions(item) }
+            .task(id:coverRequestID(item)) { model.requestCoverCandidates(item) }
             .help(item.relative + "\n封面：" + item.cover + "\n" + item.detail)
             .recordLayout("photo-card-" + item.id)
     }
@@ -373,23 +428,18 @@ struct PhotoQueueView: View {
 
     private func photoCardSelection(_ item: PhotoQueueItem) -> some View {
         Button { model.toggleSelection(item) } label: {
-            VStack(alignment:.leading,spacing:0) {
-                PhotoThumbnail(source:item.source,isPreview:model.isPreview)
-                    .frame(height:cardImageHeight).clipped()
-                    .recordLayout("photo-image-" + item.id)
-                HStack(spacing:6) {
-                    PhotoSelectionMark(selected:model.selectedIDs.contains(item.id))
+            HStack(spacing:6) {
+                PhotoSelectionMark(selected:model.selectedIDs.contains(item.id))
+                VStack(alignment:.leading,spacing:2) {
                     Text(item.name).font(.callout.weight(.medium)).foregroundColor(.primary)
                         .lineLimit(1).truncationMode(.middle)
+                    Text(item.id == model.selection ? "当前预览" : item.manufacturer).font(.caption).foregroundColor(.secondary).lineLimit(1)
                 }
-                .padding(.horizontal,10).padding(.vertical,10)
-                .frame(maxWidth:.infinity,alignment:.leading)
             }.frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).disabled(model.isBusy || model.sharing)
         .accessibilityAddTraits(model.selectedIDs.contains(item.id) ? .isSelected : [])
         .accessibilityLabel(item.name + "，" + model.displayState(item).title + "，" + item.hdr)
-        .task(id:item.id + model.settings.direction.rawValue + (item.row.version?.manualSignature ?? "")) { model.requestCoverCandidates(item) }
         .accessibilityHint("点击累加选择，再次点击取消此项；使用预览查看特性与处理计划")
     }
 
@@ -478,7 +528,7 @@ struct PhotoQueueView: View {
             Text("状态").frame(width: 92, alignment: .leading)
         }
         .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
-        .padding(.horizontal, 20).padding(.vertical, 6)
+        .padding(.leading,34).padding(.trailing,44).padding(.vertical,6)
         .background(InterfaceStyle.canvas)
     }
 
@@ -523,31 +573,35 @@ struct PhotoQueueView: View {
                 Text("照片会陆续显示在这里").font(.callout).foregroundColor(.secondary)
             } else if model.items.isEmpty {
                 if !short { MomentStaysBrandIcon().frame(width:64,height:64) }
-                Text(model.migrationTargetConfirmed ? "添加要迁移的照片" : "先选择照片要使用的目标平台")
+                Text(model.migrationTargetConfirmed ? "添加要迁移的照片" : "先选择照片的转换方向")
                     .font(.title3.weight(.semibold)).multilineTextAlignment(.center)
-                Text(model.migrationTargetConfirmed ? "拖入文件、文件夹，或从图库选择。实况、HDR 与连拍会按实际支持路径统一处理。" : "在顶部选择目标兼容格式，再添加来源。输出位置与目标格式分别设置。")
+                Text(model.migrationTargetConfirmed ? (model.settings.direction == .androidToAndroid || model.settings.direction == .honorToGoogle ? "拖入已支持来源的 JPEG 文件或文件夹。安卓互转仅 Google → 荣耀、荣耀 → Google；静态 HDR 保持单图。" : "拖入文件、文件夹，或从图库选择。实况、HDR 与连拍会按实际支持路径统一处理。") : "在顶部选择转换方向，再添加来源。输出位置另行设置；安卓互转仅支持 Google → 荣耀、荣耀 → Google 的已识别 JPEG。")
                     .font(.callout).foregroundColor(.secondary).multilineTextAlignment(.center)
-                HStack(spacing:12) {
-                    Button("选择文件或文件夹…",action:actions.chooseSources)
-                    if model.settings.direction != .androidToAndroid { Button("系统照片图库…",action:actions.importPhotos) }
-                }.disabled(!model.migrationTargetConfirmed || model.isBusy || model.sharing)
+                if model.migrationTargetConfirmed {
+                    Button("添加来源…") { model.sourceMenuRequested = true }
+                        .disabled(!model.canAppendSources)
+                        .help("在左侧来源菜单选择文件、文件夹或系统照片图库")
+                }
                 if !short {
                     Label("本机处理，保留原片",systemImage:"lock.shield")
                         .font(.caption).foregroundColor(.secondary)
                 }
             } else {
                 Image(systemName:scope.symbol).font(.title2).foregroundColor(.secondary).accessibilityHidden(true)
-                Text(scope.emptyTitle).font(.headline)
-                Button("查看全部 \(model.items.count) 张照片") { scope = .all }
+                Text(hasActiveFilters ? "没有符合筛选条件的照片" : scope.emptyTitle).font(.headline)
+                Button(hasActiveFilters ? "清除筛选并查看全部 \(model.items.count) 张" : "查看全部 \(model.items.count) 张照片") { clearFilters() }
             }
         }
         .padding(InterfaceStyle.Spacing.content)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(InterfaceStyle.gallery)
     }
+    private var hasActiveFilters: Bool {
+        !model.migrationFeatureFilters.isEmpty || !model.migrationSearch.isEmpty || model.migrationSource != nil
+    }
 
     private func detail(_ item: PhotoQueueItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             Divider()
             HStack(spacing: 8) {
                 Button { model.detailExpanded.toggle() } label: {
@@ -577,7 +631,7 @@ struct PhotoQueueView: View {
                 }.frame(maxHeight: short ? 70 : 120).padding(.horizontal, 12)
                     .transition(.opacity)
             }
-        }.padding(.bottom, 10).background(InterfaceStyle.canvas)
+        }.padding(.bottom, 6).background(InterfaceStyle.canvas)
             .subtleAnimation(model.detailExpanded,duration:0.20)
             .recordLayout("file-detail")
     }

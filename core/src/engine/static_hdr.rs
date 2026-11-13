@@ -11,6 +11,9 @@ use std::path::Path;
 
 /// Admit only complete stills without motion claims and with known HDR resources.
 pub fn inspect(native: &dyn Native, data: &[u8]) -> Result<Option<&'static str>> {
+    if crate::live::still_content_identifier(data)?.is_some() {
+        return failure("图片带 Apple 实况配对标识，必须检查完整配对；不能作为独立静态 HDR 处理");
+    }
     if !scan::confirmed_static(data) {
         return Ok(None);
     }
@@ -37,11 +40,6 @@ pub fn inspect(native: &dyn Native, data: &[u8]) -> Result<Option<&'static str>>
             }
             return Ok(None);
         }
-        for r in maps.iter().skip(1) {
-            if native.image_decodes(&data[r.clone()]) == Some(false) {
-                return failure("HDR 增益图损坏");
-            }
-        }
         kind
     };
     if native.image_decodes(data) == Some(false) {
@@ -52,7 +50,7 @@ pub fn inspect(native: &dyn Native, data: &[u8]) -> Result<Option<&'static str>>
 
 fn settings(options: &ConversionOptions) -> Value {
     json!({"direction":options.direction,"legacy_hdr":options.legacy_hdr,
-        "android":options.android.json(),"export_data_files":options.export_data_files})
+        "android":options.android.json(),"hdr_policy":hdr::POLICY,"export_data_files":options.export_data_files})
 }
 
 pub fn convert(
@@ -91,7 +89,7 @@ pub fn convert(
     if !overwrite && target.exists() {
         let m = output::verify(target)?;
         if m["source_format"] != "static-hdr"
-            || m["implementation"] != "static-hdr-1"
+            || m["implementation"] != "static-hdr-3"
             || m["source_sha256"] != source_hash
             || m["options"] != opts
             || m["hdr"]
@@ -105,7 +103,7 @@ pub fn convert(
         }
         return Ok(
             json!({"status":"resumed","source":paths::json(source),"output":paths::json(target),
-            "output_files":m["output_files"],"detail":"已验证静态 HDR，跳过重复处理"}),
+            "output_files":m["output_files"],"hdr":m["hdr"],"processing_kind":m["processing_kind"],"detail":hdr::summary(&m["hdr"])}),
         );
     }
     if token.is_cancelled() {
@@ -124,8 +122,8 @@ pub fn convert(
     let mut report = Value::Object(processed.report);
     // Reuse the existing HEIC/JPEG exporter when its actual encoding options apply.
     // Private extensions stay on the independent HDR path, never a lossy generic re-encode.
-    if options.direction == "to-android" && processed.honor_extension.is_none() {
-        let (exported, exported_report) = hdr::prepare_export(
+    if options.direction == "to-android" {
+        let (exported, exported_report) = hdr::prepare_with_policy(
             native,
             source,
             &hdr::ExportOptions {
@@ -134,9 +132,23 @@ pub fn convert(
                 image_quality: options.android.image_quality,
                 gain_quality: options.android.gain_quality,
             },
+            options.legacy_hdr,
         )?;
         image = exported;
         report = exported_report;
+    }
+    // Existing standard gain maps need no empirical reconstruction. Deliver
+    // their complete original bytes through the same verified transaction,
+    // classified as a copy rather than a new HDR conversion.
+    let original_copy = image == original
+        && kind == "Ultra HDR"
+        && report["outcome"] == "preserved"
+        && crate::hdr::known_ultra_version(&image)?;
+    if image == original && !original_copy {
+        return Ok(
+            json!({"status":"skipped","source":paths::json(source),"hdr":report,
+            "detail":format!("{}；没有可执行的静态转换，可按已选策略原样导出",hdr::summary(&report))}),
+        );
     }
     if hdr::honor_private(&image)? != processed.honor_extension {
         return failure("静态私有 HDR 扩展未完整保留");
@@ -158,7 +170,8 @@ pub fn convert(
     let names = json!({"static":name});
     write(&stage.path().join(&name), &image)?;
     let _ = super::copy_mtime(source, &stage.path().join(&name));
-    let m = json!({"source_format":"static-hdr","implementation":"static-hdr-1","source":paths::json(source),
+    let processing_kind = if original_copy { "original-copy" } else { "hdr-conversion" };
+    let m = json!({"source_format":"static-hdr","implementation":"static-hdr-3","processing_kind":processing_kind,"source":paths::json(source),
         "source_sha256":source_hash,"options":opts,"output_files":names,
         "output_sha256":{name.clone():hash_file(&stage.path().join(&name))?},
         "timing":{"applicable":false},"hdr":report,"warnings":processed.warnings});
@@ -174,6 +187,6 @@ pub fn convert(
     )?;
     Ok(
         json!({"status":"converted","source":paths::json(source),"output":paths::json(target),
-        "output_files":names,"hdr":report,"warnings":processed.warnings,"detail":"静态 HDR 已处理，交付静态图片"}),
+        "output_files":names,"processing_kind":processing_kind,"hdr":report,"warnings":processed.warnings,"detail":format!("{}；{}",if original_copy {"静态 HDR 原样输出，直接保留已有 gainmap，未重建 HDR"} else {"静态图片已处理"},hdr::summary(&report))}),
     )
 }

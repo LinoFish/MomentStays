@@ -6,8 +6,8 @@ protocol SettingsChoice: RawRepresentable, CaseIterable, Hashable, Codable where
 }
 
 enum ConversionDirection: String, SettingsChoice {
-    case toApple = "to-apple", toAndroid = "to-android", androidToAndroid = "android-to-android"
-    var title: String { switch self { case .toApple: return "照片 → Apple"; case .toAndroid: return "苹果实况 → 安卓"; case .androidToAndroid: return "安卓 → 安卓" } }
+    case toApple = "to-apple", toAndroid = "to-android", androidToAndroid = "android-to-android", honorToGoogle = "honor-to-google"
+    var title: String { switch self { case .toApple: return "受支持照片 → Apple"; case .toAndroid: return "苹果实况 → 安卓"; case .androidToAndroid: return "Google → 荣耀（仅 JPEG）"; case .honorToGoogle: return "荣耀 → Google（仅 JPEG）" } }
     var exportsAndroid: Bool { self != .toApple }
 }
 
@@ -30,21 +30,22 @@ enum AndroidVendor: String, SettingsChoice {
 // Destination presets describe the actual supported format route. Keep the
 // engine directions internal and retain their stored values for old tasks.
 enum MigrationTargetPreset: String, SettingsChoice {
-    case apple, google, xiaomi, samsung, huawei, honor, oppo, vivo, googleToHonor
+    case apple, google, xiaomi, samsung, huawei, honor, oppo, vivo, googleToHonor, honorToGoogle
     var title: String {
         switch self {
-        case .apple: return "Apple 照片兼容"
-        case .google: return "Android · Google / 通用"
-        case .xiaomi: return "Android · 小米"
-        case .samsung: return "Android · 三星"
-        case .huawei: return "Android · 华为"
-        case .honor: return "荣耀兼容 · Apple 实况来源"
-        case .oppo: return "Android · OPPO"
-        case .vivo: return "Android · vivo V2"
-        case .googleToHonor: return "荣耀兼容 · Google 动态 JPEG 来源"
+        case .apple: return "受支持照片 → Apple（实况 / HDR / 连拍）"
+        case .google: return "苹果实况 → Google / 通用"
+        case .xiaomi: return "苹果实况 → 小米"
+        case .samsung: return "苹果实况 → 三星"
+        case .huawei: return "苹果实况 → 华为"
+        case .honor: return "苹果实况 → 荣耀（备用）"
+        case .oppo: return "苹果实况 → OPPO"
+        case .vivo: return "苹果实况 → vivo V2"
+        case .googleToHonor: return "Google → 荣耀（JPEG）"
+        case .honorToGoogle: return "荣耀 → Google（JPEG）"
         }
     }
-    var direction: ConversionDirection { self == .apple ? .toApple : self == .googleToHonor ? .androidToAndroid : .toAndroid }
+    var direction: ConversionDirection { self == .apple ? .toApple : self == .googleToHonor ? .androidToAndroid : self == .honorToGoogle ? .honorToGoogle : .toAndroid }
     var vendor: AndroidVendor {
         switch self {
         case .xiaomi: return .xiaomi
@@ -59,13 +60,15 @@ enum MigrationTargetPreset: String, SettingsChoice {
     var detail: String {
         switch self {
         case .apple: return "受支持实况、静态 HDR 与荣耀 JPEG 连拍 → Apple；连拍允许缺帧，保留原序号。"
-        case .googleToHonor: return "仅支持已验证结构的 Google Motion Photo JPEG → 荣耀，不代表全部安卓互转。"
-        default: return "Apple 实况 → 目标兼容格式；本地静态 HDR 独立处理。具体支持以照片检查结果为准。"
+        case .googleToHonor: return "Google → 荣耀：仅支持已验证的 Google Motion Photo JPEG；不支持 HEIC。安卓互转仅此方向和荣耀 → Google。"
+        case .honorToGoogle: return "荣耀 → Google：仅支持已识别荣耀实况 JPEG；静态 HDR 独立输出单图，具体支持以照片检查结果为准；不支持 HEIC。"
+        default: return "\(title)；\(vendor.supportsHEIC ? "JPEG / HEIC" : "仅 JPEG")。本地静态 HDR 独立处理，具体支持以照片检查结果为准。"
         }
     }
     static func current(_ settings: ConversionSettings) -> Self {
         if settings.direction == .toApple { return .apple }
         if settings.direction == .androidToAndroid { return .googleToHonor }
+        if settings.direction == .honorToGoogle { return .honorToGoogle }
         return Self(rawValue:settings.vendor.rawValue) ?? .google
     }
 }
@@ -159,6 +162,11 @@ struct ConversionSettings: Equatable, Codable {
     var gainQuality = 0.95
     var preserveJPEG = true
     var legacyHDR = true
+    // Presentation only: retain the stored preference even when this output cannot use it.
+    var privateHDRExperimentAvailable: Bool {
+        direction != .androidToAndroid && !(direction == .toApple && exportMode == .auxiliaryOnly)
+    }
+    var privateHDRExperimentEnabled: Bool { legacyHDR && privateHDRExperimentAvailable }
     var exportDataFiles = false
     var track: VideoTrack = .primary
     var exportMode: ExportMode = .livePhoto
@@ -187,7 +195,7 @@ struct ConversionSettings: Equatable, Codable {
     }
 
     var options: ConversionOptions {
-        if direction == .androidToAndroid {
+        if direction == .androidToAndroid || direction == .honorToGoogle {
             var result = ConversionOptions(legacyHDR: legacyHDR)
             result.direction = direction.rawValue
             result.exportDataFiles = exportDataFiles
@@ -208,9 +216,10 @@ struct ConversionSettings: Equatable, Codable {
     }
 
     var summary: String {
-        if direction == .androidToAndroid { return "暂仅支持 Google → 荣耀 · JPEG 原编码" }
-        if direction == .toAndroid { return "\(vendor.title) · \(container == .heic ? "HEIC 原编码" : "JPEG")" }
-        var parts = [track.title,exportMode.title]
+        if direction == .androidToAndroid { return "Google → 荣耀 · JPEG 原编码" }
+        if direction == .honorToGoogle { return "荣耀 → Google · JPEG" }
+        if direction == .toAndroid { return "苹果实况 → \(vendor.title) · \(container == .heic ? "HEIC 原编码" : "JPEG")" }
+        var parts = [direction.title,track.title,exportMode.title]
         if exportMode == .withCandidates { parts.append((candidateDelivery ?? .staticPhotos).title) }
         if !(coverSelections ?? [:]).isEmpty && exportMode != .auxiliaryOnly { parts.append("已选择高清候选封面") }
         return parts.joined(separator:" · ")

@@ -19,6 +19,8 @@
 use crate::mp4::{self, bx, full, BoxRef, Movie};
 use crate::{fail, fail_as, ErrorKind, Result};
 use std::collections::HashSet;
+#[path = "remux_audio.rs"]
+mod audio;
 
 /// Output movie timescale. Internal: part of the file format, not API.
 const MOVIE_TIMESCALE: u32 = 1_000_000;
@@ -866,6 +868,13 @@ fn remux_mov_policy(
     media: bool,
 ) -> Result<(Vec<u8>, Movie)> {
     let (mut tracks, mut max_track_id) = parse_tracks(data, movie, video_index, audio)?;
+    for track in tracks.iter_mut().filter(|t| t.handler == "soun") {
+        for table in &mut track.stbl_ordered {
+            if &table[4..8] == b"stsd" {
+                *table = audio::quicktime_descriptions(table)?;
+            }
+        }
+    }
     if media {
         if !simple_media_timeline(data, movie, video_index)? {
             return fail("编辑时间线不能安全规范化");
@@ -910,6 +919,9 @@ pub fn remux_to_mp4(data: &[u8]) -> Result<Vec<u8>> {
 /// byte-identical. Unknown packing/layouts fail rather than guessing.
 fn mp4_sound_entry(d: &[u8], entry: &BoxRef) -> Result<Vec<u8>> {
     let raw = &d[entry.start..entry.end];
+    if entry.is(b"mp4a") {
+        return audio::iso_description(raw);
+    }
     if !entry.is(b"lpcm") {
         return Ok(raw.to_vec());
     }

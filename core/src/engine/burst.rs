@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-const REVISION: &str = "honor-burst-1";
+const REVISION: &str = "honor-burst-2";
 pub const MAX_IMAGE: u64 = 256 << 20;
 fn image_read(path: &Path) -> Result<Vec<u8>> {
     use std::io::Read;
@@ -106,12 +106,8 @@ pub fn inspect(file: &Path, data: &[u8]) -> Option<Value> {
         if crate::live::still_content_identifier(data)?.is_some() {
             return failure("连拍含 Apple 实况配对标识；此组合尚未验证，未丢弃配对资源");
         }
-        if super::static_hdr::inspect(&super::NoNative, data)?.is_some() {
-            return failure("连拍与 HDR 组合尚未验证，未剥离 HDR");
-        }
-        if !jpeg::auxiliary(data)?.is_empty() && jpeg::auxiliary(data)?.len() != 1 {
-            return failure("连拍含未知辅助资源，未处理");
-        }
+        // Validate container framing; unknown but intact HDR resources are retained.
+        let _ = jpeg::auxiliary(data)?;
         let _ = jpeg::coding_hash(data)?;
         Ok(())
     })();
@@ -367,7 +363,9 @@ pub struct Choice<'a> {
 }
 
 /// One group is one output transaction. Selected members are never silently filled.
-pub fn convert(
+// Keep the publication boundary explicit, like output::publish.
+#[allow(clippy::too_many_arguments)]
+pub fn convert_with_policy(
     native: &dyn Native,
     plan: &Value,
     selected: &[PathBuf],
@@ -375,6 +373,7 @@ pub fn convert(
     target: &Path,
     token: &StopToken,
     overwrite: bool,
+    legacy_hdr: bool,
 ) -> Result<Value> {
     let Choice {
         representative,
@@ -435,7 +434,7 @@ pub fn convert(
     } else {
         "burst-marker-conversion"
     };
-    let identity = json!({"group":plan["id"],"members":hashes,"selected":selected,"representative":representative,"independent":independent});
+    let identity = json!({"group":plan["id"],"members":hashes,"selected":selected,"representative":representative,"independent":independent,"hdr_policy":super::hdr::POLICY,"legacy_hdr":legacy_hdr});
     let group = uuid(&identity.to_string());
     if !overwrite && target.exists() {
         let m = output::verify(target)?;
@@ -447,7 +446,7 @@ pub fn convert(
             return failure("已停止");
         }
         return Ok(
-            json!({"processing_kind":processing_kind,"status":"resumed","source":paths::json(&all[0]),"output":paths::json(target),"output_files":m["output_files"],"burst":m["burst"],"detail":if processing_kind == "original-copy" {"独立照片原样输出已校验复用；未转换连拍标记"} else {"整组文件已校验；图库成组状态需单独回查"}}),
+            json!({"processing_kind":processing_kind,"status":"resumed","source":paths::json(&all[0]),"output":paths::json(target),"output_files":m["output_files"],"burst":m["burst"],"hdr":m["hdr"],"detail":format!("已校验复用；{}",super::hdr::summary(&m["hdr"])),"processing_detail":if processing_kind == "original-copy" {"独立照片原样输出已校验复用；未转换连拍标记"} else {"整组文件已校验；图库成组状态需单独回查"}}),
         );
     }
     let stage = output::Stage::new(target)?;
@@ -455,6 +454,7 @@ pub fn convert(
     let mut outputs = BTreeMap::new();
     let mut members = Vec::new();
     let mut folded = HashSet::new();
+    let mut hdr_counts = json!({"converted":0,"preserved":0,"ignored":0,"not-applicable":0});
     for (i, file) in all.iter().filter(|f| selected_set.contains(f)).enumerate() {
         if token.is_cancelled() {
             return failure("已停止，整组未发布");
@@ -475,11 +475,35 @@ pub fn convert(
             file.display(),
             hashes[&file.to_string_lossy().into_owned()]
         ));
-        let out = if independent || selected.len() == 1 {
-            data.clone()
+        let (prepared, hdr) = if processing_kind == "original-copy" {
+            (
+                data.clone(),
+                json!({"status":"not-applicable","outcome":"not-applicable","policy":super::hdr::POLICY,"reason":"独立照片原样输出，未执行 HDR 转换"}),
+            )
         } else {
-            mark(&data, &group, &photo)?
+            let processed = super::hdr::process(
+                native,
+                data.clone(),
+                super::hdr::Options {
+                    try_private_hdr: legacy_hdr,
+                    already_ultra_hdr: super::hdr::is_ultra(&data)?,
+                    allow_legacy_conversion: true,
+                },
+            )?;
+            (processed.image, Value::Object(processed.report))
         };
+        let hdr_key = hdr["outcome"].as_str().unwrap_or("ignored");
+        hdr_counts[hdr_key] = json!(hdr_counts[hdr_key].as_u64().unwrap_or(0) + 1);
+        let out = if processing_kind == "original-copy" {
+            prepared.clone()
+        } else {
+            mark(&prepared, &group, &photo)?
+        };
+        if crate::format::auxiliary_hashes(&out)? != crate::format::auxiliary_hashes(&prepared)?
+            || super::hdr::honor_private(&out)? != super::hdr::honor_private(&prepared)?
+        {
+            return failure("连拍标记写入改变 HDR 或私有资源");
+        }
         if native.image_decodes(&out) == Some(false)
             || jpeg::coding_hash(&data)? != jpeg::coding_hash(&out)?
         {
@@ -497,11 +521,13 @@ pub fn convert(
         write(&stage.path().join(&original), &data)?;
         names.insert(format!("burst_original_{i:03}"), original.clone());
         outputs.insert(original, sha256_hex(&data));
-        members.push(json!({"source":paths::json(file),"file":name,"index":evidence["index"],"source_cover":evidence["source_cover"],"representative":representative == file.to_str(),"photo_identifier":if independent || selected.len()==1 {Value::Null} else {json!(photo)}}));
+        members.push(json!({"source":paths::json(file),"file":name,"index":evidence["index"],"source_cover":evidence["source_cover"],"hdr":hdr,"prepared_auxiliary_sha256":crate::format::auxiliary_hashes(&prepared)?,"private_extension_sha256":super::hdr::honor_private(&prepared)?.map(|v|sha256_hex(&v)),"representative":representative == file.to_str(),"photo_identifier":if independent || selected.len()==1 {Value::Null} else {json!(photo)}}));
     }
     let burst = json!({"identity":identity,"group_id":plan["id"],"uuid":if independent || selected.len()==1 {Value::Null} else {json!(group)},"members":members,
         "independent":independent,"has_gaps":plan["has_gaps"],"completeness":"observed-only","original_total_known":false,"library_status":"not-checked"});
-    let m = json!({"processing_kind":processing_kind,"source_format":"honor-burst","implementation":REVISION,"output_files":names,"output_sha256":outputs,"burst":burst,"timing":{"applicable":false},"hdr":{"status":"preserved-sdr"}});
+    let hdr = json!({"policy":super::hdr::POLICY,"status":"per-member","counts":hdr_counts,
+        "reason":format!("HDR 转换 {} / 保留 {} / 忽略 {}；逐成员详情可查看",hdr_counts["converted"],hdr_counts["preserved"],hdr_counts["ignored"])});
+    let m = json!({"processing_kind":processing_kind,"source_format":"honor-burst","implementation":REVISION,"output_files":names,"output_sha256":outputs,"burst":burst,"timing":{"applicable":false},"hdr":hdr});
     write_json(&m, &stage.path().join(output::MANIFEST))?;
     output::verify(stage.path())?;
     validate_inventory(plan)?;
@@ -522,7 +548,7 @@ pub fn convert(
         true,
     )?;
     Ok(
-        json!({"processing_kind":processing_kind,"status":"converted","source":paths::json(&all[0]),"output":paths::json(target),"output_files":names,"burst":burst,"detail":if processing_kind == "original-copy" {"独立照片原样输出；未转换连拍标记"} else {"连拍整组文件已生成并校验；图库成组状态需单独回查"}}),
+        json!({"processing_kind":processing_kind,"status":"converted","source":paths::json(&all[0]),"output":paths::json(target),"output_files":names,"burst":burst,"hdr":hdr,"detail":format!("{}；{}",if processing_kind == "original-copy" {"独立照片原样输出；未转换连拍标记"} else {"连拍整组已生成并校验；图库成组需单独回查"},hdr["reason"].as_str().unwrap_or("")),"processing_detail":if processing_kind == "original-copy" {"独立照片原样输出；未转换连拍标记"} else {"连拍整组文件已生成并校验；图库成组状态需单独回查"}}),
     )
 }
 
@@ -536,7 +562,9 @@ pub fn verify(folder: &Path, manifest: &Value) -> Result<()> {
     let names = manifest["output_files"]
         .as_object()
         .ok_or_else(|| Error::new("连拍输出角色无效"))?;
-    if names.len() != members.len() * 2 || manifest["implementation"] != REVISION {
+    if names.len() != members.len() * 2
+        || ![REVISION, "honor-burst-1"].contains(&manifest["implementation"].as_str().unwrap_or(""))
+    {
         return failure("连拍输出缺少成员或原片归档");
     }
     let marked = burst["independent"] == false && members.len() > 1;
@@ -563,6 +591,27 @@ pub fn verify(folder: &Path, manifest: &Value) -> Result<()> {
         {
             return failure("连拍原片归档或图像编码校验失败");
         }
+        if manifest["implementation"] == REVISION {
+            if crate::format::auxiliary_hashes(&out)?
+                != m["prepared_auxiliary_sha256"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+                || json!(super::hdr::honor_private(&out)?.map(|v| sha256_hex(&v)))
+                    != m["private_extension_sha256"]
+            {
+                return failure("连拍 HDR 输出资源与处理记录不一致");
+            }
+            if m["hdr"]["outcome"] != "converted"
+                && crate::format::auxiliary_hashes(&out)?
+                    != crate::format::auxiliary_hashes(&original)?
+            {
+                return failure("未转换 HDR 的连拍资源发生变化");
+            }
+        }
         if marked {
             let (group, photo) = note_fields(&out)?;
             if group.as_deref() != burst["uuid"].as_str()
@@ -583,4 +632,19 @@ pub fn verify(folder: &Path, manifest: &Value) -> Result<()> {
         return failure("连拍必须恰有一张代表帧");
     }
     Ok(())
+}
+
+/// Compatibility entry point for existing callers; batch supplies its actual switch.
+pub fn convert(
+    native: &dyn Native,
+    plan: &Value,
+    selected: &[PathBuf],
+    choice: Choice<'_>,
+    target: &Path,
+    token: &StopToken,
+    overwrite: bool,
+) -> Result<Value> {
+    convert_with_policy(
+        native, plan, selected, choice, target, token, overwrite, true,
+    )
 }

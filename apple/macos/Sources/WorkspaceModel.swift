@@ -403,6 +403,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var recentOutput: URL?
     @Published var settingsPresented = false
     @Published var advancedExpanded = false
+    @Published var experimentalExpanded = false
     @Published var detailExpanded = false
     @Published var previewVisible = true
     @Published var sourceMenuRequested = false
@@ -783,7 +784,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func beginLibraryImport() -> UUID? {
-        guard settings.direction != .androidToAndroid, !isBusy, !sharing, !isPreview else { return nil }
+        guard settings.direction != .androidToAndroid && settings.direction != .honorToGoogle, !isBusy, !sharing, !isPreview else { return nil }
         return begin(.library, message: "正在选择图库资源…")
     }
 
@@ -909,7 +910,7 @@ extension WorkspaceModel {
         selectedIDs.subtracting(visibleMigrationItems(in:queueScope).map(\.id)).count
     }
     func migrationPlanSummary(_ item: PhotoQueueItem) -> String {
-        if displayState(item) == .copied { return "独立照片原样输出；未转换连拍标记。已有已校验结果，本轮不重复处理。" }
+        if displayState(item) == .copied { return "照片已按原资源输出，未计为转换。已有已校验结果，本轮不重复处理。" }
         if category(item) == .converted { return "已有已校验结果；不作为本次新转换" }
         if sourceOrigins[item.id] != nil && !item.isMotion && item.row.burst == nil {
             return "系统照片图库中的静态图片当前不转换或原样导出；可先将原件保存到文件，再添加该文件。"
@@ -925,7 +926,11 @@ extension WorkspaceModel {
         if !item.isConvertible || category(item) == .inspect { return item.detail.isEmpty ? "当前不能转换；可选择原样导出，不承诺目标兼容" : item.detail }
         if !item.isMotion { return "静态 HDR：独立单图处理；没有视频、封面或实况配对" }
         var parts = [settings.direction == .toApple ? "实况转换为 Apple 配对资源" : "实况转换为目标动态格式", "保留动态、声音与可信封面"]
-        if item.hdr.localizedCaseInsensitiveContains("HDR") { parts.append("HDR 按已支持结构保留或转换；不猜未知数据") }
+        if item.hdr.localizedCaseInsensitiveContains("HDR") {
+            parts.append(settings.privateHDRExperimentEnabled
+                ? "HDR 按实际能力处理；私有 HDR 转换属实验性尝试，无法处理时记录忽略原因，不阻断其他已支持步骤"
+                : "HDR 按标准兼容路径处理；私有 HDR 实验转换未启用或不适用于当前输出")
+        }
         if settings.coverIndex(for:item.source) != nil { parts.append("自选高清封面为 JPEG，不保留原封面的 HDR") }
         return parts.joined(separator:"；")
     }

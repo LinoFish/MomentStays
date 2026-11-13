@@ -142,6 +142,9 @@ pub fn scan(
         token,
         |i| match direction {
             "to-android" => android::scan_file_with_native(native, &entries[i], &relatives[i]),
+            "honor-to-google" => {
+                super::live::honor_to_google::scan_file(native, &entries[i], &relatives[i])
+            }
             "android-to-android" => transfer::scan_file(native, &entries[i], &relatives[i], None),
             _ => scanrow::scan_file(native, &entries[i], &relatives[i], None),
         },
@@ -254,6 +257,8 @@ pub fn run(
                 }
                 if options.direction == "to-android" {
                     android::scan_file_with_native(native, &entries[i], &relatives[i])
+                } else if options.direction == "honor-to-google" {
+                    super::live::honor_to_google::scan_file(native, &entries[i], &relatives[i])
                 } else if options.direction == "android-to-android" {
                     transfer::scan_file(native, &entries[i], &relatives[i], None)
                 } else {
@@ -440,7 +445,7 @@ pub fn run(
                 } else if invalid_choice {
                     failure("连拍成员版本变化，代表帧或独立导出确认已失效")
                 } else {
-                    crate::engine::burst::convert(
+                    crate::engine::burst::convert_with_policy(
                         native,
                         plan,
                         &selected,
@@ -451,6 +456,7 @@ pub fn run(
                         target,
                         token,
                         overwrite,
+                        options.legacy_hdr,
                     )
                 }
             } else if hdr_indices.contains(&active[offset]) {
@@ -459,6 +465,9 @@ pub fn run(
                 )
             } else {
                 match options.direction.as_str() {
+                    "honor-to-google" => super::live::honor_to_google::convert(
+                        native, file, target, options, token, overwrite, &timings,
+                    ),
                     "android-to-android" => {
                         transfer::convert(native, file, target, options, token, overwrite, &timings)
                     }
@@ -497,9 +506,21 @@ pub fn run(
                 .map(|(_, v)| v.clone())
                 .unwrap_or_else(|| vec![index]);
             for index in indices {
-                let detail = result["detail"].as_str().unwrap_or("").to_string();
+                let mut detail = result["detail"].as_str().unwrap_or("").to_string();
                 let mut item = result.clone();
                 item["source"] = s(&entries[index]);
+                if let Some(member) = result["burst"]["members"]
+                    .as_array()
+                    .and_then(|v| v.iter().find(|m| m["source"] == s(&entries[index])))
+                {
+                    if member["hdr"].is_object() {
+                        item["hdr_summary"] = result["hdr"].clone();
+                        item["hdr"] = member["hdr"].clone();
+                        detail =
+                            format!("{}；本帧 {}", detail, super::hdr::summary(&member["hdr"]));
+                        item["detail"] = json!(detail);
+                    }
+                }
                 results.insert(index, item);
                 let count_kind = if result["processing_kind"] == "original-copy"
                     && ["converted", "resumed"].contains(&status.as_str())
