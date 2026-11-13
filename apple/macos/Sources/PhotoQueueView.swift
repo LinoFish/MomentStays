@@ -18,8 +18,10 @@ struct PhotoQueueView: View {
 
     private var visibleItems: [PhotoQueueItem] { model.visibleMigrationItems(in:scope) }
     private var previewItem: PhotoQueueItem? {
-        if let selected = model.selectedItem { return selected }
-        return visibleItems.first
+        // Never inspect a photo the active category/filter hides.
+        let items = visibleItems
+        if let selected = model.selectedItem, items.contains(where:{ $0.id == selected.id }) { return selected }
+        return items.first
     }
     @State private var dropTargeted = false
 
