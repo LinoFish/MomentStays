@@ -779,6 +779,6 @@ pub fn convert(
     overwrite: bool,
 ) -> Result<Value> {
     convert_with_policy(
-        native, plan, selected, choice, target, token, overwrite, true,
+        native, plan, selected, choice, target, token, overwrite, false,
     )
 }

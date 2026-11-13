@@ -514,7 +514,9 @@ struct WorkspaceModelTests {
         var honorSettings = ConversionSettings()
         honorSettings.direction = .honorToGoogle
         check(MigrationTargetPreset.honorToGoogle.direction == .honorToGoogle && MigrationTargetPreset.current(honorSettings) == .honorToGoogle,"Honor to Google is an explicit persisted route and preset")
-        check(honorSettings.options.json["direction"] as? String == "honor-to-google" && honorSettings.options.json["legacy_hdr"] as? Bool == true,"Honor route forwards the shared HDR policy and enabled switch")
+        check(honorSettings.options.json["direction"] as? String == "honor-to-google" && honorSettings.options.json["legacy_hdr"] as? Bool == false,"Honor route defaults private HDR conversion off")
+        honorSettings.legacyHDR = true
+        check(honorSettings.options.json["legacy_hdr"] as? Bool == true,"Honor route allows explicit private HDR conversion")
         honorSettings.legacyHDR = false
         check(honorSettings.options.json["legacy_hdr"] as? Bool == false && honorSettings.destinations.allSatisfy { !$0.importsPhotos },"Honor route preserves disabled HDR and excludes Photos delivery")
         honorSettings.direction = .toAndroid
@@ -659,6 +661,7 @@ struct WorkspaceModelTests {
     }
 
     static func googleBurstTransportChecks() throws {
+        check(!ConversionSettings().legacyHDR && !ConversionOptions().legacyHDR,"HDR conversion defaults off in both UI and engine options")
         let rows: [[String:Any]] = (0..<2).map { i in
             let frame: [String:Any] = ["group_id":"google-transport", "source_group":"IMG_20230108_205201",
                 "index":i, "source_cover":i == 0, "supported":true, "reason":"",

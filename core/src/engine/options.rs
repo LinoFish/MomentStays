@@ -74,7 +74,7 @@ impl Default for ConversionOptions {
         ConversionOptions {
             direction: "to-apple".into(),
             android: AndroidOptions::default(),
-            legacy_hdr: true,
+            legacy_hdr: false,
             missing_time: "error".into(),
             time_domain: "auto".into(),
             video_track: "primary".into(),
@@ -180,7 +180,7 @@ impl ConversionOptions {
                 gain_quality: f("gain_quality", 0.95),
                 preserve_jpeg: b("preserve_jpeg", true),
             },
-            legacy_hdr: b("legacy_hdr", true),
+            legacy_hdr: b("legacy_hdr", false),
             missing_time: s("missing_time", "error"),
             time_domain: s("time_domain", "auto"),
             video_track: s("video_track", "primary"),

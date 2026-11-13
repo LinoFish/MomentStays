@@ -1,4 +1,4 @@
-MomentStays 1.7.0（留刻） — Android 动态照片 ↔ Apple Live Photo
+MomentStays 1.7.3（留刻） — Android 动态照片 ↔ Apple Live Photo
 
 系统要求
 macOS 12 Monterey 或更新系统。GitHub 发布的通用版同时支持 Intel 与 Apple Silicon。
@@ -42,7 +42,7 @@ iCloud 下载和运行期间监测需要明确启用；应用退出后停止监�
 缓存清理不删除用户输出文件夹中的文件或图库资产。
 
 图像和时间
-已有 Ultra HDR 原样保留。仅对能可靠解释的旧 Apple/ISO 增益数据尝试转换。
+已有 Ultra HDR 原样保留。私有 HDR 转换默认关闭，可在「导出设置」中手动开启实验性转换。
 SDR 不生成 HDR；未知私有 HDR 会保留数据或明确报错，不捏造增益图。
 HEIC 支持已验证的结构；未知项目、复杂位置或加密结构可被拒绝。
 音视频不重新编码，源封面通过实际视频样本时间映射，输出执行数据与 PTS 核对。

@@ -161,7 +161,7 @@ struct ConversionSettings: Equatable, Codable {
     var imageQuality = 0.95
     var gainQuality = 0.95
     var preserveJPEG = true
-    var legacyHDR = true
+    var legacyHDR = false
     // Presentation only: retain the stored preference even when this output cannot use it.
     var privateHDRExperimentAvailable: Bool {
         direction != .androidToAndroid && !(direction == .toApple && exportMode == .auxiliaryOnly)

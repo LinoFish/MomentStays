@@ -20,15 +20,18 @@ fn swift_option_json_is_kept() {
     let o = ConversionOptions::default();
     assert_eq!(
         o.json(),
-        json!({"legacy_hdr":"auto","missing_time":"error","time_domain":"auto","video_track":"primary",
+        json!({"legacy_hdr":"preserve","missing_time":"error","time_domain":"auto","video_track":"primary",
                "output_mode":"livephoto","repair_auxiliary_duration":false,"export_data_files":true})
     );
+    assert!(!o.legacy_hdr);
+    assert!(!ConversionOptions::from_request(&json!({})).legacy_hdr);
+    assert!(ConversionOptions::from_request(&json!({"legacy_hdr":true})).legacy_hdr);
     let mut a = o.clone();
     a.direction = "to-android".into();
     assert_eq!(
         a.json(),
         json!({"direction":"to-android","android":{"vendor":"google","container":"jpeg","hdr":"ultra",
-               "image_quality":0.95,"gain_quality":0.95,"preserve_jpeg":true},"legacy_hdr":true,"hdr_policy":"supported-private-hdr-2","time_domain":"auto","export_data_files":true})
+               "image_quality":0.95,"gain_quality":0.95,"preserve_jpeg":true},"legacy_hdr":false,"hdr_policy":"supported-private-hdr-2","time_domain":"auto","export_data_files":true})
     );
     a.direction = "android-to-android".into();
     assert_eq!(a.json()["layout"], "google-to-honor-a-modern-1");

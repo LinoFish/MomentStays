@@ -160,12 +160,45 @@ fn legacy_apple_hdr_is_converted_through_host_codecs() {
     let p = format::parse(&file).unwrap();
     assert!(!p.ultra);
     std::fs::write(src.0.join("hdr.jpg"), &file).unwrap();
+    let enabled = ConversionOptions {
+        legacy_hdr: true,
+        ..Default::default()
+    };
+    let preserved_out = Dir::new("hdr-default-off");
+    let preserved = batch::run(
+        &FakeHost,
+        &RunRequest {
+            sources: std::slice::from_ref(&src.0),
+            output: &preserved_out.0,
+            options: &ConversionOptions::default(),
+            scan_rows: None,
+            concurrency: Some(1),
+        },
+        &StopToken::new(),
+        None,
+        |_| {},
+    )
+    .unwrap();
+    let preserved_file = &files(&preserved)[0];
+    assert_eq!(preserved_file["status"], "converted");
+    assert_ne!(preserved_file["hdr"]["status"], "converted");
+    let kept = std::fs::read(preserved_out.0.join("hdr.jpg.livephoto/hdr.jpg")).unwrap();
+    assert_eq!(
+        jpeg::coding_hash(&kept).unwrap(),
+        jpeg::coding_hash(&file).unwrap()
+    );
+    let kept_ranges = jpeg::auxiliary(&kept).unwrap();
+    let original_ranges = jpeg::auxiliary(&file).unwrap();
+    assert_eq!(kept_ranges.len(), original_ranges.len());
+    for (a, b) in kept_ranges.iter().zip(&original_ranges).skip(1) {
+        assert_eq!(&kept[a.clone()], &file[b.clone()]);
+    }
     let outcome = batch::run(
         &FakeHost,
         &RunRequest {
             sources: std::slice::from_ref(&src.0),
             output: &out.0,
-            options: &ConversionOptions::default(),
+            options: &enabled,
             scan_rows: None,
             concurrency: Some(1),
         },
@@ -190,12 +223,7 @@ fn legacy_apple_hdr_is_converted_through_host_codecs() {
     );
     // Without host codecs the same file still converts, keeping the original HDR.
     let out2 = Dir::new("out2");
-    let plain = run(
-        std::slice::from_ref(&src.0),
-        &out2.0,
-        &ConversionOptions::default(),
-        None,
-    );
+    let plain = run(std::slice::from_ref(&src.0), &out2.0, &enabled, None);
     let g = &files(&plain)[0];
     assert_eq!(g["status"], "converted");
     assert_eq!(g["hdr"]["reason"], "旧 HDR 尝试转换未完成，原格式已保留");
@@ -275,6 +303,7 @@ fn honor_to_google_has_own_admission_and_versioned_transaction() {
     std::fs::write(&input, &bytes).unwrap();
     let options = ConversionOptions {
         direction: "honor-to-google".into(),
+        legacy_hdr: true,
         ..Default::default()
     };
     let row = route::scan_file(&NoNative, &input, "");

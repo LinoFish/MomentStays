@@ -171,7 +171,7 @@ Batch item states: `converted`, `resumed`, `skipped`, `failed`.
 More detail:
 
 - Ultra HDR output needs an ICC profile: if none is present, an sRGB profile is added only when the EXIF ColorSpace explicitly says sRGB. Otherwise conversion errors instead of guessing.
-- The **"Try compatible conversion for non-Ultra HDR"** switch (on by default) controls legacy compatibility paths. For Apple → Android, JPEG output uses Ultra HDR; plain SDR sources get no gain map.
+- The **"Try private HDR conversion (experimental)"** switch (off by default) controls legacy compatibility paths. For Apple → Android, JPEG output uses Ultra HDR; plain SDR sources get no gain map.
 - **HEIC → JPEG limit:** if a HEIC carries HDR that cannot be extracted safely on macOS 12 (some tmap/gain tracks), conversion fails explicitly and suggests keeping the HEIC encoding or providing a supported Apple HDR gain map.
 - **Edited versions** may already have lost their gain map; reports mark them "edited version has no HDR gain map", and the app never borrows the original's gain map for an edit.
 
@@ -323,7 +323,7 @@ Open the settings sheet with **More Options…** in the top toolbar. Items marke
 | Output | Library version | Unmodified original (default) / Current edited version |
 | Content (→Apple) | Export mode | Live Photo only (default) / + auxiliary track / auxiliary only |
 | Content (→Apple) | Video track | Primary motion track (default) / Auxiliary track |
-| HDR (→Apple) | Try compatible conversion for non-Ultra HDR | On by default |
+| HDR | Try private HDR conversion (experimental) | Off by default; does not disable burst processing |
 | Target (→Android) | Target vendor | Google/generic (default; recommended for newer Honor), Xiaomi, Samsung, Huawei, Honor (fallback), OPPO, vivo V2 |
 | Target (→Android) | Photo format | JPEG · Ultra HDR / HEIC · keep original encoding (HEIC for Samsung only; all other vendors force JPEG) |
 | Image quality (→Android) | Keep original JPEG encoding | On by default (no recompression) |

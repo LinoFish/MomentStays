@@ -13,7 +13,7 @@ struct ManualCoverChoice: Codable, Equatable {
 struct ConversionOptions {
     var direction = "to-apple"
     var android = AndroidOptions()
-    var legacyHDR = true
+    var legacyHDR = false
     var missingTime = "error"
     var timeDomain = "auto"
     var videoTrack = "primary"

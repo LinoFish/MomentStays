@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.7.1</strong>
+  <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.7.3</strong>
 </p>
 
 # MomentStays — Android Motion Photo ↔ Apple Live Photo Converter for macOS
@@ -96,6 +96,8 @@ Static-image passthrough paths keep the original JPEG/HEIC image encoding. Full 
 | Interpretable ISO gain data | Preserve the coded images and supplement metadata only when the complete parameters can be explained. |
 | HEIC passthrough | Retain coded image items, auxiliary data, and supported properties. Rendering Apple-private HDR on Android depends on the receiving device. |
 | SDR or unknown private HDR | Keep SDR as SDR. Report unsupported HDR rather than inventing a gain map or silently claiming conversion. |
+
+Private HDR conversion is off by default; enable it explicitly in export settings when needed. Burst processing remains available with HDR conversion off.
 
 Some validated private static extensions can be retained as opaque data. Retaining those bytes does not guarantee another device can render the private HDR format.
 
