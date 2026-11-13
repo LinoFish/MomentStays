@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/branding/github-header.svg" alt="MomentStays — The moment stays. Cover timestamps, original audio/video streams, HDR gain maps, and Photos library integration." width="100%">
+  <img src="docs/branding/github-header.svg" alt="MomentStays — The moment stays. Photo migration between Android and iPhone: Motion ⇄ Live Photos, burst groups, cover timestamps, HDR gain maps, and Photos library integration." width="100%">
 </p>
 
 <p align="center">
@@ -10,11 +10,16 @@
   <strong>macOS 12+ · Native SwiftUI · Local processing · Version 1.7.3</strong>
 </p>
 
-# MomentStays — Android Motion Photo ↔ Apple Live Photo Converter for macOS
+# MomentStays — Android ⇄ iPhone Photo Migration for macOS
 
-Convert Android Motion Photos to Apple Live Photos — and convert Live Photos back to Motion Photos — without re-encoding the original video or audio. MomentStays preserves the cover (key) photo timestamp, Ultra HDR gain maps, and works directly with your Apple Photos library. Supports Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos — JPEG, plus validated Samsung HEIC layouts.
+Move your photos between Android and iPhone, intact. MomentStays converts Android Motion Photos to Apple Live Photos and back, and can carry Android burst photos into Apple Photos as burst groups (experimental).
 
-安卓动态照片 ↔ 苹果实况照片（Live Photo）互转工具：在 Mac 上把三星、小米、Google、华为/荣耀、OPPO、vivo 的动态照片转换成 iPhone 实况照片，保留封面帧、原始音视频与 Ultra HDR，音视频不重新编码，全部本地处理，并可直接导入「照片」图库。
+- **Motion ⇄ Live Photos:** Samsung, Xiaomi, Google Pixel, Huawei/Honor, OPPO and vivo Motion Photos — JPEG, plus validated Samsung HEIC layouts.
+- **Burst migration (experimental):** recognizes JPEG bursts from Google, Samsung and known Huawei/Honor formats, keeps the original frame numbers, and lets you choose the representative photo. Newer Huawei/Honor formats may not be recognized.
+- **Nothing quietly lost:** the cover frame is matched by its original timestamp, video and audio are remuxed without re-encoding, and Ultra HDR gain maps are preserved.
+- **Local:** import results straight into your Photos library. Everything runs on your Mac; nothing is uploaded.
+
+安卓与 iPhone 之间的照片迁移工具：在 Mac 上互转安卓动态照片与苹果实况照片，并可将 Google、三星及已知华为/荣耀格式的连拍迁移为苹果连拍组（实验性）。保留封面帧、原始音视频与 Ultra HDR，全部本地处理。
 
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-12%2B-black" alt="macOS 12+">
@@ -28,9 +33,9 @@ Legacy Huawei 40-byte trailers require manual main-video frame selection; the ca
 
 **Download:** get the latest DMG/ZIP from [Releases](https://github.com/LinoFish/MomentStays/releases), or build from source below.
 
-Move Motion Photos between Android and Apple Live Photos while keeping the moment you chose as the cover. Remux the original video and audio, preserve supported image and HDR data, and bring converted Live Photos into your Photos library.
+Move photos between Android and Apple while keeping the moment you chose as the cover: Motion ⇄ Live Photos and burst groups, original video and audio remuxed, supported image and HDR data preserved, and results delivered straight into your Photos library.
 
-[Build & run](#build--run) · [Photos integration](#works-with-your-photos-library) · [Preservation details](#what-stays-with-your-photo) · [Documentation](docs/README.md)
+[Build & run](#build--run) · [Photos integration](#works-with-your-photos-library) · [Preservation details](#what-stays-with-your-photo) · [Burst migration](#burst-migration-experimental) · [Documentation](docs/README.md)
 
 **License: [GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino
 
@@ -47,6 +52,7 @@ If you can share a sample that reproduces the failure, please remove sensitive i
 | **The cover you chose** | Reads the source cover timestamp, maps it to an actual video frame, and writes the Live Photo timing marker. |
 | **Original video and audio** | Remuxes compressed samples without video/audio re-encoding. Checks sample data, counts, sizes, and presentation timestamps. |
 | **Image and HDR detail** | Keeps JPEG/HEIC image payloads on supported passthrough paths. Preserves existing Ultra HDR gain maps and handles supported Apple/ISO gain data through explicit models. |
+| **Bursts stay bursts** | Recognizes burst groups, keeps original frame numbers and writes Apple burst markers. You choose the representative photo; missing frames are not filled in, and you can export the frames as independent photos instead (experimental). |
 | **Your library workflow** | Reads complete original or matching edited resources from Photos, creates new Live Photos, and adds them to your selected album. |
 
 MomentStays changes the container and pairing metadata. Converting HEIC to JPEG, changing JPEG quality, or converting an HDR gain map can encode image or gain-map data; the original compressed video and audio remain preserved.
@@ -101,6 +107,25 @@ Private HDR conversion is off by default; enable it explicitly in export setting
 
 Some validated private static extensions can be retained as opaque data. Retaining those bytes does not guarantee another device can render the private HDR format.
 
+## Burst migration (experimental)
+
+Copy an Android burst to an iPhone and you get a pile of loose photos. MomentStays recognizes the burst group and writes Apple burst markers so Photos groups it again.
+
+| Source | Recognized when |
+| --- | --- |
+| Google | JPEG bursts with original `IMG_date_time_BURSTnnn[_COVER]` filenames |
+| Samsung | JPEG bursts carrying valid SEF burst information |
+| Huawei / Honor | JPEG bursts in known filename formats; newer Huawei/Honor formats may not be recognized |
+
+- **Direction:** Android → Apple only, JPEG only.
+- **Representative photo:** you choose it in the burst migration plan; the first frame is never assumed.
+- **Missing frames:** existing members keep their original numbers; gaps are not filled and the original total is not guessed.
+- **Independent export:** optionally export the selected frames as-is, without burst markers.
+- **Originals and checks:** source files are archived intact; after import, Photos membership and the representative photo are checked.
+- **HDR:** private HDR conversion is off by default and does not affect burst processing.
+
+Bursts from Xiaomi, OPPO, vivo and other brands, and HEIC bursts, are not supported yet. Experimental support is based on known file formats, not every device or OS version.
+
 ## Supported workflows
 
 | Direction | Formats and targets |
@@ -108,7 +133,8 @@ Some validated private static extensions can be retained as opaque data. Retaini
 | Android → Apple | Google-compatible Motion Photo JPEG, supported Huawei/Honor, Samsung SEF, OPPO and vivo V2 containers; validated Samsung HEIC layouts → JPEG/HEIC + MOV |
 | Apple → Android, JPEG | Google/generic (recommended for newer Honor), Xiaomi, Samsung, Huawei, Honor (fallback), OPPO, vivo V2 |
 | Apple → Android, HEIC | Samsung; retains the existing HEIC encoding (Google and Xiaomi Motion Photos do not use HEIC) |
-| Android → Android | Google → Honor only; validated Google Motion Photo JPEG, preserving the complete original video and source cover |
+| Android → Android | Google → Honor: validated Google Motion Photo JPEG, preserving the complete original video and source cover; Honor → Google: recognized Honor Motion Photo JPEG. No HEIC |
+| Burst, Android → Apple (experimental) | JPEG bursts from Google, Samsung and known Huawei/Honor formats → JPEG with Apple burst markers, or independent photos |
 
 Batch processing includes progress, cancellation, verified resume, skip/overwrite decisions, optional JSON manifests/reports, and separate auxiliary-track export. A single-frame auxiliary track is never stretched into fabricated motion.
 
@@ -212,7 +238,7 @@ Add the Motion Photo file (or a folder, or a Photos-library selection) in Moment
 
 Yes. In the Apple → Android direction, MomentStays reads the paired image + MOV and its still-image-time marker, and writes a Motion Photo for Google/generic (recommended for newer Honor phones), Xiaomi, Samsung, Huawei, Honor (fallback), OPPO, or vivo V2 layouts (JPEG), or the Samsung layout (HEIC; Google and Xiaomi Motion Photos are JPEG-only).
 
-Newer Honor phones have been verified to recognize Google-format files exported by MomentStays. The Honor option remains a fallback. The separate Android → Android direction supports only safely validated Google Motion Photo JPEG → Honor; unsupported or ambiguous structures are rejected.
+Newer Honor phones have been verified to recognize Google-format files exported by MomentStays. The Honor option remains a fallback. The separate Android → Android direction supports Google → Honor (safely validated Google Motion Photo JPEG) and Honor → Google (recognized Honor Motion Photo JPEG); unsupported or ambiguous structures are rejected.
 
 ### Does converting a Motion Photo lose quality?
 
@@ -221,6 +247,14 @@ No video or audio re-encoding takes place: the original compressed samples are r
 ### Which phones and formats are supported?
 
 Google-compatible Motion Photo JPEGs, supported Samsung (including SEF and validated HEIC layouts), Xiaomi, Huawei/Honor, OPPO, and vivo V2 containers. See the Supported workflows table above for the exact directions and formats.
+
+### Do Android bursts stay grouped on iPhone?
+
+Yes, experimentally. MomentStays writes Apple burst markers and checks the group and representative photo after import into Photos. You choose the representative photo, or export the frames as independent photos.
+
+### Which brands' bursts are supported?
+
+Experimental support covers JPEG bursts from Google, Samsung and known Huawei/Honor formats, Android → Apple only. Newer Huawei/Honor formats may not be recognized; Xiaomi, OPPO and vivo bursts and HEIC bursts are not supported yet.
 
 ### Is MomentStays free and private?
 
