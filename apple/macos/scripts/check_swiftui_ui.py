@@ -81,7 +81,8 @@ for name, width, height, flags in cases:
         if metrics["output_menu_selected"] == "ask":
             # 1.7 default: the user picks a destination first; the menu lists destinations only.
             assert "文件夹" in metrics["output_menu_titles"] and "相册" in metrics["output_menu_titles"],metrics
-            assert metrics["output_destination"] == ("photos" if "--ui-output-switch" in flags else "ask"),metrics
+            # Fixture previews never commit an ask-first choice (it needs a real folder/album dialog).
+            assert metrics["output_destination"] == "ask",metrics
         else:
             assert metrics["output_menu_selected"] == "folder" and "更改文件夹…" in metrics["output_menu_titles"],metrics
             assert metrics["output_destination"] == ("photos" if "--ui-output-switch" in flags else "folder"),metrics
