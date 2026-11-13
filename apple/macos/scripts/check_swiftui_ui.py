@@ -110,8 +110,10 @@ for name, width, height, flags in cases:
         if "--ui-expand-settings" in flags:
             assert check["settings_sheet_visible"] and not check["inspector_visible"], (name, "duplicated settings", check)
     if name == "wide":
-        assert not metrics["inspector_visible"] and metrics["queue_width"] >= 1000, metrics
-        assert metrics["frames"]["queue-scopes"]["x"] < 100, (name,"photo toolbar is not aligned with the gallery",metrics)
+        # 1.7 layout keeps the source sidebar; the queue must take all remaining width.
+        sidebar = metrics["frames"]["source-sidebar"]["width"]
+        assert not metrics["inspector_visible"] and metrics["queue_width"] >= metrics["frame_width"] - sidebar - 2, metrics
+        assert metrics["frames"]["queue-scopes"]["x"] - metrics["frames"]["queue-list"]["x"] < 40, (name,"photo toolbar is not aligned with the gallery",metrics)
         assert metrics["queue_height"] >= 490, (name,"compact toolbar must leave more photo space",metrics)
     if name == "compact-settings":
         assert metrics["settings_sheet_visible"], metrics
