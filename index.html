@@ -64,8 +64,7 @@ html[lang=en] .lede{line-height:1.5;max-width:28em}
 .strip::before{top:8px}.strip::after{bottom:8px}
 .f{position:relative;aspect-ratio:4/3;border-radius:2px;background:linear-gradient(160deg,var(--a),var(--b));transition:filter .6s;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}.f:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
 .f span{position:absolute;right:6px;bottom:6px;font-size:12px;line-height:1.5;color:#D5DBE1;background:rgba(0,0,0,.42);padding:0 6px;border-radius:2px;font-variant-numeric:tabular-nums}
-.f.pick span{color:#F6C67F}.f svg{position:absolute;inset:0;width:100%;height:100%}@keyframes wag{from{transform:rotate(-10deg)}to{transform:rotate(12deg)}}.f .tail{animation:wag 1.1s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:100% 50%}
-.ring{position:absolute;left:0;top:0;border:3px solid var(--amber);border-radius:5px;pointer-events:none;transition:transform 1.1s cubic-bezier(.65,0,.25,1),border-color .5s,opacity .4s}
+.f.pick span{color:#F6C67F}
 
 
 
@@ -129,30 +128,20 @@ footer{padding:44px 0 56px;font-size:14px;color:var(--faint)}
 .fs{font-family:var(--serif);color:var(--amber-t);margin-top:14px;font-size:16px}
 @media (max-width:900px){.nav .lk{display:none}.cols{grid-template-columns:1fr}.keep{grid-template-columns:1fr}.keep dt{padding:0}}
 @media (max-width:640px){body{font-size:16px}.strip{grid-template-columns:repeat(4,1fr);row-gap:34px;padding:26px 14px}.steps{grid-template-columns:1fr;gap:26px}.stripcap{flex-direction:column;gap:4px}.replay{align-self:flex-start}}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.ring,.btn{transition:none}.f .tail{animation:none}}
-#feedback p{color:var(--soft)}#feedback .btn{margin-top:18px}#press .pr{display:block;text-decoration:none;color:inherit}#press .pr .src{font-size:14px;color:var(--faint)}#press .pr h3{margin:6px 0 0}#press .pr:hover h3{text-decoration:underline}/* fish play */
-.f .fish{transform-box:fill-box;transform-origin:50% 100%;transition:transform .35s cubic-bezier(.3,1.5,.5,1)}
-.f:hover .fish{transform:translateY(-3px) rotate(-3deg)}
-.f:hover .tail{animation-duration:.32s}
-.f .bub{transform-box:fill-box;transform-origin:center}
-.f:hover .bub{animation:rise 1.3s ease-in infinite}.f:hover .bub:nth-of-type(2n){animation-delay:.35s}.f:hover .bub:nth-of-type(3n){animation-delay:.7s}
-@keyframes rise{0%{transform:translateY(0) scale(1);opacity:1}100%{transform:translateY(-16px) scale(1.4);opacity:0}}
-.f .pupil{transition:transform .12s linear}
-.f.hop .fish{animation:hop .6s cubic-bezier(.3,1.6,.5,1)}
-@keyframes hop{0%{transform:translateY(0) rotate(0)}35%{transform:translateY(-15px) rotate(-10deg) scale(1.06)}70%{transform:translateY(2px) rotate(3deg) scale(.98,1.03)}100%{transform:translateY(0) rotate(0)}}
-.f.spin .fish{animation:spin .8s cubic-bezier(.45,0,.2,1)}
-@keyframes spin{0%{transform:rotate(0)}45%{transform:translateY(-12px) rotate(200deg)}100%{transform:rotate(360deg)}}
-.f .star{opacity:0;transform:scale(.2);transform-box:fill-box;transform-origin:center;transition:opacity .3s,transform .45s cubic-bezier(.3,1.7,.5,1)}
-.f.pick .star{opacity:1;transform:scale(1);animation:twinkle 2.6s ease-in-out .5s infinite}
-@keyframes twinkle{50%{transform:scale(.75) rotate(25deg)}}
-.spark{position:absolute;left:58%;top:42%;width:6px;height:6px;margin:-3px;border-radius:50%;background:var(--c,#F3BE72);pointer-events:none;animation:spark .7s cubic-bezier(.2,.7,.3,1) forwards}
-@keyframes spark{to{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
-.strip.drag{cursor:grabbing}.strip.drag .f{cursor:grabbing}
-.stripcap b{color:var(--amber-t);font-weight:600;font-variant-numeric:tabular-nums}
-@media (prefers-reduced-motion:reduce){.f .fish,.f .pupil,.f .star{transition:none}.f:hover .fish{transform:none}.f:hover .bub,.f.hop .fish,.f.spin .fish,.f.pick .star{animation:none}.spark{display:none}}
-.thx{margin-top:22px;padding-top:18px;border-top:1px solid var(--rule);font-size:13px;line-height:1.8}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.ring,.btn{transition:none}}
+#feedback p{color:var(--soft)}#feedback .btn{margin-top:18px}#press .pr{display:block;text-decoration:none;color:inherit}#press .pr .src{font-size:14px;color:var(--faint)}#press .pr h3{margin:6px 0 0}#press .pr:hover h3{text-decoration:underline}.thx{margin-top:22px;padding-top:18px;border-top:1px solid var(--rule);font-size:13px;line-height:1.8}
 .thx-h{font-weight:600;color:var(--soft);margin-bottom:4px}.thx ul{list-style:none}.thx li b{font-weight:600;color:var(--soft);margin-right:.7em}
 .thx a,.thx-more a{color:var(--faint);text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:2px}.thx a:hover{color:var(--ink)}.thx-more{margin-top:6px}
+.f svg{position:absolute;inset:0;width:100%;height:100%}.f span{z-index:1}
+.ring{position:absolute;left:0;top:0;border:3px solid var(--amber);border-radius:5px;pointer-events:none;will-change:transform;transition:transform .9s cubic-bezier(.65,0,.25,1),border-color .4s}
+.ring b{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:nowrap;font-size:13px;line-height:1.4;font-weight:600;color:var(--amber);transition:opacity .3s}
+.ring.at-first{border-color:#9AA3AC}.ring.at-first b{color:#C5CCD3}.ring .t2{opacity:0}.ring.done .t1{opacity:0}.ring.done .t2{opacity:1}
+.out{display:flex;align-items:center;gap:16px;margin-top:18px;opacity:0;transform:translateY(6px);transition:opacity .45s,transform .45s}.out.on{opacity:1;transform:none}
+.out .th{position:relative;flex:none;width:104px;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:linear-gradient(160deg,var(--a),var(--b))}
+.out .th svg{position:absolute;inset:0;width:100%;height:100%}
+.out .live{position:absolute;left:6px;top:6px;font-style:normal;font-size:10px;font-weight:700;letter-spacing:.08em;color:#fff;background:rgba(0,0,0,.45);padding:0 5px;border-radius:3px}
+.out p{margin:0;font-size:15px;color:var(--soft)}.out p b{color:var(--amber-t);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.ring,.ring b,.out{transition:none}}
 </style>
 </head>
 <body>
@@ -167,8 +156,8 @@ footer{padding:44px 0 56px;font-size:14px;color:var(--faint)}
 <h1>MomentStays<span class="h1sub">留刻</span></h1>
 <p class="lede">Your story, still at the very moment. The original frame, restored across devices.</p>
 <figure class="stripbox">
-<div class="strip" id="strip" role="group" aria-label="A Motion Photo, frame by frame. Click any frame to make it the cover."><button type="button" class="f" style="--a:#3B4652;--b:#26303A"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M16,40 L0,30 L5,50 L0,70 Z" fill="#E85D3F"/></g><ellipse cx="38" cy="50" rx="25" ry="16" fill="#FF7A5C"/><path d="M34,35 Q41,24 49,35 Z" fill="#FFB199"/><circle cx="49" cy="45" r="5.5" fill="#fff"/><circle cx="51" cy="45" r="2.8" fill="#1F2937"/><path d="M45,57 Q51,61 56,57" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/></svg><span>0.00 s</span></button><button type="button" class="f" style="--a:#46525F;--b:#2C3640"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M24,34 L8,24 L13,44 L8,64 Z" fill="#E85D3F"/></g><ellipse cx="46" cy="44" rx="25" ry="16" fill="#FF7A5C"/><path d="M42,29 Q49,18 57,29 Z" fill="#FFB199"/><circle cx="57" cy="39" r="5.5" fill="#fff"/><circle cx="59" cy="39" r="2.8" fill="#1F2937"/><path d="M53,51 Q59,55 64,51" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="64" cy="24" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>0.20 s</span></button><button type="button" class="f" style="--a:#55616D;--b:#323C46"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M32,40 L16,30 L21,50 L16,70 Z" fill="#E85D3F"/></g><ellipse cx="54" cy="50" rx="25" ry="16" fill="#FF7A5C"/><path d="M50,35 Q57,24 65,35 Z" fill="#FFB199"/><circle cx="65" cy="45" r="5.5" fill="#fff"/><circle cx="67" cy="45" r="2.8" fill="#1F2937"/><path d="M61,57 Q67,61 72,57" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="72" cy="30" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>0.48 s</span></button><button type="button" class="f" style="--a:#6B7680;--b:#3A444E"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M40,46 L24,36 L29,56 L24,76 Z" fill="#E85D3F"/></g><ellipse cx="62" cy="56" rx="25" ry="16" fill="#FF7A5C"/><path d="M58,41 Q65,30 73,41 Z" fill="#FFB199"/><circle cx="73" cy="51" r="5.5" fill="#fff"/><circle cx="75" cy="51" r="2.8" fill="#1F2937"/><path d="M69,63 Q75,67 80,63" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="80" cy="36" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="86" cy="28" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>0.80 s</span></button><button type="button" class="f" style="--a:#8A939B;--b:#48525C"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M48,38 L32,28 L37,48 L32,68 Z" fill="#E85D3F"/></g><ellipse cx="70" cy="48" rx="25" ry="16" fill="#FF7A5C"/><path d="M66,33 Q73,22 81,33 Z" fill="#FFB199"/><circle cx="81" cy="43" r="5.5" fill="#fff"/><circle cx="83" cy="43" r="2.8" fill="#1F2937"/><path d="M77,55 Q83,59 88,55" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="88" cy="28" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="94" cy="20" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>1.12 s</span></button><button type="button" class="f pick" style="--a:#C9B48E;--b:#6D5A3E"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M56,36 L40,26 L45,46 L40,66 Z" fill="#E85D3F"/></g><ellipse cx="78" cy="46" rx="25" ry="16" fill="#FF7A5C"/><path d="M74,31 Q81,20 89,31 Z" fill="#FFB199"/><circle cx="89" cy="41" r="5.5" fill="#fff"/><circle cx="91" cy="41" r="2.8" fill="#1F2937"/><path d="M85,53 Q91,57 96,53" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="96" cy="26" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="102" cy="18" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="90" cy="16" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><path d="M106,16 l2.2,5.2 5.2,2.2 -5.2,2.2 -2.2,5.2 -2.2,-5.2 -5.2,-2.2 5.2,-2.2 Z" fill="#F3BE72"/></svg><span>1.42 s</span></button><button type="button" class="f" style="--a:#7F8890;--b:#454F59"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M64,42 L48,32 L53,52 L48,72 Z" fill="#E85D3F"/></g><ellipse cx="86" cy="52" rx="25" ry="16" fill="#FF7A5C"/><path d="M82,37 Q89,26 97,37 Z" fill="#FFB199"/><circle cx="97" cy="47" r="5.5" fill="#fff"/><circle cx="99" cy="47" r="2.8" fill="#1F2937"/><path d="M93,59 Q99,63 104,59" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="104" cy="32" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="110" cy="24" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>1.70 s</span></button><button type="button" class="f" style="--a:#636E78;--b:#38424C"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M70,36 L54,26 L59,46 L54,66 Z" fill="#E85D3F"/></g><ellipse cx="92" cy="46" rx="25" ry="16" fill="#FF7A5C"/><path d="M88,31 Q95,20 103,31 Z" fill="#FFB199"/><circle cx="103" cy="41" r="5.5" fill="#fff"/><circle cx="105" cy="41" r="2.8" fill="#1F2937"/><path d="M99,53 Q105,57 110,53" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="110" cy="26" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="116" cy="18" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>2.00 s</span></button><div class="ring" id="ring" aria-hidden="true"></div></div>
-<figcaption class="stripcap"><span>A Motion Photo, frame by frame. Click, drag or use the arrow keys to pick the cover. Cover: <b id="cov" aria-live="polite">1.42 s</b></span><button class="replay" id="replay" type="button">Play</button></figcaption>
+<div class="strip" id="strip" role="group" aria-label="A Motion Photo, frame by frame. Tap any frame to make it the cover."><button type="button" class="f" style="--a:#3B4652;--b:#26303A"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M16,40 L0,30 L5,50 L0,70 Z" fill="#E85D3F"/></g><ellipse cx="38" cy="50" rx="25" ry="16" fill="#FF7A5C"/><path d="M34,35 Q41,24 49,35 Z" fill="#FFB199"/><circle cx="49" cy="45" r="5.5" fill="#fff"/><circle cx="51" cy="45" r="2.8" fill="#1F2937"/><path d="M45,57 Q51,61 56,57" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/></svg><span>0.00 s</span></button><button type="button" class="f" style="--a:#46525F;--b:#2C3640"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M24,34 L8,24 L13,44 L8,64 Z" fill="#E85D3F"/></g><ellipse cx="46" cy="44" rx="25" ry="16" fill="#FF7A5C"/><path d="M42,29 Q49,18 57,29 Z" fill="#FFB199"/><circle cx="57" cy="39" r="5.5" fill="#fff"/><circle cx="59" cy="39" r="2.8" fill="#1F2937"/><path d="M53,51 Q59,55 64,51" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="64" cy="24" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>0.20 s</span></button><button type="button" class="f" style="--a:#55616D;--b:#323C46"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M32,40 L16,30 L21,50 L16,70 Z" fill="#E85D3F"/></g><ellipse cx="54" cy="50" rx="25" ry="16" fill="#FF7A5C"/><path d="M50,35 Q57,24 65,35 Z" fill="#FFB199"/><circle cx="65" cy="45" r="5.5" fill="#fff"/><circle cx="67" cy="45" r="2.8" fill="#1F2937"/><path d="M61,57 Q67,61 72,57" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="72" cy="30" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>0.48 s</span></button><button type="button" class="f" style="--a:#6B7680;--b:#3A444E"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M40,46 L24,36 L29,56 L24,76 Z" fill="#E85D3F"/></g><ellipse cx="62" cy="56" rx="25" ry="16" fill="#FF7A5C"/><path d="M58,41 Q65,30 73,41 Z" fill="#FFB199"/><circle cx="73" cy="51" r="5.5" fill="#fff"/><circle cx="75" cy="51" r="2.8" fill="#1F2937"/><path d="M69,63 Q75,67 80,63" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="80" cy="36" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="86" cy="28" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>0.80 s</span></button><button type="button" class="f" style="--a:#8A939B;--b:#48525C"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M48,38 L32,28 L37,48 L32,68 Z" fill="#E85D3F"/></g><ellipse cx="70" cy="48" rx="25" ry="16" fill="#FF7A5C"/><path d="M66,33 Q73,22 81,33 Z" fill="#FFB199"/><circle cx="81" cy="43" r="5.5" fill="#fff"/><circle cx="83" cy="43" r="2.8" fill="#1F2937"/><path d="M77,55 Q83,59 88,55" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="88" cy="28" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="94" cy="20" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>1.12 s</span></button><button type="button" class="f pick" style="--a:#C9B48E;--b:#6D5A3E"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M56,36 L40,26 L45,46 L40,66 Z" fill="#E85D3F"/></g><ellipse cx="78" cy="46" rx="25" ry="16" fill="#FF7A5C"/><path d="M74,31 Q81,20 89,31 Z" fill="#FFB199"/><circle cx="89" cy="41" r="5.5" fill="#fff"/><circle cx="91" cy="41" r="2.8" fill="#1F2937"/><path d="M85,53 Q91,57 96,53" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="96" cy="26" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="102" cy="18" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="90" cy="16" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>1.42 s</span></button><button type="button" class="f" style="--a:#7F8890;--b:#454F59"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M64,42 L48,32 L53,52 L48,72 Z" fill="#E85D3F"/></g><ellipse cx="86" cy="52" rx="25" ry="16" fill="#FF7A5C"/><path d="M82,37 Q89,26 97,37 Z" fill="#FFB199"/><circle cx="97" cy="47" r="5.5" fill="#fff"/><circle cx="99" cy="47" r="2.8" fill="#1F2937"/><path d="M93,59 Q99,63 104,59" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="104" cy="32" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="110" cy="24" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>1.70 s</span></button><button type="button" class="f" style="--a:#636E78;--b:#38424C"><svg viewBox="0 0 120 90" aria-hidden="true"><g class="tail"><path d="M70,36 L54,26 L59,46 L54,66 Z" fill="#E85D3F"/></g><ellipse cx="92" cy="46" rx="25" ry="16" fill="#FF7A5C"/><path d="M88,31 Q95,20 103,31 Z" fill="#FFB199"/><circle cx="103" cy="41" r="5.5" fill="#fff"/><circle cx="105" cy="41" r="2.8" fill="#1F2937"/><path d="M99,53 Q105,57 110,53" fill="none" stroke="#7A3B28" stroke-width="2" stroke-linecap="round"/><circle cx="110" cy="26" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/><circle cx="116" cy="18" r="2" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.5"/></svg><span>2.00 s</span></button><div class="ring at-first" id="ring" aria-hidden="true"><b class="t1">Others: first frame</b><b class="t2">MomentStays: your pick</b></div></div>
+<div class="out on" id="out"><div class="th" id="th"></div><p>As an iPhone Live Photo, the cover is still <b id="cov">1.42 s</b>. Video and audio are not re-encoded.</p></div><figcaption class="stripcap"><span>A Motion Photo, frame by frame. Tap any frame to make it the cover.</span><button class="replay" id="replay" type="button">Replay</button></figcaption>
 </figure>
 <div class="cta"><a class="btn" href="https://github.com/LinoFish/MomentStays/releases">Download for macOS</a><a class="tl" href="https://github.com/LinoFish/MomentStays">Source on GitHub</a><span class="meta">Free and open source, macOS 12+, runs entirely on your Mac</span></div>
 </div>
@@ -187,68 +176,31 @@ open dist/MomentStays.app</pre></details></div></div></section>
 </main>
 <footer><div class="wrap"><div class="foot"><span>© 2026 Lino. Open source under GPL-3.0</span><a href="https://github.com/LinoFish/MomentStays">GitHub</a><a href="https://github.com/LinoFish/MomentStays/issues">Report an issue</a><a href="guide.html">User Guide</a><a href="guides/index.html#en">How-to guides</a><a href="https://github.com/LinoFish/MomentStays#readme">README</a><a href="archive/v1/">Previous site</a></div><p class="fs">The moment stays</p><div class="thx"><p class="thx-h">Thanks</p><ul><li><b>Format &amp; implementation references</b><a href="https://github.com/Huakira/MotionTrans">MotionTrans</a> · <a href="https://github.com/LengxiQwQ/live-photo-box">Live Photo Box</a> · <a href="https://exiftool.org/">ExifTool</a> · <a href="https://github.com/doodspav/motionphoto">motionphoto</a> · <a href="https://github.com/deckerst/aves">Aves (burst filename rules)</a></li><li><b>HDR &amp; HEIC research</b><a href="https://github.com/openharmony/multimedia_image_framework">OpenHarmony</a> · <a href="https://github.com/strukturag/libheif">libheif</a> · <a href="https://github.com/google/libultrahdr">libultrahdr</a> · <a href="https://github.com/NightMean/MotionPhotoSamples">MotionPhotoSamples</a></li><li><b>Evaluated alternatives</b><a href="https://github.com/google/libmotionphoto">libmotionphoto</a> · <a href="https://github.com/PetrVys/MotionPhoto2">MotionPhoto2</a> · <a href="https://github.com/ysya/LiveMux">LiveMux</a></li><li><b>Rust dependencies</b><a href="https://github.com/RustCrypto/hashes">RustCrypto</a> · <a href="https://github.com/serde-rs/json">serde_json</a></li><li><b>Packaging &amp; docs</b><a href="https://github.com/dmgbuild/dmgbuild">dmgbuild</a> · <a href="https://github.com/dmgbuild/ds_store">ds_store</a> · <a href="https://github.com/dmgbuild/mac_alias">mac_alias</a> · <a href="https://github.com/Python-Markdown/markdown">Python-Markdown</a> · <a href="https://github.com/fonttools/fonttools">fontTools</a> · <a href="https://github.com/google/brotli">Brotli</a></li><li><b>Design &amp; review</b><a href="https://github.com/alchaincyf/huashu-design">huashu-design / 花叔 Design</a> · <a href="https://github.com/anthropics/skills/tree/main/skills/frontend-design">frontend-design</a> · <a href="https://github.com/nextlevelbuilder/ui-ux-pro-max-skill">ui-ux-pro-max</a> · <a href="https://github.com/paulunemoon/ux-audit-skill">ux-audit</a></li><li><b>Fonts &amp; platform</b><a href="https://github.com/notofonts/noto-cjk">Noto Serif SC</a> · <a href="https://github.com/adobe-fonts/source-han-serif">Source Han Serif</a> · <a href="https://developer.apple.com/documentation/">Apple developer docs</a> · <a href="https://developer.apple.com/sf-symbols/">SF Symbols</a></li><li><b>Specifications</b><a href="https://developer.android.com/media/platform/motion-photo-format">Android Motion Photo</a> · <a href="https://developer.adobe.com/xmp/">Adobe XMP</a> · <a href="https://www.iso.org/standard/86775.html">ISO gain maps</a></li></ul><p class="thx-more"><a href="https://github.com/LinoFish/MomentStays/blob/main/THIRD_PARTY_NOTICES.md">Full third-party credits</a> · <a href="assets/fonts/OFL.txt">Font license</a></p></div></div></footer>
 <script>(function(){
-  var strip=document.getElementById('strip'),ring=document.getElementById('ring');
+  var strip=document.getElementById('strip'),ring=document.getElementById('ring'),out=document.getElementById('out'),th=document.getElementById('th'),cov=document.getElementById('cov');
   if(!strip||!ring)return;
-  var fr=[].slice.call(strip.querySelectorAll('.f')),sel=strip.querySelector('.f.pick')||fr[0],timer,playing=false;
+  var fr=[].slice.call(strip.querySelectorAll('.f')),sel=strip.querySelector('.f.pick')||fr[0],timer;
   var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var cov=document.getElementById('cov'),NS='http://www.w3.org/2000/svg';
-  var star0=strip.querySelector('path[fill="#F3BE72"]');
-  fr.forEach(function(f){var svg=f.querySelector('svg');if(!svg)return;
-    var g=document.createElementNS(NS,'g');g.setAttribute('class','fish');
-    while(svg.firstChild)g.appendChild(svg.firstChild);svg.appendChild(g);
-    [].forEach.call(g.querySelectorAll('circle[stroke]'),function(c){c.classList.add('bub');});
-    [].forEach.call(g.querySelectorAll('circle[fill="#1F2937"]'),function(c){c.classList.add('pupil');});
-    var st=g.querySelector('path[fill="#F3BE72"]');
-    if(!st&&star0){var eye=g.querySelector('circle[fill="#fff"]'),cx=eye?+eye.getAttribute('cx'):90,cy=eye?+eye.getAttribute('cy'):40;
-      st=star0.cloneNode(true);var ex=+star0.closest('svg').querySelector('circle[fill="#fff"]').getAttribute('cx'),ey=+star0.closest('svg').querySelector('circle[fill="#fff"]').getAttribute('cy');
-      var w=document.createElementNS(NS,'g');w.setAttribute('transform','translate('+(cx-ex)+','+(cy-ey)+')');w.appendChild(st);svg.appendChild(w);}
-    else if(st){svg.appendChild(st);}
-    if(st)st.classList.add('star');});
-  function place(el){var s=strip.getBoundingClientRect(),r=el.getBoundingClientRect(),p=6;
+  function place(el,now){var s=strip.getBoundingClientRect(),r=el.getBoundingClientRect(),p=6;
+    if(now)ring.style.transition='none';
     ring.style.width=(r.width+p*2)+'px';ring.style.height=(r.height+p*2)+'px';
-    ring.style.transform='translate('+(r.left-s.left-p)+'px,'+(r.top-s.top-p)+'px)';}
-  function anim(el,c){if(reduce)return;el.classList.remove('hop','spin');void el.offsetWidth;el.classList.add(c);
-    setTimeout(function(){el.classList.remove(c);},850);}
-  function sparks(el){if(reduce)return;var cs=['#F3BE72','#FF7A5C','#FFB199','#fff'];
-    for(var i=0;i<10;i++){var s=document.createElement('i'),a=Math.PI*2*i/10+Math.random()*.4,d=22+Math.random()*22;
-      s.className='spark';s.style.setProperty('--dx',Math.cos(a)*d+'px');s.style.setProperty('--dy',Math.sin(a)*d+'px');s.style.setProperty('--c',cs[i%4]);
-      el.appendChild(s);setTimeout(function(n){return function(){n.remove();};}(s),750);}}
-  function select(el,quiet){var same=el===sel;sel=el;
+    ring.style.transform='translate('+(r.left-s.left-p)+'px,'+(r.top-s.top-p)+'px)';
+    if(now){ring.offsetWidth;ring.style.transition='';}}
+  function show(el){if(th){th.setAttribute('style',el.getAttribute('style'));var sv=el.querySelector('svg');th.innerHTML=(sv?sv.outerHTML:'')+'<i class="live">LIVE</i>';}
+    if(cov)cov.textContent=(el.querySelector('span')||{}).textContent||'';}
+  function choose(el,now){clearTimeout(timer);sel=el;
     fr.forEach(function(f){f.classList.toggle('pick',f===el);f.setAttribute('aria-pressed',f===el?'true':'false');});
-    place(el);if(cov)cov.textContent=(el.querySelector('span')||{}).textContent||'';
-    if(quiet)return;anim(el,same?'spin':'hop');if(!same)sparks(el);}
-  fr.forEach(function(f){f.addEventListener('click',function(){if(dragMoved){dragMoved=false;return;}stop();select(this);});});
-  /* drag to scrub */
-  var dragging=false,dragMoved=false,last=null;
-  strip.addEventListener('pointerdown',function(e){if(e.pointerType==='touch')return;dragging=true;dragMoved=false;last=null;});
-  window.addEventListener('pointermove',function(e){
-    if(!reduce)look(e.clientX,e.clientY);
-    if(!dragging)return;var t=document.elementFromPoint(e.clientX,e.clientY),f=t&&t.closest?t.closest('.f'):null;
-    if(f&&fr.indexOf(f)>-1&&f!==last){if(last){dragMoved=true;strip.classList.add('drag');stop();}last=f;if(dragMoved){select(f,true);anim(f,'hop');}}});
-  window.addEventListener('pointerup',function(){if(dragging&&dragMoved&&sel)sparks(sel);dragging=false;strip.classList.remove('drag');setTimeout(function(){dragMoved=false;},0);});
-  /* eyes follow the pointer */
-  var pend=null;
-  function look(x,y){if(pend)return;pend=requestAnimationFrame(function(){pend=null;
-    fr.forEach(function(f){var p=f.querySelector('.pupil');if(!p)return;var r=p.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,
-      dx=x-cx,dy=y-cy,d=Math.sqrt(dx*dx+dy*dy)||1,k=Math.min(1,d/120)*2.2;
-      p.style.transform='translate('+(dx/d*k-2)+'px,'+(dy/d*k)+'px)';});});}
-  /* keyboard */
+    ring.classList.remove('at-first');ring.classList.add('done');place(el,now||reduce);show(el);if(out)out.classList.add('on');}
+  function play(){clearTimeout(timer);if(reduce){choose(sel,true);return;}
+    if(out)out.classList.remove('on');ring.classList.remove('done');ring.classList.add('at-first');place(fr[0],true);
+    timer=setTimeout(function(){choose(sel);},1200);}
+  fr.forEach(function(f){f.addEventListener('click',function(){choose(this);});});
   strip.addEventListener('keydown',function(e){var i=fr.indexOf(sel);
-    if(e.key==='ArrowRight'||e.key==='ArrowDown')i=Math.min(fr.length-1,i+1);else if(e.key==='ArrowLeft'||e.key==='ArrowUp')i=Math.max(0,i-1);
-    else if(e.key==='Home')i=0;else if(e.key==='End')i=fr.length-1;else return;
-    e.preventDefault();stop();select(fr[i]);fr[i].focus();});
-  function stop(){clearTimeout(timer);timer=null;playing=false;}
-  function play(){var i=0;stop();
-    if(reduce){place(sel);return;}playing=true;
-    function step(){if(!playing)return;if(i>=fr.length){playing=false;timer=null;place(sel);anim(sel,'hop');sparks(sel);return;}
-      place(fr[i]);anim(fr[i],'hop');i++;timer=setTimeout(step,340);}
-    step();}
-  window.addEventListener('resize',function(){place(sel);});
+    if(e.key==='ArrowRight')i=Math.min(fr.length-1,i+1);else if(e.key==='ArrowLeft')i=Math.max(0,i-1);else return;
+    e.preventDefault();choose(fr[i]);fr[i].focus();});
+  var rt;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){place(ring.classList.contains('done')?sel:fr[0],true);},120);});
   var rb=document.getElementById('replay');if(rb)rb.addEventListener('click',play);
-  select(sel,true);
-  ring.style.transition='none';place(sel);ring.offsetWidth;ring.style.transition='';
-  if(document.fonts&&document.fonts.ready){document.fonts.ready.then(function(){ring.style.transition='none';place(sel);ring.offsetWidth;ring.style.transition='';});}
-  if('IntersectionObserver' in window&&!reduce){var seen=false,io=new IntersectionObserver(function(es){if(!seen&&es[0].isIntersecting){seen=true;io.disconnect();setTimeout(play,500);}},{threshold:.6});io.observe(strip);}
+  choose(sel,true);
+  if('IntersectionObserver' in window&&!reduce){var io=new IntersectionObserver(function(es){if(es[0].isIntersecting){io.disconnect();setTimeout(play,300);}},{threshold:.6});io.observe(strip);}
 })();</script>
 </body>
 </html>
