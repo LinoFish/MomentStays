@@ -1,0 +1,34 @@
+name: mac-ui-snapshots
+on:
+  push:
+    branches: [ui-layout]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  snapshots:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: cargo fetch --manifest-path core/Cargo.toml
+      - name: Build diagnostics app
+        run: bash apple/macos/scripts/build_app.sh --arm64 --diagnostics 2>&1 | tee build.log
+      - name: UI checks
+        continue-on-error: true
+        run: python3 apple/macos/scripts/check_swiftui_ui.py 2>&1 | tee ui-check.log
+      - name: Publish snapshots
+        if: always()
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          dir=$RUNNER_TEMP/snap
+          git config user.name "ui-snapshots-bot"; git config user.email "actions@users.noreply.github.com"
+          git fetch origin ui-snapshots || true
+          if git rev-parse --verify origin/ui-snapshots >/dev/null 2>&1; then git worktree add $dir origin/ui-snapshots; else git worktree add --detach $dir; (cd $dir && git checkout --orphan tmp && git rm -rf -q . ); fi
+          mkdir -p $dir/$sha
+          cp build.log ui-check.log $dir/$sha/ 2>/dev/null || true
+          for f in .build/gui/ui-checks/*.png; do [ -f "$f" ] && sips -Z 1200 "$f" --out "$dir/$sha/$(basename $f)" >/dev/null; done
+          cd $dir && git add -A && git commit -q -m "snapshots $sha" && git push origin HEAD:ui-snapshots
