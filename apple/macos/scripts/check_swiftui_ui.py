@@ -78,9 +78,14 @@ for name, width, height, flags in cases:
         frame = metrics["frames"][control]
         assert frame["x"] >= 0 and frame["x"] + frame["width"] <= metrics["frame_width"] + 1, (name,control,"clipped",metrics)
     if "--ui-output-menu" in flags:
-        assert metrics["output_menu_selected"] == "folder" and "更改文件夹…" in metrics["output_menu_titles"],metrics
-        assert metrics["output_destination"] == ("photos" if "--ui-output-switch" in flags else "folder"),metrics
-        assert ("共享菜单" in metrics["output_menu_titles"]) == ("--direction" in flags),metrics
+        if metrics["output_menu_selected"] == "ask":
+            # 1.7 default: the user picks a destination first; the menu lists destinations only.
+            assert "文件夹" in metrics["output_menu_titles"] and "相册" in metrics["output_menu_titles"],metrics
+            assert metrics["output_destination"] == ("photos" if "--ui-output-switch" in flags else "ask"),metrics
+        else:
+            assert metrics["output_menu_selected"] == "folder" and "更改文件夹…" in metrics["output_menu_titles"],metrics
+            assert metrics["output_destination"] == ("photos" if "--ui-output-switch" in flags else "folder"),metrics
+            assert ("共享菜单" in metrics["output_menu_titles"]) == ("--direction" in flags),metrics
     if name == "cleared":
         assert metrics["row_count"] == 0 and metrics["output_path"].endswith("/Live Photos") and not metrics["clear_enabled"],metrics
     if name == "clear-busy":
