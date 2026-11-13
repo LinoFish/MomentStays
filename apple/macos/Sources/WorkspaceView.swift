@@ -60,7 +60,7 @@ struct WorkspaceView: View {
             title:"添加来源…",details:model.migrationTargetConfirmed ? model.sources.map(\.path).joined(separator:"\n") : "请先选择转换方向",
             hasSources:!model.sources.isEmpty,prominentWhenEmpty:false,allowsLibrary:model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle,
             addFiles:actions.chooseSources,addLibrary:actions.importPhotos)
-            .frame(maxWidth:.infinity).frame(height:22).recordLayout("add-button")
+            .frame(maxWidth:.infinity).frame(height:24).recordLayout("add-button")
     }
     private var outputControl: some View {
         OutputLocationControl(title:outputSummary,details:outputHelp,
