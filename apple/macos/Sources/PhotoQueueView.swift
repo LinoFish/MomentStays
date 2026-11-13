@@ -18,8 +18,10 @@ struct PhotoQueueView: View {
 
     private var visibleItems: [PhotoQueueItem] { model.visibleMigrationItems(in:scope) }
     private var previewItem: PhotoQueueItem? {
-        if let selected = model.selectedItem { return selected }
-        return visibleItems.first
+        // Never inspect a photo the active category/filter hides.
+        let items = visibleItems
+        if let selected = model.selectedItem, items.contains(where:{ $0.id == selected.id }) { return selected }
+        return items.first
     }
     @State private var dropTargeted = false
 
@@ -46,6 +48,7 @@ struct PhotoQueueView: View {
     private func configureDiagnostics() {
         #if UI_DIAGNOSTICS
         if CommandLine.arguments.contains("--ui-cover-editor") { coverEditor = model.items.first }
+        if CommandLine.arguments.contains("--ui-list") { prefersGrid = false }
         #endif
     }
 
@@ -163,19 +166,17 @@ struct PhotoQueueView: View {
     private func listPhoto(_ item: PhotoQueueItem, layout: QueueLayout) -> some View {
         let traits: AccessibilityTraits = model.selectedIDs.contains(item.id) ? .isSelected : []
         return HStack(spacing:8) {
-            Button { model.toggleSelection(item) } label: {
-                HStack {
-                    PhotoSelectionMark(selected:model.selectedIDs.contains(item.id))
-                    row(item,layout:layout)
-                }.contentShape(Rectangle())
-            }.buttonStyle(.plain).disabled(model.isBusy || model.sharing)
-            Button { showPreview(item) } label: { Image(systemName:"sidebar.right") }
-                .buttonStyle(.borderless).help("预览与处理计划")
-                .accessibilityLabel("预览「" + item.name + "」与处理计划")
+            Button { model.toggleSelection(item) } label: { PhotoSelectionMark(selected:model.selectedIDs.contains(item.id)).padding(4) }
+                .buttonStyle(.plain).disabled(model.isBusy || model.sharing)
+                .accessibilityLabel(model.selectedIDs.contains(item.id) ? "取消勾选「" + item.name + "」" : "勾选「" + item.name + "」")
+            row(item,layout:layout).contentShape(Rectangle())
+                .onTapGesture { click(item) }
         }
+        .padding(.vertical,2).padding(.horizontal,4)
+        .background(item.id == model.selection ? InterfaceStyle.selection : Color.clear).cornerRadius(6)
         .accessibilityAddTraits(traits)
         .task(id:coverRequestID(item)) { model.requestCoverCandidates(item) }
-        .listRowInsets(EdgeInsets(top:layout.twoLines ? 7 : 4,leading:12,bottom:layout.twoLines ? 7 : 4,trailing:12))
+        .listRowInsets(EdgeInsets(top:layout.twoLines ? 5 : 2,leading:8,bottom:layout.twoLines ? 5 : 2,trailing:8))
         .contextMenu { itemActions(item) }
     }
     private var focusedPreview: some View {
@@ -242,43 +243,63 @@ struct PhotoQueueView: View {
         }
     }
 
+    // A single toolbar row: categories, then filters, search and view controls.
     private func heading(_ layout: QueueLayout) -> some View {
-        VStack(alignment:.leading,spacing:8) {
-            HStack(spacing:12) {
+        // Wide: one row. Narrow: categories get their own row so their titles never truncate.
+        let narrow = layout.width < 660
+        return VStack(alignment:.leading,spacing:8) {
+            if narrow {
                 scopeFilters(layout)
-                if layout.width >= 700 { browserControls(layout) }
+                HStack(spacing:10) { Spacer(minLength:0); toolButtons(layout) }
+            } else {
+                HStack(spacing:10) { scopeFilters(layout); toolButtons(layout) }
             }
-            HStack(spacing:10) {
-                ForEach(MigrationPhotoFeature.allCases) { feature in
-                    Toggle(feature.title,isOn:Binding(get:{ model.migrationFeatureFilters.contains(feature) },set:{ value in
-                        if value { model.migrationFeatureFilters.insert(feature) } else { model.migrationFeatureFilters.remove(feature) }
-                    })).toggleStyle(.checkbox).font(.callout).fixedSize()
-                        .padding(.horizontal,6).padding(.vertical,4)
-                        .background(InterfaceStyle.canvas).cornerRadius(InterfaceStyle.controlRadius)
-                        .accessibilityIdentifier("feature-" + feature.rawValue)
-                        .help("多项勾选时，只显示同时包含这些特性的照片；不改变本轮处理范围")
-                }
-                if !model.burstGroups.isEmpty {
-                    Button("检查连拍组…") { model.burstReviewPresented = true }
-                        .font(.caption).fixedSize().accessibilityIdentifier("burst-review-button")
-                        .recordLayout("burst-review-button")
-                        .help("\(model.burstGroups.count) 组 · \(model.burstGroups.reduce(0) { $0 + $1.members.count }) 帧；检查组成员与代表帧")
-                        .disabled(model.isBusy || model.sharing)
-                }
-                Spacer(minLength:0)
-                if model.migrationSearchExpanded && layout.width >= 700 { searchField.frame(maxWidth:240) }
-                Button {
-                    model.migrationSearchExpanded = true
-                    searchFocused = true
-                } label: { Image(systemName:"magnifyingglass") }
-                    .accessibilityLabel("搜索照片").accessibilityValue(model.migrationSearchExpanded ? "已展开" : "已收起")
-                    .help("搜索文件名、来源或拍摄设备").keyboardShortcut("f",modifiers:.command)
-                    .accessibilityIdentifier("queue-search-toggle")
-                if layout.width < 700 { browserControls(layout) }
-            }
-            if model.migrationSearchExpanded && layout.width < 700 { searchField }
+            if model.migrationSearchExpanded && layout.width < 860 { searchField }
         }.padding(.horizontal,InterfaceStyle.Spacing.content).padding(.vertical,8)
             .frame(maxWidth:.infinity,alignment:.leading).background(InterfaceStyle.content)
+    }
+    @ViewBuilder private func toolButtons(_ layout: QueueLayout) -> some View {
+        featureMenu
+        if !model.burstGroups.isEmpty {
+            Button { model.burstReviewPresented = true } label: { Image(systemName:"square.stack.3d.down.right") }
+                .buttonStyle(.borderless).accessibilityLabel("检查连拍组")
+                .accessibilityIdentifier("burst-review-button").recordLayout("burst-review-button")
+                .help("检查连拍组：\(model.burstGroups.count) 组 · \(model.burstGroups.reduce(0) { $0 + $1.members.count }) 帧")
+                .disabled(model.isBusy || model.sharing)
+        }
+        if model.migrationSearchExpanded && layout.width >= 860 { searchField.frame(width:200) }
+        else if !model.migrationSearchExpanded { searchToggle }
+        browserControls(layout)
+    }
+    private var searchToggle: some View {
+        Button {
+            model.migrationSearchExpanded = true
+            searchFocused = true
+        } label: { Image(systemName:"magnifyingglass") }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("搜索照片").accessibilityValue("已收起")
+            .help("搜索文件名、来源或拍摄设备（⌘F）").keyboardShortcut("f",modifiers:.command)
+            .accessibilityIdentifier("queue-search-toggle")
+    }
+    private func featureBinding(_ feature: MigrationPhotoFeature) -> Binding<Bool> {
+        Binding(get:{ model.migrationFeatureFilters.contains(feature) },set:{ value in
+            if value { model.migrationFeatureFilters.insert(feature) } else { model.migrationFeatureFilters.remove(feature) }
+        })
+    }
+    private var featureMenu: some View {
+        let active = model.migrationFeatureFilters.count
+        return Menu {
+            ForEach(MigrationPhotoFeature.allCases) { feature in
+                Toggle(feature.title,isOn:featureBinding(feature)).accessibilityIdentifier("feature-" + feature.rawValue)
+            }
+            Divider()
+            Button("清除特性筛选") { model.migrationFeatureFilters = [] }.disabled(active == 0)
+        } label: {
+            Label(active == 0 ? "筛选" : "筛选 \(active)",systemImage:active == 0 ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+        }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help("按照片特性筛选；多项勾选时只显示同时具备的照片，不改变本轮处理范围")
+            .accessibilityIdentifier("feature-filter-menu").recordLayout("feature-filter-menu")
     }
     private var searchField: some View {
         HStack(spacing:4) {
@@ -325,19 +346,20 @@ struct PhotoQueueView: View {
     private func scopeFilters(_ layout: QueueLayout) -> some View {
         HStack(spacing:4) {
             ForEach([PhotoQueueScope.ready,.completed,.manual,.attention,.all]) { value in scopeButton(value) }
-        }.frame(maxWidth:.infinity).recordLayout("queue-scopes")
+        }.frame(maxWidth:.infinity,alignment:.leading).recordLayout("queue-scopes")
     }
     private func browserControls(_ layout: QueueLayout) -> some View {
         HStack(spacing:8) {
             Button {
                 if layout.width >= 800 { model.previewVisible.toggle() } else { narrowInspectorExpanded.toggle() }
             } label: { Image(systemName:"sidebar.right") }
-                .disabled(model.items.isEmpty)
+                .buttonStyle(.borderless).disabled(model.items.isEmpty)
                 .help("展开或收起照片检查器（⌘⌥P）")
                 .keyboardShortcut("p",modifiers:[.command,.option]).accessibilityIdentifier("preview-button")
                 .recordLayout("preview-button").accessibilityLabel("开合照片检查器")
                 .accessibilityValue((layout.width >= 800 ? model.previewVisible : narrowInspectorExpanded) ? "已展开" : "已收起")
             Button { prefersGrid.toggle() } label: { Image(systemName:prefersGrid ? "list.bullet" : "square.grid.2x2") }
+                .buttonStyle(.borderless)
                 .help(prefersGrid ? "切换为列表" : "切换为网格").accessibilityLabel("切换网格或列表")
                 .accessibilityValue(prefersGrid ? "当前为网格" : "当前为列表").accessibilityIdentifier("queue-view-toggle")
             Menu {
@@ -361,6 +383,14 @@ struct PhotoQueueView: View {
         model.migrationSource = nil
         scope = .all
     }
+    // Clicking a photo inspects it; inclusion stays on the check mark (or ⌘-click).
+    private func click(_ item: PhotoQueueItem) {
+        if NSEvent.modifierFlags.contains(.command) { model.toggleSelection(item) } else { focus(item) }
+    }
+    private func focus(_ item: PhotoQueueItem) {
+        model.selection = item.id
+        if queueWidth >= 800 && !model.previewVisible { model.previewVisible = true }
+    }
     private func showPreview(_ item: PhotoQueueItem) {
         model.selection = item.id
         if queueWidth >= 800 { model.previewVisible = true } else { narrowInspectorExpanded = true }
@@ -373,7 +403,7 @@ struct PhotoQueueView: View {
                 Text(value.title).fontWeight(scope == value ? .semibold : .regular)
                 Text("\(count)").monospacedDigit().foregroundColor(.secondary)
             }
-            .font(.callout).lineLimit(1).frame(maxWidth:.infinity,minHeight:short ? 22 : 28)
+            .font(.callout).lineLimit(1).fixedSize().padding(.horizontal,9).frame(minHeight:short ? 22 : 28)
             .foregroundColor(.primary)
             .background(RoundedRectangle(cornerRadius:InterfaceStyle.controlRadius)
                 .fill(scope == value ? InterfaceStyle.selection : Color.clear)
@@ -395,7 +425,7 @@ struct PhotoQueueView: View {
           ZStack(alignment:.topTrailing) {
             PhotoThumbnail(source:item.source,isPreview:model.isPreview)
                 .frame(height:cardImageHeight).clipped().contentShape(Rectangle())
-                .onTapGesture { model.toggleSelection(item) }
+                .onTapGesture { click(item) }
                 .recordLayout("photo-image-" + item.id)
                 .accessibilityHidden(true)
             cardBadges(item).padding(8).frame(maxWidth:.infinity,alignment:.leading)
@@ -407,16 +437,12 @@ struct PhotoQueueView: View {
           Divider()
           HStack(spacing:6) {
             photoCardSelection(item)
-            Button("预览") { showPreview(item) }
-                .buttonStyle(.borderless).font(.caption).padding(.vertical,4)
-                .help("预览与处理计划，不改变勾选")
-                .accessibilityLabel("预览「" + item.name + "」与处理计划")
-          }.padding(.horizontal,10).padding(.vertical,7)
+          }.padding(.horizontal,10).padding(.vertical,9)
         }
             .background(InterfaceStyle.content).cornerRadius(InterfaceStyle.photoRadius)
             .overlay(RoundedRectangle(cornerRadius:InterfaceStyle.photoRadius)
-                .stroke(model.selectedIDs.contains(item.id) ? InterfaceStyle.accent : InterfaceStyle.separator,
-                    lineWidth:model.selectedIDs.contains(item.id) ? 2 : 0.5).allowsHitTesting(false))
+                .stroke(model.selectedIDs.contains(item.id) ? InterfaceStyle.accent : item.id == model.selection ? Color.secondary : InterfaceStyle.separator,
+                    lineWidth:model.selectedIDs.contains(item.id) ? 2 : item.id == model.selection ? 1.5 : 0.5).allowsHitTesting(false))
             .subtleAnimation(model.selectedIDs.contains(item.id),duration:0.12)
             .contextMenu { itemActions(item) }
             .task(id:coverRequestID(item)) { model.requestCoverCandidates(item) }
@@ -440,7 +466,7 @@ struct PhotoQueueView: View {
         .buttonStyle(.plain).disabled(model.isBusy || model.sharing)
         .accessibilityAddTraits(model.selectedIDs.contains(item.id) ? .isSelected : [])
         .accessibilityLabel(item.name + "，" + model.displayState(item).title + "，" + item.hdr)
-        .accessibilityHint("点击累加选择，再次点击取消此项；使用预览查看特性与处理计划")
+        .accessibilityHint("点击勾选或取消此项；点击照片查看特性与处理计划")
     }
 
     private func cardBadges(_ item: PhotoQueueItem) -> some View {
@@ -528,7 +554,7 @@ struct PhotoQueueView: View {
             Text("状态").frame(width: 92, alignment: .leading)
         }
         .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
-        .padding(.leading,34).padding(.trailing,44).padding(.vertical,6)
+        .padding(.leading,44).padding(.trailing,16).padding(.vertical,6)
         .background(InterfaceStyle.canvas)
     }
 

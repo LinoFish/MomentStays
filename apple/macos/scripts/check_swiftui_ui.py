@@ -78,9 +78,15 @@ for name, width, height, flags in cases:
         frame = metrics["frames"][control]
         assert frame["x"] >= 0 and frame["x"] + frame["width"] <= metrics["frame_width"] + 1, (name,control,"clipped",metrics)
     if "--ui-output-menu" in flags:
-        assert metrics["output_menu_selected"] == "folder" and "更改文件夹…" in metrics["output_menu_titles"],metrics
-        assert metrics["output_destination"] == ("photos" if "--ui-output-switch" in flags else "folder"),metrics
-        assert ("共享菜单" in metrics["output_menu_titles"]) == ("--direction" in flags),metrics
+        if metrics["output_menu_selected"] == "ask":
+            # 1.7 default: the user picks a destination first; the menu lists destinations only.
+            assert "文件夹" in metrics["output_menu_titles"] and "相册" in metrics["output_menu_titles"],metrics
+            # Fixture previews never commit an ask-first choice (it needs a real folder/album dialog).
+            assert metrics["output_destination"] == "ask",metrics
+        else:
+            assert metrics["output_menu_selected"] == "folder" and "更改文件夹…" in metrics["output_menu_titles"],metrics
+            assert metrics["output_destination"] == ("photos" if "--ui-output-switch" in flags else "folder"),metrics
+            assert ("共享菜单" in metrics["output_menu_titles"]) == ("--direction" in flags),metrics
     if name == "cleared":
         assert metrics["row_count"] == 0 and metrics["output_path"].endswith("/Live Photos") and not metrics["clear_enabled"],metrics
     if name == "clear-busy":
@@ -91,7 +97,7 @@ for name, width, height, flags in cases:
     else:
         assert not metrics["source_button_color"], (name,"adding more photos should be secondary to conversion",metrics)
     assert abs(metrics["frames"]["add-button"]["height"] - metrics["frames"]["settings-button"]["height"]) < 2, (name, "source button size mismatch", metrics)
-    if name == "source-menu":
+    if name == "source-menu" and metrics["source_button_enabled"]:  # preview fixtures disable appending sources
         assert metrics["source_menu_opened"] and metrics["source_menu_titles"] == ["继续添加照片或文件夹…", "继续从系统图库添加…"], metrics
     if name in ("wide","compact","empty","cleared"):
         assert "task-feedback" not in metrics["frames"], (name,"routine footer status remains",metrics)
@@ -110,8 +116,10 @@ for name, width, height, flags in cases:
         if "--ui-expand-settings" in flags:
             assert check["settings_sheet_visible"] and not check["inspector_visible"], (name, "duplicated settings", check)
     if name == "wide":
-        assert not metrics["inspector_visible"] and metrics["queue_width"] >= 1000, metrics
-        assert metrics["frames"]["queue-scopes"]["x"] < 100, (name,"photo toolbar is not aligned with the gallery",metrics)
+        # 1.7 layout keeps the source sidebar; the queue must take all remaining width.
+        sidebar = metrics["frames"]["source-sidebar"]["width"]
+        assert not metrics["inspector_visible"] and metrics["queue_width"] >= metrics["frame_width"] - sidebar - 2, metrics
+        assert metrics["frames"]["queue-scopes"]["x"] - metrics["frames"]["queue-list"]["x"] < 40, (name,"photo toolbar is not aligned with the gallery",metrics)
         assert metrics["queue_height"] >= 490, (name,"compact toolbar must leave more photo space",metrics)
     if name == "compact-settings":
         assert metrics["settings_sheet_visible"], metrics

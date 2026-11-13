@@ -275,7 +275,7 @@ final class UISnapshotSupport {
                 tasks.append(task)
             }
         }
-        let view = RecentTasksView(model:model,initialTasks:tasks,close:{},retry:{ _ in },remove:{ _ in [] })
+        let view = RecentTasksView(model:model,initialTasks:tasks,close:{},retry:{ _ in },export:{ _ in },originals:{ _ in },remove:{ _ in [] })
             .coordinateSpace(name:"workspace")
             .onPreferenceChange(LayoutFramesKey.self) { self.recentFrames = $0 }
         panel.contentView = NSHostingView(rootView:view)
