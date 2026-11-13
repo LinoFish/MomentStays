@@ -173,6 +173,8 @@ struct ConversionSettings: Equatable, Codable {
     var missingTime: MissingTimePolicy = .error
     var timeDomain: CoverTimeDomain = .auto
     var repairAuxiliaryDuration = false
+    // Optional for compatibility with task histories saved before this switch.
+    var exifFileTimes: Bool?
     // Optional for compatibility with task histories saved before cover selection.
     var coverSelections: [String:Int]?
     var manualMidpoints: [String:Bool]?
@@ -199,11 +201,13 @@ struct ConversionSettings: Equatable, Codable {
             var result = ConversionOptions(legacyHDR: legacyHDR)
             result.direction = direction.rawValue
             result.exportDataFiles = exportDataFiles
+            result.exifFileTimes = exifFileTimes ?? false
             return result
         }
         var result = ConversionOptions(legacyHDR: legacyHDR, missingTime: missingTime.rawValue,
             timeDomain: timeDomain.rawValue, videoTrack: track.rawValue, outputMode: exportMode.rawValue,
-            repairAuxiliaryDuration: repairAuxiliaryDuration, exportDataFiles: exportDataFiles)
+            repairAuxiliaryDuration: repairAuxiliaryDuration, exportDataFiles: exportDataFiles,
+            exifFileTimes: exifFileTimes ?? false)
         result.direction = direction.rawValue
         result.burstChoices = burstChoices ?? [:]
         result.manualCovers = direction == .toApple ? manualCovers ?? [:] : [:]

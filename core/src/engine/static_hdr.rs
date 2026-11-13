@@ -169,7 +169,7 @@ pub fn convert(
     );
     let names = json!({"static":name});
     write(&stage.path().join(&name), &image)?;
-    let _ = super::copy_mtime(source, &stage.path().join(&name));
+    let _ = super::stamp_output_time(source, &stage.path().join(&name), options.exif_file_times);
     let processing_kind = if original_copy {
         "original-copy"
     } else {

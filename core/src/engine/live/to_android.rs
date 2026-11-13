@@ -130,7 +130,7 @@ pub fn convert(
     );
     let file = stage.path().join(&name);
     crate::engine::write(&file, &result)?;
-    let _ = crate::engine::copy_mtime(source, &file);
+    let _ = crate::engine::stamp_output_time(source, &file, options.exif_file_times);
     timing["source_still_image_time_seconds"] = json!(paired.cover_seconds);
     timing["cover_timestamp_us"] = json!(time);
     timing["cover_frame_index"] = json!(paired.frame);

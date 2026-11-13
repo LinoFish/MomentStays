@@ -459,6 +459,7 @@ pub fn run(
                         token,
                         overwrite,
                         options.legacy_hdr,
+                        options.exif_file_times,
                     )
                 }
             } else if hdr_indices.contains(&active[offset]) {

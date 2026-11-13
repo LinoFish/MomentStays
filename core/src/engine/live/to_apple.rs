@@ -154,7 +154,7 @@ pub fn convert(
             info["duration_repair"] = r;
         }
         write(&aux_path, &mov)?;
-        let _ = crate::engine::copy_mtime(source, &aux_path);
+        let _ = crate::engine::stamp_output_time(source, &aux_path, options.exif_file_times);
         auxiliary = Some(info);
     }
     if options.output_mode == "auxiliary-only" {
@@ -392,8 +392,8 @@ pub fn convert(
         names.extend(crate::engine::manual::archive(&data, &photo, stage.path())?);
         warnings.push("人工定位动态封面，原相机静态照片保留；原EXIF、私有块和尾标在输出目录附属数据中，相册仅接收JPEG/MOV".into());
     }
-    let _ = crate::engine::copy_mtime(source, &still_path);
-    let _ = crate::engine::copy_mtime(source, &mov_path);
+    let _ = crate::engine::stamp_output_time(source, &still_path, options.exif_file_times);
+    let _ = crate::engine::stamp_output_time(source, &mov_path, options.exif_file_times);
     let mut hashes = BTreeMap::new();
     for name in names.values() {
         hashes.insert(name.clone(), hash_file(&stage.path().join(name))?);

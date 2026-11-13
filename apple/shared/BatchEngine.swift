@@ -20,6 +20,7 @@ struct ConversionOptions {
     var outputMode = "livephoto"
     var repairAuxiliaryDuration = false
     var exportDataFiles = true
+    var exifFileTimes = false
     var coverIndex: Int?
     var coverSelections: [String:Int] = [:]
     var candidateDelivery = "static"
@@ -28,11 +29,12 @@ struct ConversionOptions {
     var manualCover: ManualCoverChoice?
     var manualCovers: [String:ManualCoverChoice] = [:]
     var json: [String:Any] {
-        if direction == "honor-to-google" { return ["direction":direction,"legacy_hdr":legacyHDR,"hdr_policy":"supported-private-hdr-2","export_data_files":exportDataFiles] }
-        if direction == "android-to-android" { return ["direction":direction,"target":"honor","layout":AndroidTransfer.revision,"vendor":"google","container":"jpeg","export_data_files":exportDataFiles] }
-        if direction == "to-android" { return ["direction":direction,"android":android.json,"legacy_hdr":legacyHDR,"hdr_policy":"supported-private-hdr-2","time_domain":timeDomain,"export_data_files":exportDataFiles] }
+        if direction == "honor-to-google" { var r: [String:Any] = ["direction":direction,"legacy_hdr":legacyHDR,"hdr_policy":"supported-private-hdr-2","export_data_files":exportDataFiles]; if exifFileTimes { r["exif_file_times"] = true }; return r }
+        if direction == "android-to-android" { var r: [String:Any] = ["direction":direction,"target":"honor","layout":AndroidTransfer.revision,"vendor":"google","container":"jpeg","export_data_files":exportDataFiles]; if exifFileTimes { r["exif_file_times"] = true }; return r }
+        if direction == "to-android" { var r: [String:Any] = ["direction":direction,"android":android.json,"legacy_hdr":legacyHDR,"hdr_policy":"supported-private-hdr-2","time_domain":timeDomain,"export_data_files":exportDataFiles]; if exifFileTimes { r["exif_file_times"] = true }; return r }
         var result: [String:Any] = ["legacy_hdr": legacyHDR ? "auto" : "preserve", "missing_time": missingTime, "time_domain": timeDomain,
             "video_track":videoTrack,"output_mode":outputMode,"repair_auxiliary_duration":outputMode != "livephoto" && repairAuxiliaryDuration,"export_data_files":exportDataFiles]
+        if exifFileTimes { result["exif_file_times"] = true }
         if let index = coverIndex { result["cover_candidate_index"] = index }
         if outputMode == "livephoto+candidates" && candidateDelivery != "static" { result["candidate_delivery"] = candidateDelivery }
         if let choice = manualCover { result["manual_cover"] = choice.json }

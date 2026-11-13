@@ -145,7 +145,11 @@ pub fn convert(
     let stage = Stage::new(target)?;
     let name = format!("{}.MP.jpg", paths::stem(source));
     write(&stage.path().join(&name), &result)?;
-    let _ = crate::engine::copy_mtime(source, &stage.path().join(&name));
+    let _ = crate::engine::stamp_output_time(
+        source,
+        &stage.path().join(&name),
+        options.exif_file_times,
+    );
     let m = json!({"implementation":REVISION,"source":paths::json(source),"source_sha256":hash,"options":options.json(),
         "output_files":{"motionphoto":name},"output_sha256":{name.clone():sha256_hex(&result)},"timing":timing,"hdr":report,"warnings":processed.warnings});
     write_json(&m, &stage.path().join(output::MANIFEST))?;

@@ -450,6 +450,7 @@ pub fn convert_with_policy(
     token: &StopToken,
     overwrite: bool,
     legacy_hdr: bool,
+    exif_file_times: bool,
 ) -> Result<Value> {
     let google = plan["source_format"] == "google-burst";
     let format = source_format(plan);
@@ -615,7 +616,7 @@ pub fn convert_with_policy(
             return failure("连拍文件名冲突");
         }
         write(&stage.path().join(&name), &out)?;
-        let _ = super::copy_mtime(file, &stage.path().join(&name));
+        let _ = super::stamp_output_time(file, &stage.path().join(&name), exif_file_times);
         names.insert(format!("burst_frame_{i:03}"), name.clone());
         outputs.insert(name.clone(), sha256_hex(&out));
         let original = format!("source-burst-{i:03}.bin");
@@ -779,6 +780,6 @@ pub fn convert(
     overwrite: bool,
 ) -> Result<Value> {
     convert_with_policy(
-        native, plan, selected, choice, target, token, overwrite, false,
+        native, plan, selected, choice, target, token, overwrite, false, false,
     )
 }

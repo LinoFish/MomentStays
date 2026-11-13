@@ -59,6 +59,11 @@ pub struct ConversionOptions {
     pub output_mode: String,
     pub repair_auxiliary_duration: bool,
     pub export_data_files: bool,
+    /// Stamp output files with the photo's EXIF capture time instead of
+    /// the source file's modification time (Advanced Settings, default
+    /// off). Recorded in the options JSON only when enabled, so existing
+    /// outputs keep resuming unchanged while the switch is off.
+    pub exif_file_times: bool,
     pub cover_index: Option<i64>,
     /// Normalized source path -> candidate index.
     pub cover_selections: BTreeMap<String, i64>,
@@ -81,6 +86,7 @@ impl Default for ConversionOptions {
             output_mode: "livephoto".into(),
             repair_auxiliary_duration: false,
             export_data_files: true,
+            exif_file_times: false,
             cover_index: None,
             cover_selections: BTreeMap::new(),
             candidate_delivery: "static".into(),
@@ -95,10 +101,14 @@ impl Default for ConversionOptions {
 impl ConversionOptions {
     pub fn json(&self) -> Value {
         if self.direction == "honor-to-google" {
-            return json!({"direction":self.direction,"legacy_hdr":self.legacy_hdr,"hdr_policy":super::hdr::POLICY,"export_data_files":self.export_data_files});
+            let mut v = json!({"direction":self.direction,"legacy_hdr":self.legacy_hdr,"hdr_policy":super::hdr::POLICY,"export_data_files":self.export_data_files});
+            if self.exif_file_times {
+                v["exif_file_times"] = json!(true);
+            }
+            return v;
         }
         if self.direction == "android-to-android" {
-            return json!({
+            let mut v = json!({
                 "direction": self.direction,
                 "target": "honor",
                 "layout": contracts::TRANSFER_REVISION,
@@ -106,15 +116,23 @@ impl ConversionOptions {
                 "container": "jpeg",
                 "export_data_files": self.export_data_files,
             });
+            if self.exif_file_times {
+                v["exif_file_times"] = json!(true);
+            }
+            return v;
         }
         if self.direction == "to-android" {
-            return json!({
+            let mut v = json!({
                 "direction": self.direction,
                 "android": self.android.json(),
                 "legacy_hdr":self.legacy_hdr, "hdr_policy":super::hdr::POLICY,
                 "time_domain": self.time_domain,
                 "export_data_files": self.export_data_files,
             });
+            if self.exif_file_times {
+                v["exif_file_times"] = json!(true);
+            }
+            return v;
         }
         let mut m = Map::new();
         m.insert(
@@ -136,6 +154,9 @@ impl ConversionOptions {
             "export_data_files".into(),
             Value::from(self.export_data_files),
         );
+        if self.exif_file_times {
+            m.insert("exif_file_times".into(), Value::from(true));
+        }
         if let Some(i) = self.cover_index {
             m.insert("cover_candidate_index".into(), Value::from(i));
         }
@@ -187,6 +208,7 @@ impl ConversionOptions {
             output_mode: s("output_mode", "livephoto"),
             repair_auxiliary_duration: b("repair_auxiliary_duration", false),
             export_data_files: b("export_data_files", true),
+            exif_file_times: b("exif_file_times", false),
             cover_index: req["cover_candidate_index"].as_i64(),
             cover_selections: selections,
             candidate_delivery: s("candidate_delivery", "static"),

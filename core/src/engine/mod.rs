@@ -164,15 +164,172 @@ pub fn uuid() -> String {
 }
 
 /// File modification time copy (Swift sets `.modificationDate` from the source).
-pub(crate) fn copy_mtime(from: &Path, to: &Path) -> Result<()> {
-    let modified = std::fs::metadata(from)
-        .and_then(|m| m.modified())
-        .map_err(|e| io_error(from, e))?;
+/// Set an output file's modification time, and on Apple platforms its
+/// creation time, from the source photo's EXIF capture time when
+/// `use_exif` is set (Advanced Settings, default off); otherwise copy the
+/// source file's modification time, as before. Failures are silent: call
+/// sites ignore the result (`let _ =`), so a missing EXIF time or an
+/// unwritable timestamp never fails a conversion.
+pub(crate) fn stamp_output_time(source: &Path, to: &Path, use_exif: bool) -> Result<()> {
+    let time = if use_exif {
+        crate::exif_time::capture_time_from_file(source)
+            .or_else(|| std::fs::metadata(source).and_then(|m| m.modified()).ok())
+    } else {
+        std::fs::metadata(source).and_then(|m| m.modified()).ok()
+    };
+    let Some(time) = time else {
+        return Ok(());
+    };
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(to)
         .map_err(|e| io_error(to, e))?;
-    f.set_modified(modified).map_err(|e| io_error(to, e))
+    f.set_modified(time).map_err(|e| io_error(to, e))?;
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        let _ = set_birthtime(to, time);
+    }
+    Ok(())
+}
+
+/// Apple platforms only: `setattrlist` + `ATTR_CMN_CRTIME` sets the birth
+/// time alone (documented since OS X 10.5; no public std API exists, and
+/// Linux exposes no writable birth time at all). Creation and modification
+/// times are set to the same value in one call, so the kernel rule that
+/// clamps creation time to modification time cannot bite. Best effort:
+/// future times (more than 24h ahead) are rejected by the kernel and
+/// volumes without `setattrlist` support fail here; the modification time
+/// above already landed, so the caller ignores this result.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn set_birthtime(path: &Path, time: std::time::SystemTime) -> Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    let duration = time
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| Error::new("EXIF 拍摄时间早于 Unix 纪元"))?;
+    let stamp = libc::timespec {
+        tv_sec: duration.as_secs() as libc::time_t,
+        tv_nsec: duration.subsec_nanos() as libc::c_long,
+    };
+    let mut list = libc::attrlist {
+        bitmapcount: libc::ATTR_BIT_MAP_COUNT,
+        reserved: 0,
+        commonattr: libc::ATTR_CMN_CRTIME | libc::ATTR_CMN_MODTIME,
+        volattr: 0,
+        dirattr: 0,
+        fileattr: 0,
+        forkattr: 0,
+    };
+    // Buffer order follows attribute bit order: creation time, then
+    // modification time.
+    let buf = [stamp, stamp];
+    let cpath = std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| Error::new("输出路径包含 NUL"))?;
+    let rc = unsafe {
+        libc::setattrlist(
+            cpath.as_ptr(),
+            &mut list as *mut libc::attrlist as *mut libc::c_void,
+            buf.as_ptr() as *mut libc::c_void,
+            std::mem::size_of_val(&buf),
+            0,
+        )
+    };
+    if rc != 0 {
+        return Err(io_error(path, std::io::Error::last_os_error()));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod stamp_tests {
+    use super::*;
+    use crate::exif_time::capture_time_from_bytes;
+
+    fn test_jpeg() -> Vec<u8> {
+        // Minimal JPEG carrying DateTimeOriginal "2024:05:06 07:08:09",
+        // built with the same TIFF helpers as the exif_time tests.
+        let tiff = {
+            let root: &[(usize, usize, &[u8])] = &[];
+            let exif: &[(usize, usize, &[u8])] = &[(0x9003, 2, b"2024:05:06 07:08:09\0")];
+            let ifd0_n = root.len() + 1;
+            let ifd0_size = 2 + ifd0_n * 12 + 4;
+            let sub_off = 8 + ifd0_size;
+            let sub_size = 2 + exif.len() * 12 + 4;
+            let mut blob_at = sub_off + sub_size;
+            let mut out = Vec::new();
+            out.extend_from_slice(b"II");
+            out.extend_from_slice(&42u16.to_le_bytes());
+            out.extend_from_slice(&8u32.to_le_bytes());
+            let root_entries = vec![crate::tiff::entry(true, 0x8769, 4, 1, sub_off)];
+            let mut sub_entries: Vec<[u8; 12]> = Vec::new();
+            let mut blobs: Vec<Vec<u8>> = Vec::new();
+            for (tag, ty, value) in exif {
+                let mut e = crate::tiff::entry(true, *tag, *ty, value.len(), 0);
+                if value.len() <= 4 {
+                    e[8..8 + value.len()].copy_from_slice(value);
+                } else {
+                    e[8..12].copy_from_slice(&(blob_at as u32).to_le_bytes());
+                    blob_at += value.len();
+                    blobs.push(value.to_vec());
+                }
+                sub_entries.push(e);
+            }
+            out.extend_from_slice(&crate::tiff::serialize(true, &root_entries, 0));
+            out.extend_from_slice(&crate::tiff::serialize(true, &sub_entries, 0));
+            for blob in blobs {
+                out.extend_from_slice(&blob);
+            }
+            out
+        };
+        let mut payload = crate::jpeg::EXIF.to_vec();
+        payload.extend_from_slice(&tiff);
+        let len = u16::try_from(payload.len() + 2).expect("small test payload");
+        let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
+        out.extend_from_slice(&len.to_be_bytes());
+        out.extend_from_slice(&payload);
+        out.extend_from_slice(&[0xFF, 0xD9]);
+        out
+    }
+
+    #[test]
+    fn stamp_prefers_exif_time_when_enabled() {
+        let dir =
+            std::env::temp_dir().join(format!("momentstays-stamp-exif-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let source = dir.join("source.jpg");
+        let dest = dir.join("dest.jpg");
+        std::fs::write(&source, test_jpeg()).expect("write source");
+        std::fs::write(&dest, b"output").expect("write dest");
+        let expected = capture_time_from_bytes(&test_jpeg()).expect("exif time");
+        stamp_output_time(&source, &dest, true).expect("stamp");
+        let modified = std::fs::metadata(&dest)
+            .expect("dest metadata")
+            .modified()
+            .expect("dest mtime");
+        assert_eq!(modified, expected);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stamp_copies_source_mtime_when_disabled() {
+        let dir =
+            std::env::temp_dir().join(format!("momentstays-stamp-mtime-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let source = dir.join("source.jpg");
+        let dest = dir.join("dest.jpg");
+        std::fs::write(&source, test_jpeg()).expect("write source");
+        std::fs::write(&dest, b"output").expect("write dest");
+        let source_mtime = std::fs::metadata(&source)
+            .expect("source metadata")
+            .modified()
+            .expect("source mtime");
+        stamp_output_time(&source, &dest, false).expect("stamp");
+        let modified = std::fs::metadata(&dest)
+            .expect("dest metadata")
+            .modified()
+            .expect("dest mtime");
+        assert_eq!(modified, source_mtime);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 /// Seconds since an arbitrary start, monotonic (Swift `systemUptime`).

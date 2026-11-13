@@ -64,6 +64,11 @@ struct ExportSettingsView: View {
                                 .disabled(model.settings.exportMode == .livePhoto)
                             note("仅影响独立辅助视频。高清封面的解码修复仅使用临时副本。")
                         }
+                        Toggle("将 EXIF 拍摄时间写入文件时间", isOn: Binding(
+                            get: { model.settings.exifFileTimes ?? false },
+                            set: { value in model.updateSettings { $0.exifFileTimes = value } }))
+                            .accessibilityIdentifier("advanced-exif-file-times-toggle")
+                        note("默认关闭。开启后，输出文件的创建与修改时间改为照片 EXIF 里的拍摄时间；没有 EXIF 时间时沿用原片文件时间，在其他系统里按时间排序更准确。")
                         note("自动检查封面位置，无法确定时报告错误。仅在熟悉原片时间轴时修改。")
                     }.padding(.top, 10)
                 } label: { Text("高级设置").font(.headline) }

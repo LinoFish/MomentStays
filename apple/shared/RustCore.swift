@@ -164,6 +164,7 @@ extension RustCore {
         req["output_mode"] = options.outputMode
         req["repair_auxiliary_duration"] = options.repairAuxiliaryDuration
         req["export_data_files"] = options.exportDataFiles
+        req["exif_file_times"] = options.exifFileTimes
         if let index = options.coverIndex { req["cover_candidate_index"] = index }
         req["cover_selections"] = options.coverSelections
         req["manual_covers"] = options.manualCovers.mapValues { $0.json }
