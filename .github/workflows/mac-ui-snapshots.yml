@@ -20,12 +20,20 @@ jobs:
         run: |
           set -o pipefail
           bash apple/macos/scripts/build_app.sh --arm64 --diagnostics 2>&1 | tee build.log
+      - name: Baseline (main)
+        continue-on-error: true
+        run: |
+          git fetch -q origin main
+          git worktree add -q ../base origin/main
+          cd ../base
+          sed -i '' 's/retry:{ _ in },remove:{ _ in \[\] })/retry:{ _ in },export:{ _ in },originals:{ _ in },remove:{ _ in [] })/' apple/macos/Sources/UISnapshotSupport.swift
+          bash apple/macos/scripts/build_app.sh --arm64 --diagnostics > ../base-build.log 2>&1
       - name: Snapshots
         continue-on-error: true
         run: |
-          app=.build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays
           mkdir -p shots
-          snap() { name=$1; w=$2; h=$3; shift 3; timeout 40 "$app" --ui-snapshot "$PWD/shots/$name.png" --ui-width $w --ui-height $h "$@" > "shots/$name.log" 2>&1 || echo "FAIL $name" >> shots/failures.txt; }
+          snapall() { app=$1; prefix=$2
+          snap() { name=$prefix$1; w=$2; h=$3; shift 3; perl -e "alarm 40; exec @ARGV" "$app" --ui-snapshot "$PWD/shots/$name.png" --ui-width $w --ui-height $h "$@" > "shots/$name.log" 2>&1 || echo "FAIL $name" >> shots/failures.txt; }
           snap wide 1120 700
           snap wide-preview 1120 700 --ui-preview --ui-select-first
           snap wide-checked 1120 700 --ui-check-first --ui-select-first
@@ -39,6 +47,10 @@ jobs:
           snap filtered-empty 760 600 --ui-scope completed
           snap settings 1120 700 --ui-expand-settings
           snap detail 1120 700 --ui-select-first --ui-detail
+          snap monitor 1120 700 --ui-monitoring-preview
+          }
+          snapall .build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays ""
+          snapall ../base/.build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays "base-"
       - name: UI checks
         continue-on-error: true
         run: |
@@ -57,7 +69,7 @@ jobs:
           git remote add origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           if git fetch -q --depth 1 origin ui-snapshots; then git checkout -q -b ui-snapshots FETCH_HEAD; else git checkout -q --orphan ui-snapshots; fi
           rm -rf "$sha"; mkdir -p "$sha"
-          cp "$src"/build.log "$src"/ui-check.log "$sha"/ 2>/dev/null || true
+          cp "$src"/build.log "$src"/ui-check.log "$src"/../base-build.log "$sha"/ 2>/dev/null || true
           cp "$src"/shots/*.log "$src"/shots/failures.txt "$sha"/ 2>/dev/null || true
           for f in "$src"/shots/*.png; do [ -f "$f" ] && sips -Z 1400 "$f" --out "$sha/$(basename "$f")" >/dev/null; done
           ls -la "$sha"
