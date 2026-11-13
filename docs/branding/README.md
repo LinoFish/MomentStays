@@ -16,7 +16,7 @@
 
 - [项目图标](icon.svg)：1024×1024 SVG，通过 `prefers-color-scheme` 自动适配深浅色。
 - [浅色图标](icon-light.svg) 与 [深色图标](icon-dark.svg)：单独的 1024×1024 SVG。
-- [README 页首](github-header.svg)：1280×420，包含项目名称和四项核心价值。
+- [README 页首](github-header.svg)：1280×420，包含项目名称、照片迁移定位和五项核心价值。
 - 原生应用图标由 `apple/macos/packaging/Icon.swift` 使用同一几何与色值绘制（`make-icon <iconset> light|dark`）；构建脚本生成 `AppIcon.icns` 与 `AppIconDark.icns`。`apple/macos/Sources/AppIconAppearance.swift` 在运行时按系统外观切换 Dock 图标；Finder 中显示浅色版。
 
 图形全部由代码绘制，不使用用户照片、样片截图、EXIF、时间戳或固定内容指纹。SVG 源文件可直接随仓库发布，不需要为个人媒体的忽略规则添加例外。
