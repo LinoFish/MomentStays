@@ -85,20 +85,24 @@ fn track(s: &TSpec) -> (Vec<u8>, Vec<u8>) {
     // Structurally valid ISO AAC-LC description; payload samples remain synthetic.
     let entry = if s.stsd_entry == "mp4a" {
         let mut p = vec![0; 28];
-        p[7] = 1; p[17] = 2; p[19] = 16;
+        p[7] = 1;
+        p[17] = 2;
+        p[19] = 16;
         p[24..].copy_from_slice(&(48000u32 << 16).to_be_bytes());
-        p.extend(full("esds", 0, 0, &[
-            3,25,0,0,0,4,17,0x40,0x15,0,3,0,0,3,0xe8,0,0,3,0xe8,0,
-            5,2,0x11,0x90,6,1,2,
-        ]));
+        p.extend(full(
+            "esds",
+            0,
+            0,
+            &[
+                3, 25, 0, 0, 0, 4, 17, 0x40, 0x15, 0, 3, 0, 0, 3, 0xe8, 0, 0, 3, 0xe8, 0, 5, 2,
+                0x11, 0x90, 6, 1, 2,
+            ],
+        ));
         bx("mp4a", &p)
-    } else { bx(s.stsd_entry, &[0; 6]) };
-    let mut stbl = full(
-        "stsd",
-        0,
-        0,
-        &[u32s(&[1]), entry].concat(),
-    );
+    } else {
+        bx(s.stsd_entry, &[0; 6])
+    };
+    let mut stbl = full("stsd", 0, 0, &[u32s(&[1]), entry].concat());
     let mut body = u32s(&[s.stts.len() as u32]);
     for (c, d) in &s.stts {
         body.extend(u32s(&[*c, *d]));

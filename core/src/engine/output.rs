@@ -309,7 +309,10 @@ pub fn verify_manifest(folder: &Path, manifest: &Value) -> Result<()> {
     fn set<'a>(v: &[&'a str]) -> HashSet<&'a str> {
         v.iter().copied().collect()
     }
-    let burst = manifest["source_format"] == "honor-burst";
+    let burst = matches!(
+        manifest["source_format"].as_str(),
+        Some("honor-burst" | "google-burst" | "huawei-burst" | "samsung-burst")
+    );
     let known = [
         set(&["still", "video"]),
         set(&["still", "video", "auxiliary"]),
@@ -504,9 +507,13 @@ pub(crate) fn resume(
         let data = read(source)?;
         let original = format::parse(&data)?;
         if crate::mp4::Movie::parse(original.video(&data))?
-            .tracks.iter().any(|t| t.samples.handler == "soun")
+            .tracks
+            .iter()
+            .any(|t| t.samples.handler == "soun")
         {
-            return failure("旧版实况未通过当前 Apple 音频兼容校验，请显式覆盖重新处理；未复用旧音频封装");
+            return failure(
+                "旧版实况未通过当前 Apple 音频兼容校验，请显式覆盖重新处理；未复用旧音频封装",
+            );
         }
         if let Some(ext) = crate::engine::hdr::honor_private(&original.still)? {
             if manifest["hdr"]["private_extension_sha256"].as_str()

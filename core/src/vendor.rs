@@ -92,6 +92,50 @@ pub fn locate(d: &[u8], image_end: usize) -> Result<Option<Location>> {
             }
         }
     }
+    let Some(sef) = sef_records(d, image_end)? else {
+        return Ok(None);
+    };
+    let mut found: Option<Location> = None;
+    for record in sef.records {
+        if record.marker == 0x0a30 {
+            if found.is_some() || record.name != b"MotionPhoto_Data" {
+                return fail("三星动态视频条目不唯一或名称错误");
+            }
+            let (mut start, mut end) = (record.end - record.data.len(), record.end);
+            if end - start == 12 && &d[start..start + 4] == b"mpv2" {
+                let offset = be(d, start + 4, 4)?;
+                let bytes = be(d, start + 8, 4)?;
+                if offset < image_end || offset > record.start || bytes > record.start - offset {
+                    return fail("三星 mpv2 视频指针越界");
+                }
+                start = offset;
+                end = offset + bytes;
+            }
+            found = Some(Location {
+                start,
+                end,
+                frame: None,
+                format: "samsung-sef",
+            });
+        }
+    }
+    Ok(found)
+}
+
+/// Borrowed, validated SEF records shared by motion and burst readers.
+pub(crate) struct SefRecord<'a> {
+    pub marker: usize,
+    pub name: &'a [u8],
+    pub data: &'a [u8],
+    pub start: usize,
+    pub end: usize,
+}
+pub(crate) struct Sef<'a> {
+    pub version: usize,
+    pub head: usize,
+    pub records: Vec<SefRecord<'a>>,
+}
+pub(crate) fn sef_records(d: &[u8], image_end: usize) -> Result<Option<Sef<'_>>> {
     if d.len() < 20 || &d[d.len() - 4..] != b"SEFT" {
         return Ok(None);
     }
@@ -105,10 +149,10 @@ pub fn locate(d: &[u8], image_end: usize) -> Result<Option<Location>> {
         return fail("三星 SEFH 目录头无效");
     }
     let count = le(d, head + 8, 4)?;
-    if count > (size - 12) / 12 || 12 + count * 12 != size {
+    if count > 4096 || count > (size - 12) / 12 || 12 + count * 12 != size {
         return fail("三星 SEF 目录越界");
     }
-    let mut found: Option<Location> = None;
+    let mut records = Vec::new();
     let mut owned: Vec<Range<usize>> = Vec::new();
     for i in 0..count {
         let entry = head + 12 + i * 12;
@@ -131,29 +175,20 @@ pub fn locate(d: &[u8], image_end: usize) -> Result<Option<Location>> {
         if name_len > length - 8 {
             return fail("三星 SEF 名称越界");
         }
-        if marker == 0x0a30 {
-            if found.is_some() || name_len != 16 || &d[at + 8..at + 24] != b"MotionPhoto_Data" {
-                return fail("三星动态视频条目不唯一或名称错误");
-            }
-            let (mut start, mut end) = (at + 24, at + length);
-            if end - start == 12 && &d[start..start + 4] == b"mpv2" {
-                let offset = be(d, start + 4, 4)?;
-                let bytes = be(d, start + 8, 4)?;
-                if offset < image_end || offset > at || bytes > at - offset {
-                    return fail("三星 mpv2 视频指针越界");
-                }
-                start = offset;
-                end = offset + bytes;
-            }
-            found = Some(Location {
-                start,
-                end,
-                frame: None,
-                format: "samsung-sef",
-            });
-        }
+        let name = &d[at + 8..at + 8 + name_len];
+        records.push(SefRecord {
+            marker,
+            name,
+            data: &d[at + 8 + name_len..at + length],
+            start: at,
+            end: at + length,
+        });
     }
-    Ok(found)
+    Ok(Some(Sef {
+        version: le(d, head + 4, 4)?,
+        head,
+        records,
+    }))
 }
 
 /// EXIF Make/Model of a JPEG, best effort (never fails conversion).

@@ -1,4 +1,4 @@
-//! Trusted Honor JPEG burst migration. No temporal guessing or alternate scheduler.
+//! Evidence-based Honor / Google / Huawei / Samsung JPEG burst migration.
 //! Filename protocol and Apple tags adapted from LinoFish/MomentPort (upstream GPL-3.0-or-later),
 //! cb927369c7555d1b38e465d4184c3d64334a2c8d, honor.rs / makernote.rs.
 //! Container editing, hashing, TIFF, UUIDs and atomic publication belong to MomentStays.
@@ -9,6 +9,36 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 const REVISION: &str = "honor-burst-2";
+const GOOGLE_REVISION: &str = "google-burst-1";
+const HUAWEI_REVISION: &str = "huawei-burst-1";
+const SAMSUNG_REVISION: &str = "samsung-burst-1";
+mod google;
+mod samsung;
+
+fn source_format(value: &Value) -> &str {
+    value["source_format"].as_str().unwrap_or("honor-burst")
+}
+fn revision(format: &str) -> Result<&'static str> {
+    match format {
+        "honor-burst" => Ok(REVISION),
+        "google-burst" => Ok(GOOGLE_REVISION),
+        "huawei-burst" => Ok(HUAWEI_REVISION),
+        "samsung-burst" => Ok(SAMSUNG_REVISION),
+        _ => failure("未知连拍来源格式"),
+    }
+}
+pub fn source_make(plan: &Value) -> &'static str {
+    match source_format(plan) {
+        "google-burst" => "Google",
+        "huawei-burst" => "HUAWEI",
+        "samsung-burst" => "samsung",
+        _ => "",
+    }
+}
+/// Name-only prefilter, not evidence of a supported brand or group.
+pub fn filename_candidate(name: &str) -> bool {
+    filename(name, "Google").is_some() || samsung::filename(name).is_some()
+}
 pub const MAX_IMAGE: u64 = 256 << 20;
 fn image_read(path: &Path) -> Result<Vec<u8>> {
     use std::io::Read;
@@ -25,7 +55,12 @@ fn image_read(path: &Path) -> Result<Vec<u8>> {
 
 /// Strict filename evidence, never a claim about the original camera's total count.
 pub fn filename(name: &str, make: &str) -> Option<Value> {
-    if !make.trim().is_empty() && !make.trim().eq_ignore_ascii_case("HONOR") {
+    if make.trim().eq_ignore_ascii_case("samsung") {
+        return samsung::filename(name);
+    }
+    let google = make.trim().eq_ignore_ascii_case("Google");
+    let huawei = make.trim().eq_ignore_ascii_case("HUAWEI");
+    if !google && !huawei && !make.trim().is_empty() && !make.trim().eq_ignore_ascii_case("HONOR") {
         return None;
     }
     let upper = name.to_ascii_uppercase();
@@ -78,29 +113,54 @@ pub fn filename(name: &str, make: &str) -> Option<Value> {
         return None;
     }
     let index: u16 = index.parse().ok()?;
-    if index == 0 {
+    if index == 0 && !google {
         return None;
     }
-    Some(
-        json!({"source_group":format!("IMG_{id}"),"index":index,"source_cover":cover,"evidence":"honor-filename-v1"}),
-    )
+    let mut frame = json!({"source_group":format!("IMG_{id}"),"index":index,"source_cover":cover,"evidence":"honor-filename-v1"});
+    if google {
+        frame["evidence"] = json!("google-filename-xmp-v1");
+        frame["source_format"] = json!("google-burst");
+    }
+    if huawei {
+        frame["evidence"] = json!("huawei-filename-v1");
+        frame["source_format"] = json!("huawei-burst");
+    }
+    Some(frame)
 }
 
 pub fn inspect(file: &Path, data: &[u8]) -> Option<Value> {
-    let (make, _) = crate::vendor::make_model(data);
+    let (make, model) = crate::vendor::make_model(data);
     let mut frame = filename(file.file_name()?.to_str()?, &make)?;
+    let google = frame["source_format"] == "google-burst";
+    let samsung = frame["source_format"] == "samsung-burst";
+    let brand = match source_format(&frame) {
+        "google-burst" => Some("Google"),
+        "huawei-burst" => Some("Huawei"),
+        "samsung-burst" => Some("Samsung"),
+        _ => None,
+    };
     let namespace = paths::normalized(file.parent()?);
     frame["group_id"] = json!(sha256_hex(
         format!(
             "{}\0{}",
-            namespace.display(),
+            if let Some(brand) = brand {
+                format!("{}\0{brand}\0{model}", namespace.display())
+            } else {
+                namespace.display().to_string()
+            },
             frame["source_group"].as_str()?
         )
         .as_bytes()
     ));
     // Keep evidence visible even when the combination is unsupported.
     let support = (|| -> Result<()> {
-        if data.len() as u64 > MAX_IMAGE || !scan::confirmed_static(data) {
+        if google {
+            google::validate(data, &mut frame)?;
+        }
+        if samsung {
+            samsung::validate(data, &mut frame)?;
+        }
+        if data.len() as u64 > MAX_IMAGE || (!samsung && !scan::confirmed_static(data)) {
             return failure("连拍仅支持完整静态 JPEG；实况组合尚未验证");
         }
         if crate::live::still_content_identifier(data)?.is_some() {
@@ -127,13 +187,26 @@ pub fn plans(rows: &[super::scanrow::ScanRow]) -> Vec<Value> {
     }
     groups.into_iter().map(|(id, mut rows)| {
         rows.sort_by_key(|r| r.burst.as_ref().and_then(|v| v["index"].as_u64()).unwrap_or(0));
-        let members: Vec<Value> = rows.iter().map(|r| json!({"source":paths::json(&r.source),"source_sha256":r.burst.as_ref().unwrap()["source_sha256"],"index":r.burst.as_ref().unwrap()["index"],
-            "source_cover":r.burst.as_ref().unwrap()["source_cover"],"version":r.version.map(|v| format!("{}:{}:{}:{}:{}",v.device,v.inode,v.size,v.modified_ns,v.changed_ns))})).collect();
+        let google = rows[0].burst.as_ref().unwrap()["source_format"] == "google-burst";
+        let format = source_format(rows[0].burst.as_ref().unwrap());
+        let samsung = format == "samsung-burst";
+        let members: Vec<Value> = rows.iter().map(|r| {
+            let frame = r.burst.as_ref().unwrap();
+            let mut member = json!({"source":paths::json(&r.source),"source_sha256":frame["source_sha256"],"index":frame["index"],
+                "source_cover":frame["source_cover"],"version":r.version.map(|v| format!("{}:{}:{}:{}:{}",v.device,v.inode,v.size,v.modified_ns,v.changed_ns))});
+            if google { member["google_group"] = frame["google_group"].clone(); }
+            if samsung { member["vendor_group"] = frame["vendor_group"].clone(); }
+            member
+        }).collect();
         let covers: Vec<_> = rows.iter().filter(|r| r.burst.as_ref().unwrap()["source_cover"] == true).collect();
-        let consecutive = members.iter().enumerate().all(|(i,m)| m["index"].as_u64() == Some((i+1) as u64));
+        let consecutive = members.iter().enumerate().all(|(i,m)| m["index"].as_u64() == Some((i + usize::from(!google)) as u64));
         let ordered = members.windows(2).all(|pair| pair[0]["index"].as_u64() < pair[1]["index"].as_u64());
         let unsupported = rows.iter().find(|r| r.burst.as_ref().unwrap()["supported"] != true);
+        let google_conflict = google && members.iter().any(|m| m["google_group"] != members[0]["google_group"]);
+        let samsung_conflict = samsung && members.iter().any(|m| m["vendor_group"] != members[0]["vendor_group"]);
         let reason = if let Some(row) = unsupported { row.burst.as_ref().unwrap()["reason"].as_str().unwrap_or("来源不支持") }
+            else if google_conflict { "Google 连拍成员的 XMP 组标识缺失或冲突，请检查完整原片" }
+            else if samsung_conflict { "三星连拍成员的 SEF 连拍数据不一致，请检查完整原片" }
             else if !ordered { "帧序号重复，无法确定原始顺序；可显式按独立照片导出" }
             else if covers.len() > 1 { "发现多个原始 COVER；请选择代表帧" } else { "" };
         let representative = if covers.len() == 1 { paths::json(&covers[0].source) } else { Value::Null };
@@ -141,9 +214,11 @@ pub fn plans(rows: &[super::scanrow::ScanRow]) -> Vec<Value> {
         let mut identity_members = members.clone();
         for member in &mut identity_members { if let Some(source) = member["source"].as_str() { member["source"] = paths::json(&paths::normalized(Path::new(source))); } }
         let signature = sha256_hex(serde_json::to_string(&identity_members).unwrap_or_default().as_bytes());
-        json!({"id":id,"label":label,"members":members,"signature":signature,"representative":representative,
-            "reason":reason,"ordered":ordered,"has_gaps":!consecutive,"supported":unsupported.is_none(),"source_cover_count":covers.len(),
-            "completeness":"observed-only","original_total_known":false})
+        let mut plan = json!({"id":id,"label":label,"members":members,"signature":signature,"representative":representative,
+            "reason":reason,"ordered":ordered,"has_gaps":!consecutive,"supported":unsupported.is_none() && !google_conflict && !samsung_conflict,"source_cover_count":covers.len(),
+            "completeness":"observed-only","original_total_known":false});
+        if format != "honor-burst" { plan["source_format"] = json!(format); }
+        plan
     }).collect()
 }
 
@@ -170,17 +245,18 @@ struct Inventory {
     version: super::identity::SourceVersion,
     groups: HashMap<String, HashSet<PathBuf>>,
 }
-fn inventory(parent: &Path, label: &str) -> Result<HashSet<PathBuf>> {
+fn inventory(parent: &Path, label: &str, make: &str) -> Result<HashSet<PathBuf>> {
     use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Inventory>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<(PathBuf, String), Inventory>>> = OnceLock::new();
     let parent = paths::normalized(parent);
+    let key = (parent.clone(), make.to_string());
     let version = super::identity::SourceVersion::read_directory(&parent)
         .ok_or_else(|| Error::new("连拍来源目录不可读取"))?;
     let mut cache = CACHE
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
         .unwrap_or_else(|p| p.into_inner());
-    if let Some(previous) = cache.get(&parent) {
+    if let Some(previous) = cache.get(&key) {
         if previous.version == version {
             return Ok(previous.groups.get(label).cloned().unwrap_or_default());
         }
@@ -194,7 +270,7 @@ fn inventory(parent: &Path, label: &str) -> Result<HashSet<PathBuf>> {
             return failure("来源目录超过安全枚举上限");
         }
         let e = e.map_err(|e| io_error(&parent, e))?;
-        if let Some(frame) = filename(&e.file_name().to_string_lossy(), "") {
+        if let Some(frame) = filename(&e.file_name().to_string_lossy(), make) {
             if let Some(id) = frame["source_group"].as_str() {
                 groups
                     .entry(id.into())
@@ -210,7 +286,7 @@ fn inventory(parent: &Path, label: &str) -> Result<HashSet<PathBuf>> {
     if cache.len() >= 64 {
         cache.clear();
     }
-    cache.insert(parent, Inventory { version, groups });
+    cache.insert(key, Inventory { version, groups });
     Ok(result)
 }
 
@@ -228,7 +304,7 @@ fn validate_inventory(plan: &Value) -> Result<()> {
     let label = plan["label"]
         .as_str()
         .ok_or_else(|| Error::new("连拍来源组无效"))?;
-    let actual = inventory(parent, label)?;
+    let actual = inventory(parent, label, source_make(plan))?;
     if actual != expected {
         return failure("连拍成员范围发生变化或仅扫描了部分组，请添加完整来源目录后重新检查");
     }
@@ -375,6 +451,9 @@ pub fn convert_with_policy(
     overwrite: bool,
     legacy_hdr: bool,
 ) -> Result<Value> {
+    let google = plan["source_format"] == "google-burst";
+    let format = source_format(plan);
+    let revision = revision(format)?;
     let Choice {
         representative,
         independent,
@@ -401,10 +480,32 @@ pub fn convert_with_policy(
     {
         return failure("连拍选取范围无效");
     }
-    let indices: Vec<_> = all
-        .iter()
-        .filter_map(|p| filename(&paths::file_name(p), "").and_then(|f| f["index"].as_u64()))
-        .collect();
+    let mut indices = Vec::new();
+    let mut vendor_groups = HashSet::new();
+    for (file, member) in all.iter().zip(plan["members"].as_array().unwrap()) {
+        let evidence =
+            inspect(file, &image_read(file)?).ok_or_else(|| Error::new("连拍来源证据已失效"))?;
+        if evidence["supported"] != true
+            || evidence["group_id"] != plan["id"]
+            || evidence["index"] != member["index"]
+            || evidence["source_cover"] != member["source_cover"]
+            || source_format(&evidence) != format
+        {
+            return failure("连拍来源证据与扫描计划不符，请重新检查");
+        }
+        if let Some(index) = evidence["index"].as_u64() {
+            indices.push(index);
+        }
+        if google {
+            vendor_groups.insert(evidence["google_group"].to_string());
+        }
+        if format == "samsung-burst" {
+            vendor_groups.insert(evidence["vendor_group"].to_string());
+        }
+    }
+    if vendor_groups.len() > 1 {
+        return failure("连拍成员的厂商分组证据缺失或冲突");
+    }
     let ordered = indices.len() == all.len() && indices.windows(2).all(|p| p[0] < p[1]);
     if !independent && (selected.len() != all.len() || !ordered) {
         return failure(
@@ -438,7 +539,7 @@ pub fn convert_with_policy(
     let group = uuid(&identity.to_string());
     if !overwrite && target.exists() {
         let m = output::verify(target)?;
-        if m["implementation"] != REVISION || m["burst"]["identity"] != identity {
+        if m["implementation"] != revision || m["burst"]["identity"] != identity {
             return failure("已有连拍结果与来源、范围或代表帧不同，请显式覆盖");
         }
         validate_inventory(plan)?;
@@ -527,7 +628,7 @@ pub fn convert_with_policy(
         "independent":independent,"has_gaps":plan["has_gaps"],"completeness":"observed-only","original_total_known":false,"library_status":"not-checked"});
     let hdr = json!({"policy":super::hdr::POLICY,"status":"per-member","counts":hdr_counts,
         "reason":format!("HDR 转换 {} / 保留 {} / 忽略 {}；逐成员详情可查看",hdr_counts["converted"],hdr_counts["preserved"],hdr_counts["ignored"])});
-    let m = json!({"processing_kind":processing_kind,"source_format":"honor-burst","implementation":REVISION,"output_files":names,"output_sha256":outputs,"burst":burst,"timing":{"applicable":false},"hdr":hdr});
+    let m = json!({"processing_kind":processing_kind,"source_format":format,"implementation":revision,"output_files":names,"output_sha256":outputs,"burst":burst,"timing":{"applicable":false},"hdr":hdr});
     write_json(&m, &stage.path().join(output::MANIFEST))?;
     output::verify(stage.path())?;
     validate_inventory(plan)?;
@@ -562,14 +663,17 @@ pub fn verify(folder: &Path, manifest: &Value) -> Result<()> {
     let names = manifest["output_files"]
         .as_object()
         .ok_or_else(|| Error::new("连拍输出角色无效"))?;
-    if names.len() != members.len() * 2
-        || ![REVISION, "honor-burst-1"].contains(&manifest["implementation"].as_str().unwrap_or(""))
-    {
+    let google = manifest["source_format"] == "google-burst";
+    let format = source_format(manifest);
+    let valid_revision = manifest["implementation"] == revision(format)?
+        || (format == "honor-burst" && manifest["implementation"] == "honor-burst-1");
+    if names.len() != members.len() * 2 || !valid_revision {
         return failure("连拍输出缺少成员或原片归档");
     }
     let marked = burst["independent"] == false && members.len() > 1;
     let mut ids = HashSet::new();
     let mut representatives = 0;
+    let mut vendor_groups = HashSet::new();
     for (i, m) in members.iter().enumerate() {
         let role = format!("burst_frame_{i:03}");
         let original_role = format!("burst_original_{i:03}");
@@ -586,12 +690,39 @@ pub fn verify(folder: &Path, manifest: &Value) -> Result<()> {
         let source = m["source"]
             .as_str()
             .ok_or_else(|| Error::new("连拍原片身份无效"))?;
+        if format != "honor-burst" {
+            let evidence = inspect(Path::new(source), &original)
+                .ok_or_else(|| Error::new("连拍归档缺少来源证据"))?;
+            if source_format(&evidence) != format
+                || evidence["supported"] != true
+                || evidence["index"] != m["index"]
+                || evidence["source_cover"] != m["source_cover"]
+            {
+                return failure("连拍归档证据与清单不符");
+            }
+            if google {
+                vendor_groups.insert(evidence["google_group"].to_string());
+            }
+            if format == "samsung-burst" {
+                vendor_groups.insert(evidence["vendor_group"].to_string());
+                let mut output_evidence = json!({});
+                samsung::validate(&out, &mut output_evidence)?;
+                if output_evidence["vendor_group"] != evidence["vendor_group"] {
+                    return failure("三星连拍输出的 SEF 连拍证据变化");
+                }
+                let original_end = jpeg::image_ranges(&original)?.last().unwrap().end;
+                let output_end = jpeg::image_ranges(&out)?.last().unwrap().end;
+                if original[original_end..] != out[output_end..] {
+                    return failure("三星连拍 SEF 尾部资源未原样保留");
+                }
+            }
+        }
         if burst["identity"]["members"][source] != sha256_hex(&original)
             || jpeg::coding_hash(&out)? != jpeg::coding_hash(&original)?
         {
             return failure("连拍原片归档或图像编码校验失败");
         }
-        if manifest["implementation"] == REVISION {
+        if manifest["implementation"] != "honor-burst-1" {
             if crate::format::auxiliary_hashes(&out)?
                 != m["prepared_auxiliary_sha256"]
                     .as_array()
@@ -627,6 +758,9 @@ pub fn verify(folder: &Path, manifest: &Value) -> Result<()> {
         if m["representative"] == true {
             representatives += 1;
         }
+    }
+    if vendor_groups.len() > 1 {
+        return failure("连拍归档包含冲突的厂商组证据");
     }
     if marked && representatives != 1 {
         return failure("连拍必须恰有一张代表帧");

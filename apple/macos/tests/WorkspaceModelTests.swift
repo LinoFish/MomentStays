@@ -658,7 +658,50 @@ struct WorkspaceModelTests {
         }
     }
 
+    static func googleBurstTransportChecks() throws {
+        let rows: [[String:Any]] = (0..<2).map { i in
+            let frame: [String:Any] = ["group_id":"google-transport", "source_group":"IMG_20230108_205201",
+                "index":i, "source_cover":i == 0, "supported":true, "reason":"",
+                "source_format":"google-burst", "google_group":"source-google-id", "source_sha256":"frame-\(i)"]
+            return ["source":"/tmp/google-burst-transport/IMG_20230108_205201_BURST00\(i).jpg", "static":true, "burst":frame]
+        }
+        let transported = rows.compactMap(RustCore.scanRow).map(RustCore.rowJSON)
+        check(transported.count == 2, "Google scan rows survive Swift decoding")
+        let result = try RustCore.engine(["mode":"burst-plan", "scan_rows":transported])
+        let data = try JSONSerialization.data(withJSONObject:result["groups"]!)
+        let groups = try JSONDecoder().decode([BurstGroup].self,from:data)
+        check(groups.count == 1 && groups[0].source_format == "google-burst", "Google source format survives group transport")
+        check(groups[0].members.map(\.index) == [0,1] && groups[0].has_gaps == false, "Google zero-based sequence survives group planning")
+        check(groups[0].members.allSatisfy { $0.google_group == "source-google-id" }, "Google XMP evidence survives member transport")
+        var options = ConversionOptions(); options.burstPlans = groups
+        let encoded = transportJSON(options.burstPlans) as! [[String:Any]]
+        check(encoded[0]["source_format"] as? String == "google-burst", "Google conversion plans retain the source contract")
+        let roundTrip = try RustCore.engine(["mode":"burst-plan", "scan_rows":transported])
+        let again = roundTrip["groups"] as! [[String:Any]]
+        check(again[0]["signature"] as? String == groups[0].signature, "Google confirmation signature is stable across Swift transport")
+        for format in ["huawei-burst", "samsung-burst"] {
+            let vendorRows: [[String:Any]] = (1...2).map { i in
+                var frame: [String:Any] = ["group_id":format, "source_group":"20230108_205201", "index":i,
+                    "source_cover":format == "huawei-burst" && i == 1, "supported":true, "reason":"", "source_format":format]
+                if format == "samsung-burst" { frame["vendor_group"] = "sef-evidence-hash" }
+                return ["source":"/tmp/vendor-burst-transport/frame\(i).jpg", "burst":frame]
+            }
+            let sent = vendorRows.compactMap(RustCore.scanRow).map(RustCore.rowJSON)
+            let result = try RustCore.engine(["mode":"burst-plan", "scan_rows":sent])
+            let data = try JSONSerialization.data(withJSONObject:result["groups"]!)
+            let vendorGroups = try JSONDecoder().decode([BurstGroup].self,from:data)
+            check(vendorGroups.count == 1 && vendorGroups[0].source_format == format, "vendor source format survives scan and plan transport")
+            check(vendorGroups[0].members.map(\.index) == [1,2] && vendorGroups[0].has_gaps == false, "one-based vendor frame sequence survives transport")
+            if format == "samsung-burst" {
+                check(vendorGroups[0].members.allSatisfy { $0.vendor_group == "sef-evidence-hash" } && vendorGroups[0].representative == nil, "Samsung SEF evidence survives transport without guessing a representative")
+            }
+            let encoded = transportJSON(vendorGroups) as! [[String:Any]]
+            check(encoded[0]["source_format"] as? String == format, "vendor conversion plan preserves its source contract")
+        }
+    }
+
     static func burstChecks(root: URL, still: URL) throws {
+        try googleBurstTransportChecks()
         let requested = root.appendingPathComponent("burst-input")
         try FileManager.default.createDirectory(at:requested,withIntermediateDirectories:true)
         let input = NativeBatch.normalized(requested)
@@ -715,6 +758,11 @@ struct WorkspaceModelTests {
     }
 
     static func main() throws {
+        if CommandLine.arguments.contains("--google-burst-transport") {
+            try googleBurstTransportChecks()
+            print("PASS \(checks) Google burst Swift/Rust transport checks")
+            return
+        }
         if let i = CommandLine.arguments.firstIndex(of:"--burst-copy-integration"), i + 2 < CommandLine.arguments.count {
             try burstCopyIntegrationChecks(root:URL(fileURLWithPath:CommandLine.arguments[i+2]),still:URL(fileURLWithPath:CommandLine.arguments[i+1]))
             print("PASS \(checks) real Swift/Rust copy classification checks")

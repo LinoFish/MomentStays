@@ -158,15 +158,21 @@ pub fn handle(
         "audio-check" => {
             let file = first()?;
             let movie = crate::mp4::Movie::parse(&read(&file)?)?;
-            let count = movie.tracks.iter().filter(|t| t.samples.handler == "soun").count();
+            let count = movie
+                .tracks
+                .iter()
+                .filter(|t| t.samples.handler == "soun")
+                .count();
             match native.audio_decodes(&file, count)? {
                 Some(true) => Ok(json!({"audio_tracks":count,"native_decode":"completed"})),
-                Some(false) => Err(Error::new("Apple 原生音频解码失败，请重新转换后交付；未导入可能无声的旧结果")),
+                Some(false) => Err(Error::new(
+                    "Apple 原生音频解码失败，请重新转换后交付；未导入可能无声的旧结果",
+                )),
                 None => Err(Error::new("当前平台缺少原生音频校验能力")),
             }
         }
         "burst-filename" => Ok(
-            json!({"candidate":crate::engine::burst::filename(req["filename"].as_str().unwrap_or(""), "").is_some()}),
+            json!({"candidate":crate::engine::burst::filename_candidate(req["filename"].as_str().unwrap_or(""))}),
         ),
         "burst-plan" => {
             let rows: Vec<_> = req["scan_rows"]

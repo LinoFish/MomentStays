@@ -39,7 +39,10 @@ fn existing_standard_gainmap_is_delivered_without_rebuilding_or_counting_convers
         assert_eq!(result["processing_kind"], "original-copy");
         assert_eq!(result["hdr"]["outcome"], "preserved");
         assert_eq!(std::fs::read(out.join("hdr.jpg")).unwrap(), bytes);
-        assert_eq!(output::verify(&out).unwrap()["processing_kind"], "original-copy");
+        assert_eq!(
+            output::verify(&out).unwrap()["processing_kind"],
+            "original-copy"
+        );
         let resumed = static_hdr::convert(
             &NoNative,
             &source,

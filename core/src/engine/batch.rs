@@ -337,7 +337,9 @@ pub fn run(
         .map(|i| {
             if let Some((plan, _)) = burst_jobs.get(i) {
                 let parent = Path::new(&relatives[*i]).parent().unwrap_or(Path::new(""));
-                let evidence = crate::engine::burst::filename(&paths::file_name(&entries[*i]), "");
+                let make = crate::engine::burst::source_make(plan);
+                let evidence =
+                    crate::engine::burst::filename(&paths::file_name(&entries[*i]), make);
                 let label = evidence
                     .as_ref()
                     .and_then(|v| v["source_group"].as_str())
@@ -436,7 +438,7 @@ pub fn run(
                 let selected: Vec<_> = indices.iter().map(|i| entries[*i].clone()).collect();
                 let invalid_choice = choice.is_some_and(|c| c["signature"] != plan["signature"]);
                 if options.direction != "to-apple" {
-                    failure("荣耀连拍目前仅支持 Apple 目标")
+                    failure("连拍目前仅支持 Apple 目标")
                 } else if options.output_mode != "livephoto"
                     || options.video_track != "primary"
                     || options.cover_index.is_some()

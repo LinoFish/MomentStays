@@ -170,7 +170,11 @@ pub fn convert(
     let names = json!({"static":name});
     write(&stage.path().join(&name), &image)?;
     let _ = super::copy_mtime(source, &stage.path().join(&name));
-    let processing_kind = if original_copy { "original-copy" } else { "hdr-conversion" };
+    let processing_kind = if original_copy {
+        "original-copy"
+    } else {
+        "hdr-conversion"
+    };
     let m = json!({"source_format":"static-hdr","implementation":"static-hdr-3","processing_kind":processing_kind,"source":paths::json(source),
         "source_sha256":source_hash,"options":opts,"output_files":names,
         "output_sha256":{name.clone():hash_file(&stage.path().join(&name))?},

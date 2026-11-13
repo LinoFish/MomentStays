@@ -59,7 +59,7 @@ enum MigrationTargetPreset: String, SettingsChoice {
     }
     var detail: String {
         switch self {
-        case .apple: return "受支持实况、静态 HDR 与荣耀 JPEG 连拍 → Apple；连拍允许缺帧，保留原序号。"
+        case .apple: return "受支持实况、静态 HDR 与荣耀/华为同格式 JPEG 连拍 → Apple；实验支持 Google 原始文件名及三星 SEF JPEG 连拍。"
         case .googleToHonor: return "Google → 荣耀：仅支持已验证的 Google Motion Photo JPEG；不支持 HEIC。安卓互转仅此方向和荣耀 → Google。"
         case .honorToGoogle: return "荣耀 → Google：仅支持已识别荣耀实况 JPEG；静态 HDR 独立输出单图，具体支持以照片检查结果为准；不支持 HEIC。"
         default: return "\(title)；\(vendor.supportsHEIC ? "JPEG / HEIC" : "仅 JPEG")。本地静态 HDR 独立处理，具体支持以照片检查结果为准。"

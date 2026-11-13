@@ -279,14 +279,20 @@ pub fn convert(
         movie::movie(video, &request)
     })?;
     write(&mov_path, &mov)?;
-    let expected_audio = timing["tracks"].as_array().map_or(0, |v| v.iter().filter(|t| t["type"] == "soun").count());
+    let expected_audio = timing["tracks"]
+        .as_array()
+        .map_or(0, |v| v.iter().filter(|t| t["type"] == "soun").count());
     let audio_checked = native.audio_decodes(&mov_path, expected_audio)?;
     if audio_checked == Some(false) {
         return failure("Apple 原生音频解码校验失败；未发布可能无声的实况结果");
     }
     timing["audio_native_decode"] = json!(if expected_audio == 0 {
         "not-applicable"
-    } else if audio_checked == Some(true) { "completed" } else { "unavailable" });
+    } else if audio_checked == Some(true) {
+        "completed"
+    } else {
+        "unavailable"
+    });
 
     // Extra candidate stills (and optional Live pairs for each).
     let mut candidate_photos: Vec<Value> = Vec::new();
@@ -321,8 +327,11 @@ pub fn convert(
             let (m, t) =
                 timings.measure("media_remux_and_validation", || movie::movie(video, &req))?;
             write(&stage.path().join(&movie_name), &m)?;
-            let expected_audio = t["tracks"].as_array().map_or(0, |v| v.iter().filter(|t| t["type"] == "soun").count());
-            if native.audio_decodes(&stage.path().join(&movie_name), expected_audio)? == Some(false) {
+            let expected_audio = t["tracks"]
+                .as_array()
+                .map_or(0, |v| v.iter().filter(|t| t["type"] == "soun").count());
+            if native.audio_decodes(&stage.path().join(&movie_name), expected_audio)? == Some(false)
+            {
                 return failure("Apple 原生音频解码校验失败；未发布候选实况结果");
             }
             names.insert(candidate_video_role(role), movie_name);

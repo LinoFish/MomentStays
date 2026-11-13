@@ -76,18 +76,20 @@ fn build_track(s: &TrackSpec) -> (Vec<u8>, Vec<u8>) {
         sound.extend(16u16.to_be_bytes());
         sound.extend([0; 4]);
         sound.extend((48000u32 << 16).to_be_bytes());
-        sound.extend(full("esds", 0, 0, &[
-            3,25,0,0,0,4,17,0x40,0x15,0,3,0,0,3,0xe8,0,0,3,0xe8,0,
-            5,2,0x11,0x90,6,1,2,
-        ]));
+        sound.extend(full(
+            "esds",
+            0,
+            0,
+            &[
+                3, 25, 0, 0, 0, 4, 17, 0x40, 0x15, 0, 3, 0, 0, 3, 0xe8, 0, 0, 3, 0xe8, 0, 5, 2,
+                0x11, 0x90, 6, 1, 2,
+            ],
+        ));
         bx("mp4a", &sound)
-    } else { bx(s.stsd_entry, &[0; 6]) };
-    let mut stbl = full(
-        "stsd",
-        0,
-        0,
-        &[u32s(&[1]), entry].concat(),
-    );
+    } else {
+        bx(s.stsd_entry, &[0; 6])
+    };
+    let mut stbl = full("stsd", 0, 0, &[u32s(&[1]), entry].concat());
     let mut body = u32s(&[s.stts.len() as u32]);
     for (c, d) in &s.stts {
         body.extend(u32s(&[*c, *d]));

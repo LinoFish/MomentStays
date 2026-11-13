@@ -86,7 +86,7 @@ pub fn scan_file(
 ) -> ScanRow {
     let before = SourceVersion::read(file);
     if before.is_some_and(|v| v.size > super::burst::MAX_IMAGE)
-        && super::burst::filename(&super::paths::file_name(file), "").is_some()
+        && super::burst::filename_candidate(&super::paths::file_name(file))
     {
         let mut burst = super::burst::inspect(file, &[]);
         if let Some(frame) = burst.as_mut() {
@@ -160,7 +160,19 @@ pub fn scan_file(
             row.burst = super::burst::inspect(file, data);
             if let Some(burst) = &row.burst {
                 row.detail = if burst["supported"] == true {
-                    "荣耀 JPEG 连拍成员；按原帧序保留，需检查整组与代表帧".into()
+                    match burst["source_format"].as_str() {
+                        Some("google-burst") => {
+                            "Google JPEG 连拍成员（实验支持）；按原帧序保留，需检查整组与代表帧"
+                                .into()
+                        }
+                        Some("huawei-burst") => {
+                            "华为 JPEG 连拍成员（已知荣耀同格式）；未承诺新版本兼容".into()
+                        }
+                        Some("samsung-burst") => {
+                            "三星 JPEG 连拍成员（实验支持）；请明确选择代表帧".into()
+                        }
+                        _ => "荣耀 JPEG 连拍成员；按原帧序保留，需检查整组与代表帧".into(),
+                    }
                 } else {
                     burst["reason"]
                         .as_str()

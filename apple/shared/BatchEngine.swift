@@ -62,6 +62,9 @@ struct BurstFrame: Codable, Equatable {
     let source_sha256: String?
     let supported: Bool
     let reason: String
+    var source_format: String? = nil
+    var google_group: String? = nil
+    var vendor_group: String? = nil
 }
 struct BurstMember: Codable, Equatable, Identifiable {
     let source: String
@@ -69,6 +72,8 @@ struct BurstMember: Codable, Equatable, Identifiable {
     let source_cover: Bool
     let version: String?
     let source_sha256: String?
+    var google_group: String? = nil
+    var vendor_group: String? = nil
     var id: String { source }
 }
 struct BurstGroup: Codable, Equatable, Identifiable {
@@ -82,6 +87,7 @@ struct BurstGroup: Codable, Equatable, Identifiable {
     let has_gaps: Bool?
     let supported: Bool
     let source_cover_count: Int
+    var source_format: String? = nil
 }
 struct BurstChoice: Codable, Equatable {
     var signature: String
