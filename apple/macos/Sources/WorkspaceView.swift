@@ -79,61 +79,71 @@ struct WorkspaceView: View {
                 return actions.acceptDrop(providers,true)
             }.recordLayout("output-control")
     }
+    // One command row reads left to right as the task flow: direction → output → options → start.
     private func workspaceHeader(_ layout: WorkspaceLayout) -> some View {
-        VStack(alignment:.leading,spacing:8) {
-            HStack(alignment:.top,spacing:16) {
-                VStack(alignment:.leading,spacing:3) {
-                    Text("转换方向").font(.caption).foregroundColor(.secondary)
-                    Picker("转换方向",selection:target) {
-                        Text("选择转换方向…").tag(Optional<MigrationTargetPreset>.none)
-                        ForEach(MigrationTargetPreset.allCases,id:\.self) { Text($0.title).tag(Optional($0)) }
-                    }.labelsHidden().disabled(!model.canSwitchDirection)
-                        .help(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先选择来源 → 去向的转换方向，再添加对应来源")
-                        .accessibilityIdentifier("migration-target").recordLayout("conversion-directions")
-                }.frame(minWidth:180,maxWidth:300)
-                VStack(alignment:.leading,spacing:3) {
+        let roomy = layout.size.width >= 940
+        return HStack(alignment:.bottom,spacing:12) {
+            VStack(alignment:.leading,spacing:3) {
+                Text("转换方向").font(.caption).foregroundColor(.secondary)
+                Picker("转换方向",selection:target) {
+                    Text("选择转换方向…").tag(Optional<MigrationTargetPreset>.none)
+                    ForEach(MigrationTargetPreset.allCases,id:\.self) { Text($0.title).tag(Optional($0)) }
+                }.labelsHidden().disabled(!model.canSwitchDirection)
+                    .help(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先选择来源 → 去向的转换方向，再添加对应来源")
+                    .accessibilityIdentifier("migration-target").recordLayout("conversion-directions")
+            }.frame(minWidth:170,maxWidth:280)
+            Image(systemName:"arrow.right").font(.caption).foregroundColor(.secondary)
+                .padding(.bottom,5).accessibilityHidden(true)
+            VStack(alignment:.leading,spacing:3) {
+                HStack(spacing:6) {
                     Text(model.unconvertedExport == .none ? "输出位置" : "输出位置 · 含未转换原片")
-                        .font(.caption).foregroundColor(.secondary).lineLimit(1)
+                        .lineLimit(1)
                         .help(model.unconvertedExport == .none ? "文件生成与交付位置；可在选项中启用未转换照片原样导出" : originalExportHelp)
-                    outputControl
-                }.frame(maxWidth:.infinity,alignment:.leading)
-                VStack(alignment:.trailing,spacing:3) {
-                    Text(primaryActionHint).font(.caption).foregroundColor(.secondary)
-                        .lineLimit(1).truncationMode(.tail).help(primaryActionHint)
-                    primaryAction.frame(maxWidth:.infinity)
-                }.frame(width:148)
+                    if model.settings.privateHDRExperimentEnabled {
+                        Text("· 实验功能已启用").lineLimit(1)
+                            .help("私有 HDR 转换为实验性功能，可在选项中的「实验性功能」查看和修改")
+                            .accessibilityIdentifier("experimental-enabled-summary")
+                    }
+                }.font(.caption).foregroundColor(.secondary)
+                outputControl
+            }.frame(maxWidth:.infinity,alignment:.leading)
+            resultMenu.padding(.bottom,1)
+            Button { model.settingsPresented = true } label: {
+                if roomy { Label("选项…",systemImage:"slider.horizontal.3") }
+                else { Image(systemName:"slider.horizontal.3") }
             }
-            HStack(spacing:12) {
-                Text(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先选择转换方向，再从左侧添加来源。原片保持不变。")
-                    .font(.caption).foregroundColor(.secondary).lineLimit(1).truncationMode(.tail)
-                    .frame(maxWidth:.infinity,alignment:.leading)
-                    .help(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先选择转换方向，再从左侧添加来源。原片保持不变。")
-                if model.settings.privateHDRExperimentEnabled {
-                    Text("实验功能已启用").font(.caption).foregroundColor(.secondary)
-                        .help("私有 HDR 转换为实验性功能，可在选项中的「实验性功能」查看和修改")
-                        .accessibilityIdentifier("experimental-enabled-summary")
-                }
-                Button { model.settingsPresented = true } label: { Label("选项…",systemImage:"slider.horizontal.3") }
-                    .focused($settingsFocused).disabled(!model.migrationTargetConfirmed || model.isBusy || model.sharing)
-                    .accessibilityIdentifier("settings-button").recordLayout("settings-button")
-                    .help("处理、原样导出与实验性功能设置")
-            }
-        }.padding(.horizontal,layout.margin).padding(.vertical,8).recordLayout("command-bar")
+                .focused($settingsFocused).disabled(!model.migrationTargetConfirmed || model.isBusy || model.sharing)
+                .accessibilityLabel("选项").accessibilityIdentifier("settings-button").recordLayout("settings-button")
+                .help("处理、原样导出与实验性功能设置（⌘,）")
+            VStack(alignment:.trailing,spacing:3) {
+                Text(primaryActionHint).font(.caption).foregroundColor(.secondary)
+                    .lineLimit(1).truncationMode(.tail).help(primaryActionHint)
+                primaryAction.frame(maxWidth:.infinity)
+            }.frame(width:148)
+        }.padding(.horizontal,layout.margin).padding(.vertical,10).recordLayout("command-bar")
     }
     private var resultMenu: some View {
         Menu {
             Button("导出结果到其他位置…",action:actions.exportResults)
                 .disabled(!model.resultExportAvailable || model.isBusy || model.sharing)
                 .accessibilityIdentifier("export-results-button")
-            if model.report != nil { Button("处理报告…",action:actions.showReport).disabled(model.isBusy) }
             if model.shareReady { Button("共享完整结果…",action:actions.shareResults).disabled(model.isBusy || model.sharing) }
             Button("打开输出文件夹",action:actions.openOutput).disabled(!model.canOpenOutput).help(model.outputOpenHelp)
+            if model.report != nil { Button("处理报告…",action:actions.showReport).disabled(model.isBusy) }
+            Divider()
+            Button("最近结果与交付…",action:actions.recentResults).disabled(model.isBusy || model.sharing)
+            if model.libraryMonitoring { Button("停止图库监测",action:actions.toggleLibraryMonitoring).disabled(model.isBusy) }
             Divider()
             Link(UserGuide.title(for:locale),destination:UserGuide.url(for:locale))
-        } label: { Label("本轮结果",systemImage:"checkmark.rectangle.stack") }
-            .help("导出结果、处理报告、完整共享与打开输出；不重新转换")
-            .accessibilityLabel("本轮结果操作")
+        } label: { Image(systemName:"checkmark.rectangle.stack") }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help(resultMenuHelp)
+            .accessibilityLabel("结果与交付")
             .recordLayout("workspace-more-menu")
+    }
+    private var resultMenuHelp: String {
+        let summary = !model.deliverySummary.isEmpty ? model.deliverySummary : model.report?.summary ?? ""
+        return (summary.isEmpty ? "" : summary + "\n") + "导出、共享、打开输出、处理报告与最近结果；不重新转换"
     }
     @ViewBuilder private var primaryAction: some View {
         if model.isBusy {
@@ -178,10 +188,12 @@ struct WorkspaceView: View {
                     Spacer(minLength:0)
                     sourceMenu
                 }
-                Text("\(model.sources.count) 个入口 · \(model.items.count) 张").font(.caption).foregroundColor(.secondary)
                 addButton
+                if !model.sources.isEmpty {
+                    Text("\(model.sources.count) 个入口 · \(model.items.count) 张").font(.caption).foregroundColor(.secondary)
+                }
                 if model.sources.isEmpty {
-                    Text(model.migrationTargetConfirmed ? "添加文件、文件夹或图库照片" : "先在顶部选择转换方向")
+                    Text(model.migrationTargetConfirmed ? "添加文件、文件夹或图库照片，也可直接拖进右侧" : "先在顶部选择转换方向")
                         .font(.caption).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
                 } else {
                     sidebarButton("全部来源",symbol:"square.stack",selected:model.migrationSource == nil) { model.migrationSource = nil }
@@ -193,21 +205,18 @@ struct WorkspaceView: View {
                     }
                 }
               }
-                Divider().padding(.vertical,2)
-              Group {
-                Text("任务与结果").font(.headline)
-                Text(model.isBusy ? model.status : !model.deliverySummary.isEmpty ? model.deliverySummary : model.report?.summary ?? "处理后的结果会保留在这里")
-                    .font(.caption).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
-                resultMenu
-                Button("最近结果与交付…",action:actions.recentResults).disabled(model.isBusy || model.sharing)
-                    .help("查看任务历史，重试未完成的图库导入、共享或其他交付")
-                if model.libraryMonitoring {
-                    Label("正在监测图库",systemImage:"photo.on.rectangle").font(.caption).foregroundColor(.secondary)
-                    Button("停止监测",action:actions.toggleLibraryMonitoring).disabled(model.isBusy)
-                }
-              }
             }.frame(maxWidth:.infinity,alignment:.leading).padding(12)
-        }.background(InterfaceStyle.content).recordLayout("source-sidebar")
+        }
+        .safeAreaInset(edge:.bottom,spacing:0) {
+            if model.libraryMonitoring {
+                VStack(alignment:.leading,spacing:6) {
+                    Divider()
+                    Label("正在监测图库",systemImage:"photo.on.rectangle").font(.caption).foregroundColor(.secondary)
+                    Button("停止监测",action:actions.toggleLibraryMonitoring).disabled(model.isBusy).controlSize(.small)
+                }.padding([.horizontal,.bottom],12).background(InterfaceStyle.content)
+            }
+        }
+        .background(InterfaceStyle.content).recordLayout("source-sidebar")
     }
     private var sourceMenu: some View {
         Menu {
