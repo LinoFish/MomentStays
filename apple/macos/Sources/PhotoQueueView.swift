@@ -243,24 +243,31 @@ struct PhotoQueueView: View {
 
     // A single toolbar row: categories, then filters, search and view controls.
     private func heading(_ layout: QueueLayout) -> some View {
-        VStack(alignment:.leading,spacing:8) {
-            HStack(spacing:10) {
+        // Wide: one row. Narrow: categories get their own row so their titles never truncate.
+        let narrow = layout.width < 660
+        return VStack(alignment:.leading,spacing:8) {
+            if narrow {
                 scopeFilters(layout)
-                featureMenu
-                if !model.burstGroups.isEmpty {
-                    Button { model.burstReviewPresented = true } label: { Image(systemName:"square.stack.3d.down.right") }
-                        .buttonStyle(.borderless).accessibilityLabel("检查连拍组")
-                        .accessibilityIdentifier("burst-review-button").recordLayout("burst-review-button")
-                        .help("检查连拍组：\(model.burstGroups.count) 组 · \(model.burstGroups.reduce(0) { $0 + $1.members.count }) 帧")
-                        .disabled(model.isBusy || model.sharing)
-                }
-                if model.migrationSearchExpanded && layout.width >= 860 { searchField.frame(width:200) }
-                else if !model.migrationSearchExpanded { searchToggle }
-                browserControls(layout)
+                HStack(spacing:10) { Spacer(minLength:0); toolButtons(layout) }
+            } else {
+                HStack(spacing:10) { scopeFilters(layout); toolButtons(layout) }
             }
             if model.migrationSearchExpanded && layout.width < 860 { searchField }
         }.padding(.horizontal,InterfaceStyle.Spacing.content).padding(.vertical,8)
             .frame(maxWidth:.infinity,alignment:.leading).background(InterfaceStyle.content)
+    }
+    @ViewBuilder private func toolButtons(_ layout: QueueLayout) -> some View {
+        featureMenu
+        if !model.burstGroups.isEmpty {
+            Button { model.burstReviewPresented = true } label: { Image(systemName:"square.stack.3d.down.right") }
+                .buttonStyle(.borderless).accessibilityLabel("检查连拍组")
+                .accessibilityIdentifier("burst-review-button").recordLayout("burst-review-button")
+                .help("检查连拍组：\(model.burstGroups.count) 组 · \(model.burstGroups.reduce(0) { $0 + $1.members.count }) 帧")
+                .disabled(model.isBusy || model.sharing)
+        }
+        if model.migrationSearchExpanded && layout.width >= 860 { searchField.frame(width:200) }
+        else if !model.migrationSearchExpanded { searchToggle }
+        browserControls(layout)
     }
     private var searchToggle: some View {
         Button {
@@ -394,7 +401,7 @@ struct PhotoQueueView: View {
                 Text(value.title).fontWeight(scope == value ? .semibold : .regular)
                 Text("\(count)").monospacedDigit().foregroundColor(.secondary)
             }
-            .font(.callout).lineLimit(1).padding(.horizontal,10).frame(minHeight:short ? 22 : 28)
+            .font(.callout).lineLimit(1).fixedSize().padding(.horizontal,9).frame(minHeight:short ? 22 : 28)
             .foregroundColor(.primary)
             .background(RoundedRectangle(cornerRadius:InterfaceStyle.controlRadius)
                 .fill(scope == value ? InterfaceStyle.selection : Color.clear)
