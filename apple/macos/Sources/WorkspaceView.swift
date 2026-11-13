@@ -110,8 +110,9 @@ struct WorkspaceView: View {
             resultMenu.padding(.bottom,1)
             Button { model.settingsPresented = true } label: {
                 if roomy { Label("选项…",systemImage:"slider.horizontal.3") }
-                else { Image(systemName:"slider.horizontal.3") }
+                else { Image(systemName:"slider.horizontal.3").frame(height:16) }
             }
+                .frame(minHeight:24)
                 .focused($settingsFocused).disabled(!model.migrationTargetConfirmed || model.isBusy || model.sharing)
                 .accessibilityLabel("选项").accessibilityIdentifier("settings-button").recordLayout("settings-button")
                 .help("处理、原样导出与实验性功能设置（⌘,）")
