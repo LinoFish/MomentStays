@@ -1,5 +1,4 @@
 import Foundation
-import AVFoundation
 import ImageIO
 import CoreGraphics
 
@@ -7,7 +6,6 @@ struct CoverCandidate {
     let index: Int
     let timestampUs: Int
     let timeSource: String
-    let sampleTime: CMTime
     var json: [String:Any] { ["index":index,"timestamp_us":timestampUs,"time_source":timeSource] }
 }
 
@@ -15,15 +13,13 @@ struct CoverCandidate {
 // carry the real frame time even when every sample in the sparse track has PTS 0.
 final class CoverCandidateSession {
     let candidates: [CoverCandidate]
-    let durationRepair: [String:Any]?
     private let source: URL
     private let folder: URL
     private init(source: URL, folder: URL, value: [String:Any]) {
         self.source = source; self.folder = folder
-        durationRepair = value["duration_repair"] as? [String:Any]
         candidates = (value["candidates"] as? [[String:Any]] ?? []).compactMap { v in
             guard let i = v["index"] as? Int, let us = v["timestamp_us"] as? Int, let ts = v["time_source"] as? String else { return nil }
-            return CoverCandidate(index:i,timestampUs:us,timeSource:ts,sampleTime:.invalid)
+            return CoverCandidate(index:i,timestampUs:us,timeSource:ts)
         }
     }
     static func prepare(video: [UInt8], folder: URL) throws -> CoverCandidateSession? {

@@ -25,23 +25,8 @@ func hex(_ digest: SHA256.Digest) -> String {
 }
 
 func sha(_ data: Data) -> String { hex(SHA256.hash(data: data)) }
-// Feed one slice of a larger buffer into a running hash without copying it.
-func hashRange(_ hash: inout SHA256, _ d: [UInt8], _ range: Range<Int>) {
-    d.withUnsafeBufferPointer { buf in
-        guard let base = buf.baseAddress else { return }
-        hash.update(bufferPointer: UnsafeRawBufferPointer(start: UnsafeRawPointer(base + range.lowerBound), count: range.count))
-    }
-}
 
 func seconds(_ t: CMTime) -> Double { CMTimeGetSeconds(t) }
-func textItem(_ key: String, _ value: String) -> AVMetadataItem {
-    let item = AVMutableMetadataItem()
-    item.keySpace = .quickTimeMetadata
-    item.key = key as NSString
-    item.value = value as NSString
-    item.dataType = "com.apple.metadata.datatype.UTF-8"
-    return item
-}
 
 struct TrackInfo {
     let track: AVAssetTrack
