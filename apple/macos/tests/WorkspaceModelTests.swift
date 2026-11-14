@@ -533,10 +533,47 @@ struct WorkspaceModelTests {
             ScanRow(source:urls[1],relative:"hdr.jpg",isMotion:false,hdr:"Ultra HDR",cover:"不适用",detail:"",confirmedStatic:true,version:SourceVersion.read(urls[1])),
             ScanRow(source:urls[2],relative:"manual.jpg",isMotion:true,hdr:"SDR",cover:"未记录",detail:"",version:SourceVersion.read(urls[2])),
             ScanRow(source:urls[3],relative:"ordinary.jpg",isMotion:false,hdr:"SDR",cover:"不适用",detail:"",confirmedStatic:true,version:SourceVersion.read(urls[3]))]
+        let destinationService=ControlledService(), destinationModel=WorkspaceModel(service:ControlledService())
+        check(!destinationModel.outputIsChosen,"fresh workspace has no confirmed output")
+        let pendingDestination=WorkspaceModel(service:destinationService)
+        pendingDestination.selectMigrationTarget(.google); pendingDestination.chooseSources(urls)
+        destinationService.scans[0].completion(.success(rows))
+        check(pendingDestination.output != nil && !pendingDestination.outputIsChosen,"Android suggested output is not a user-confirmed output location")
+        pendingDestination.selectDeliveryMode(.share)
+        check(pendingDestination.outputIsChosen,"explicit share destination confirms cache-backed delivery without a folder")
+        pendingDestination.selectDeliveryMode(.folder)
+        check(!pendingDestination.outputIsChosen,"switching from cache to folder never confirms the suggested folder implicitly")
         let service = ControlledService(), model = WorkspaceModel(service:ControlledService())
         check(!model.canReviewMigration && !model.migrationTargetConfirmed,"target is chosen before the source workflow")
+        check(model.workspaceStep == .direction && !model.canImportSources && !model.canImportFromLibrary,"direction selection gates both import entries")
+        model.selectMigrationTarget(.googleToHonor)
+        check(model.canImportSources && !model.canImportFromLibrary && model.importScopeDescription.contains("JPEG"),"Android transfer exposes local verified JPEG import only")
+        model.selectMigrationTarget(.apple)
+        check(model.canImportSources && model.canImportFromLibrary,"Apple route restores both import entries without choosing processing features")
         let m = WorkspaceModel(service:service)
-        m.selectMigrationTarget(.apple); m.chooseSources(urls); service.scans[0].completion(.success(rows))
+        m.selectMigrationTarget(.apple); m.updateSettings { $0.legacyHDR = true }; m.chooseSources(urls); service.scans[0].completion(.success(rows))
+        let switchService = ControlledService(), switches = WorkspaceModel(service:ControlledService())
+        check(switches.settings.legacyHDR == false,"HDR action defaults off")
+        let scoped = WorkspaceModel(service:switchService)
+        scoped.selectMigrationTarget(.apple); scoped.chooseSources(urls); switchService.scans[0].completion(.success(rows))
+        check(scoped.migrationReadyItems.map(\.source) == [urls[0]],"HDR-off excludes standalone HDR but preserves live execution")
+        scoped.updateSettings { $0.liveConversion = false }
+        check(scoped.migrationReadyItems.isEmpty,"disabled live action is never silently executed")
+        scoped.updateSettings { $0.legacyHDR = true }
+        check(scoped.migrationReadyItems.map(\.source) == [urls[1]],"HDR-only excludes compound live photos instead of stripping their dynamic format")
+        scoped.updateSettings { $0.exportMode = .withAuxiliary }
+        let hdrOnlyOutput=root.appendingPathComponent("hdr-only-output")
+        try FileManager.default.createDirectory(at:hdrOnlyOutput,withIntermediateDirectories:true)
+        scoped.setOutput(hdrOnlyOutput); scoped.approveMigrationReview()
+        scoped.startReviewedMigration(scoped.reviewedMigration!,outputOverride:nil)
+        check(switchService.runs.first?.job.options.outputMode == "livephoto" && switchService.runs.first?.job.sources == [urls[1]],"disabled live internals never leak auxiliary output options into an HDR-only job")
+        var unsupported = rows[1]
+        unsupported = ScanRow(source:urls[1],relative:"hdr.jpg",isMotion:false,hdr:"荣耀私有 HDR",cover:"不适用",detail:"",confirmedStatic:true,version:SourceVersion.read(urls[1]),privateHDRSupported:false,privateHDRReason:"未命中标定配置")
+        let unsupportedService=ControlledService(), refused=WorkspaceModel(service:ControlledService())
+        check(!refused.settings.legacyHDR,"private HDR remains opt-in")
+        let denied=WorkspaceModel(service:unsupportedService); denied.selectMigrationTarget(.apple); denied.updateSettings { $0.legacyHDR=true }
+        denied.chooseSources([urls[1]]); unsupportedService.scans[0].completion(.success([unsupported]))
+        check(denied.migrationReadyItems.isEmpty && denied.anticipatedStatus(denied.items[0]).contains("未命中"),"unsupported Honor HDR is explicitly excluded from predicted conversion")
         let output = root.appendingPathComponent("migration-workbench-output")
         try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
         m.setOutput(output)
@@ -550,6 +587,9 @@ struct WorkspaceModelTests {
         check(m.canApproveMigration,"a selected ready/manual scope with a confirmed output can start directly")
         m.approveMigrationReview()
         let review = m.reviewedMigration!
+        check(m.resultScopeIDs == [urls[0].path,urls[2].path],"result photo scope freezes the converted and original-export scope together")
+        m.recordOriginalExport(try JSONSerialization.data(withJSONObject:["files":[["source":urls[2].path,"status":"copied","output":output.path,"detail":"完整原资源已校验"]]]))
+        check(m.items[2].originalExportState == .copied && m.items[2].resultState == nil,"original-only results expose structured copy status without pretending conversion success")
         check(review.readyIDs == [urls[0].path] && review.originalRows.map(\.source) == [urls[2]],"original export freezes only selected unconverted items, never unselected SDR")
         m.reviewedMigration = nil; m.startReviewedMigration(review,outputOverride:nil)
         check(service.runs.count == 1 && service.runs[0].job.sources == [urls[0]] && !m.manualPromptPresented && !m.migrationReviewPresented,"main workflow starts supported mixed scope directly with no extra manual or plan question")
@@ -613,8 +653,16 @@ struct WorkspaceModelTests {
         try Data([1]).write(to:hdr); try Data([2]).write(to:motion)
         let row = ScanRow(source:hdr,relative:"static-hdr.jpg",isMotion:false,hdr:"Ultra HDR",cover:"不适用",detail:"静态 HDR",confirmedStatic:true,version:SourceVersion.read(hdr))
         let dynamic = ScanRow(source:motion,relative:"motion.jpg",isMotion:true,hdr:"SDR",cover:"0.0 秒",detail:"",version:SourceVersion.read(motion))
+        let oppoRow = ScanRow(source:hdr,relative:"oppo.heic",isMotion:false,hdr:"OPPO UHDR（实验）",cover:"不适用",detail:"仅向苹果方向",confirmedStatic:true,version:SourceVersion.read(hdr))
+        for direction:ConversionDirection in [.toApple,.toAndroid,.androidToAndroid,.honorToGoogle] {
+            let oppoService=ControlledService()
+            let oppoModel=WorkspaceModel(service:oppoService)
+            oppoModel.updateSettings { $0.direction=direction }
+            oppoModel.chooseSources([hdr]); oppoService.scans[0].completion(.success([oppoRow]))
+            check(oppoModel.items.first?.isConvertible == (direction == .toApple),"OPPO UHDR is convertible only toward Apple")
+        }
         let service = ControlledService()
-        let model = WorkspaceModel(service:service); model.chooseSources([hdr,motion]); service.scans[0].completion(.success([row,dynamic]))
+        let model = WorkspaceModel(service:service); model.updateSettings { $0.legacyHDR = true }; model.chooseSources([hdr,motion]); service.scans[0].completion(.success([row,dynamic]))
         check(model.items[0].isConvertible && !model.items[0].isMotion && model.category(model.items[0]) == .ready,"static HDR is ready without claiming motion")
         model.toggleSelection(model.items[0]); model.selectQueueScope(.completed); model.toggleSelection(model.items[1])
         check(model.selectedIDs == Set([hdr.path,motion.path]),"static HDR and motion share cross-tab multiselection")

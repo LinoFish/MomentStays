@@ -93,8 +93,37 @@ fn supported_camera(data: &[u8]) -> Result<bool> {
         }))
 }
 
+/// Metadata-only admission; no pixel conversion or output writes.
+pub fn preflight(image: &[u8]) -> Result<()> {
+    let end = jpeg::image_end(image)?;
+    let Some(honor) = framing::honor_ehdr(image, end)? else {
+        return unsupported("未找到 EHDR 扩展");
+    };
+    if honor.luma.is_empty() {
+        return unsupported("原片不含亮度 JPEG");
+    }
+    if jpeg::image_ranges(image)?.len() != 1 {
+        return unsupported("已存在辅助图，不对其叠加私有 HDR 重建");
+    }
+    if !supported_camera(image)? {
+        return unsupported("机型、固件或色彩声明不属于当前标定配置");
+    }
+    if !profile::supports_header(honor.header) {
+        return unsupported("EHDR 参数头未命中四组标定配置（含 ISO/曝光字段）；无法确认私有亮度图对应的标准增益参数，未直接封装为 Ultra HDR");
+    }
+    let (width, height, channels) = frame(image)?;
+    if channels != 3
+        || !profile::supports_dimensions(width, height)
+        || frame(honor.luma)? != (width, height, 1)
+    {
+        return unsupported("主图与亮度图尺寸不属于当前标定配置");
+    }
+    Ok(())
+}
+
 /// No reference data at runtime. A refusal leaves preservation to the caller.
 pub fn convert(native: &dyn Native, image: &[u8]) -> Result<Vec<u8>> {
+    preflight(image)?;
     let end = jpeg::image_end(image)?;
     let Some(honor) = framing::honor_ehdr(image, end)? else {
         return unsupported("未找到 EHDR 扩展");

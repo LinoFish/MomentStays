@@ -145,6 +145,17 @@ pub struct MsNative {
         Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> i32>,
     /// (ctx, rows_json, len): a JSON array of scan rows
     pub rows_ready: Option<unsafe extern "C" fn(*mut c_void, *const u8, usize)>,
+    pub prepare_output_times: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const c_char,
+            *const c_char,
+            *const u8,
+            usize,
+            *mut MsBuffer,
+            *mut MsBuffer,
+        ) -> i32,
+    >,
 }
 
 struct Host(*const MsNative);
@@ -179,6 +190,32 @@ impl Host {
 }
 
 impl Native for Host {
+    fn prepare_output_times(&self, stage: &Path, source: &Path, manifest: &Value) -> Result<Value> {
+        let t = self.table();
+        let Some(f) = t.prepare_output_times else {
+            return Ok(Value::Null);
+        };
+        let stage = cstring(stage)?;
+        let source = cstring(source)?;
+        let input = manifest.to_string();
+        let (mut out, mut err) = (MsBuffer::default(), MsBuffer::default());
+        let code = unsafe {
+            f(
+                t.context,
+                stage.as_ptr(),
+                source.as_ptr(),
+                input.as_ptr(),
+                input.len(),
+                &mut out,
+                &mut err,
+            )
+        };
+        if !status(code, err, "补全照片拍摄时间")? {
+            return Ok(Value::Null);
+        }
+        serde_json::from_slice(&out.0).map_err(|_| Error::new("照片时间处理返回无效记录"))
+    }
+
     fn audio_decodes(&self, path: &Path, expected_tracks: usize) -> Result<Option<bool>> {
         crate::platform::SystemNative.audio_decodes(path, expected_tracks)
     }

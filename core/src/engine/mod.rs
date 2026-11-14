@@ -37,6 +37,7 @@ pub mod paths;
 pub mod request;
 pub mod scanrow;
 pub mod static_hdr;
+pub mod static_time;
 pub mod still;
 pub mod transfer;
 

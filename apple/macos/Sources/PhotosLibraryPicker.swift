@@ -8,26 +8,26 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
     private let listScroll = NSScrollView()
     private let gridScroll = NSScrollView()
     private let collection = NSCollectionView()
-    private let viewMode = NSSegmentedControl(labels:["缩略图","列表"],trackingMode:.selectOne,target:nil,action:nil)
+    private let viewMode = NSSegmentedControl(labels:[AppText.text("缩略图"),AppText.text("列表")],trackingMode:.selectOne,target:nil,action:nil)
     private var selectedIndexes = IndexSet()
     private var syncingSelection = false
     private var thumbnailMode: Bool { viewMode.selectedSegment == 0 }
     private var assetCount: Int { previewCount ?? assets?.count ?? 0 }
-    private let message = NSTextField(wrappingLabelWithString: "选择相册和照片，原片保持不变。")
-    private let libraryInfo = NSTextField(wrappingLabelWithString: "")
-    private let importButton = NSButton(title: "读取所选", target: nil, action: nil)
-    private let cancelButton = NSButton(title: "取消", target: nil, action: nil)
-    private let allButton = NSButton(title: "读取全部", target: nil, action: nil)
+    private let message = NSTextField(wrappingLabelWithString: AppText.text("选择相册和照片，原片保持不变。"))
+    private let libraryInfo = NSTextField(wrappingLabelWithString: AppText.text(""))
+    private let importButton = NSButton(title: AppText.text("读取所选"), target: nil, action: nil)
+    private let cancelButton = NSButton(title: AppText.text("取消"), target: nil, action: nil)
+    private let allButton = NSButton(title: AppText.text("读取全部"), target: nil, action: nil)
     private let albumPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let versionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let network = NSButton(checkboxWithTitle: "允许下载 iCloud 原件", target: nil, action: nil)
-    private let monitor = NSButton(checkboxWithTitle: "自动转换新增或编辑照片（运行期间）", target: nil, action: nil)
+    private let network = NSButton(checkboxWithTitle: AppText.text("允许下载 iCloud 原件"), target: nil, action: nil)
+    private let monitor = NSButton(checkboxWithTitle: AppText.text("自动转换新增或编辑照片（运行期间）"), target: nil, action: nil)
     private var albums: [PHAssetCollection] = []
     private var assets: PHFetchResult<PHAsset>!
     private let images = PHCachingImageManager()
     private let readProgress = NSProgressIndicator()
     private let photoBrowser = NSView()
-    private let emptyMessage = NSTextField(wrappingLabelWithString:"此相册没有可读取的照片\n试试其他相册或转换方向")
+    private let emptyMessage = NSTextField(wrappingLabelWithString:AppText.text("此相册没有可读取的照片\n试试其他相册或转换方向"))
     private var previewCount: Int? // Set only by the diagnostics entry point; never authorizes PhotoKit.
     private let service = PhotoLibraryService()
     private let token = StopToken()
@@ -97,22 +97,22 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
         let width = min(760,max(WindowSizing.library.width,(parent.contentView?.bounds.width ?? 800) - 32))
         let height = min(620,max(WindowSizing.library.height,(parent.contentView?.bounds.height ?? 640) - 48))
         sheet = NSWindow(contentRect:NSRect(x:0,y:0,width:width,height:height),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
-        sheet.title = "照片图库"; sheet.contentMinSize = WindowSizing.library
+        sheet.title = AppText.text("照片图库"); sheet.contentMinSize = WindowSizing.library
         if previewCount == nil { albums = PhotoLibraryService.albums(writableOnly:false) }
-        albumPopup.addItem(withTitle:"所有照片")
-        albumPopup.addItems(withTitles:albums.map { $0.localizedTitle ?? "未命名相册" })
+        albumPopup.addItem(withTitle:AppText.text("所有照片"))
+        albumPopup.addItems(withTitles:albums.map { $0.localizedTitle ?? AppText.text("未命名相册") })
         albumPopup.target = self; albumPopup.action = #selector(changeScope)
-        albumPopup.setAccessibilityLabel("相册范围")
-        versionPopup.addItems(withTitles:LibraryVersion.allCases.map(\.title))
+        albumPopup.setAccessibilityLabel(AppText.text("相册范围"))
+        versionPopup.addItems(withTitles:LibraryVersion.allCases.map { AppText.text($0.title) })
         versionPopup.selectItem(at:selectedScope.version == .original ? 0 : 1)
         versionPopup.target = self; versionPopup.action = #selector(changeScope)
-        versionPopup.setAccessibilityLabel("照片版本")
+        versionPopup.setAccessibilityLabel(AppText.text("照片版本"))
         table.delegate = self; table.dataSource = self; table.rowHeight = 58
         table.allowsMultipleSelection = true; table.style = .fullWidth
-        table.setAccessibilityLabel("图库照片，可多选")
+        table.setAccessibilityLabel(AppText.text("图库照片，可多选"))
         for (id,title,size) in [("image","照片",60.0),("name","文件与拍摄时间",width - 120)] {
             let column = NSTableColumn(identifier:NSUserInterfaceItemIdentifier(id))
-            column.title = title; column.width = size; column.minWidth = id == "image" ? 60 : 180
+            column.title = AppText.text(title); column.width = size; column.minWidth = id == "image" ? 60 : 180
             if id == "image" { column.maxWidth = 60 }
             table.addTableColumn(column)
         }
@@ -128,7 +128,7 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
         collection.isSelectable = true; collection.allowsMultipleSelection = true
         collection.dataSource = self; collection.delegate = self
         collection.backgroundColors = [.controlBackgroundColor]
-        collection.setAccessibilityLabel("图库缩略图，可按住 Command 多选")
+        collection.setAccessibilityLabel(AppText.text("图库缩略图，可按住 Command 多选"))
         collection.register(LibraryThumbnailItem.self,forItemWithIdentifier:NSUserInterfaceItemIdentifier("thumbnail"))
         gridScroll.hasVerticalScroller = true; gridScroll.documentView = collection
         gridScroll.borderType = .bezelBorder
@@ -143,7 +143,7 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
             ])
         }
         viewMode.selectedSegment = 0; viewMode.target = self; viewMode.action = #selector(changeViewMode)
-        viewMode.setAccessibilityLabel("图库显示方式")
+        viewMode.setAccessibilityLabel(AppText.text("图库显示方式"))
         listScroll.isHidden = true
         emptyMessage.alignment = .center; emptyMessage.textColor = .secondaryLabelColor
         emptyMessage.font = .systemFont(ofSize:13); emptyMessage.translatesAutoresizingMaskIntoConstraints = false
@@ -157,14 +157,14 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
             button.target = self; button.action = action; button.bezelStyle = .rounded
         }
         importButton.keyEquivalent = "\r"; importButton.isEnabled = false; cancelButton.keyEquivalent = "\u{1b}"
-        allButton.toolTip = "读取当前相册中列出的全部照片"
+        allButton.toolTip = AppText.text("读取当前相册中列出的全部照片")
         network.font = .systemFont(ofSize:12); monitor.font = .systemFont(ofSize:12)
-        network.toolTip = "关闭时不下载云端原件；无法读取的照片会跳过并说明原因。"
-        monitor.toolTip = "仅在应用运行期间监测所选相册与转换方向，退出后停止。"
+        network.toolTip = AppText.text("关闭时不下载云端原件；无法读取的照片会跳过并说明原因。")
+        monitor.toolTip = AppText.text("仅在应用运行期间监测所选相册与转换方向，退出后停止。")
         let gap = NSView(); gap.setContentHuggingPriority(.init(1),for:.horizontal)
         let buttons = NSStackView(views:[cancelButton,gap,allButton,importButton]); buttons.orientation = .horizontal
-        let title = NSTextField(labelWithString:"从图库添加照片"); title.font = .systemFont(ofSize:18,weight:.semibold)
-        let albumLabel = NSTextField(labelWithString:"相册"), versionLabel = NSTextField(labelWithString:"版本")
+        let title = NSTextField(labelWithString:AppText.text("从图库添加照片")); title.font = .systemFont(ofSize:18,weight:.semibold)
+        let albumLabel = NSTextField(labelWithString:AppText.text("相册")), versionLabel = NSTextField(labelWithString:AppText.text("版本"))
         for label in [albumLabel,versionLabel] { label.textColor = .secondaryLabelColor; label.font = .systemFont(ofSize:13) }
         let choices = NSStackView(views:[albumLabel,albumPopup,versionLabel,versionPopup])
         choices.orientation = .horizontal; choices.spacing = 8
@@ -202,10 +202,10 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
     }
 
     private func updateSummary(imageCount: Int, count: Int, permission: String) {
-        libraryInfo.stringValue = "当前范围 \(count) 张 · 图库共 \(imageCount) 张 · \(permission)"
-        libraryInfo.toolTip = "图库包含个人图库、共享相簿和同步来源。数量不符时，请在「照片 → 设置 → 通用」确认系统照片图库。"
-        message.stringValue = direction == .toApple ? "选择动态照片，按住 ⌘ 可多选；静态照片会跳过。" : "仅显示 Live Photo，按住 ⌘ 可多选。"
-        message.toolTip = "原片保持不变。云端原件需勾选允许下载；缩略图不会触发下载。"
+        libraryInfo.stringValue = AppText.text("当前范围 \(count) 张 · 图库共 \(imageCount) 张 · \(permission)")
+        libraryInfo.toolTip = AppText.text("图库包含个人图库、共享相簿和同步来源。数量不符时，请在「照片 → 设置 → 通用」确认系统照片图库。")
+        message.stringValue = AppText.text(direction == .toApple ? "选择动态照片，按住 ⌘ 可多选；静态照片会跳过。" : "仅显示 Live Photo，按住 ⌘ 可多选。")
+        message.toolTip = AppText.text("原片保持不变。云端原件需勾选允许下载；缩略图不会触发下载。")
         emptyMessage.isHidden = count > 0
     }
     @objc private func changeScope() {
@@ -285,7 +285,7 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
         collection.selectionIndexPaths = Set(indexes.map { IndexPath(item:$0,section:0) })
         syncingSelection = false
         importButton.isEnabled = !importing && !indexes.isEmpty
-        importButton.title = indexes.isEmpty ? "读取所选" : "读取所选（\(indexes.count)）"
+        importButton.title = AppText.text(indexes.isEmpty ? "读取所选" : "读取所选（\(indexes.count)）")
     }
     func tableViewSelectionDidChange(_ notification: Notification) {
         if !importing && !syncingSelection { setSelection(table.selectedRowIndexes) }
@@ -320,7 +320,7 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
     @objc private func readAll() { setSelection(IndexSet(integersIn:0..<assetCount)); importSelected() }
     @objc func cancel() {
         guard !finished else { return }; token.cancel(); service.cancel()
-        if importing { message.stringValue = "正在停止原件读取…"; cancelButton.isEnabled = false }
+        if importing { message.stringValue = AppText.text("正在停止原件读取…"); cancelButton.isEnabled = false }
         else { finish([], nil) }
     }
     private func finish(_ urls: [URL], _ error: Error?) {
@@ -339,7 +339,7 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
             do {
                 let result = try self.service.export(selected, scope: scope, store: self.store, token: self.token) { current, total, text in
                     DispatchQueue.main.async {
-                        self.message.stringValue = text; self.onProgress(text)
+                        self.message.stringValue = AppText.text(text); self.onProgress(text)
                         self.readProgress.doubleValue = total > 0 ? Double(current) / Double(total) * 100 : 0
                     }
                 }
@@ -358,7 +358,7 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
 // Reusable, bounded previews. Never download iCloud images merely to browse.
 private final class LibraryThumbnailItem: NSCollectionViewItem {
     private let photo = NSImageView()
-    private let caption = NSTextField(labelWithString:"")
+    private let caption = NSTextField(labelWithString:AppText.text(""))
     private let check = NSImageView()
     private var manager: PHImageManager?
     private var request: PHImageRequestID = PHInvalidImageRequestID
@@ -399,7 +399,7 @@ private final class LibraryThumbnailItem: NSCollectionViewItem {
     func configurePreview(_ index: Int) {
         reset(); caption.stringValue = "图库照片_\(index + 1).heic"
         view.toolTip = caption.stringValue + "（示意照片）"
-        photo.setAccessibilityLabel("示意照片")
+        photo.setAccessibilityLabel(AppText.text("示意照片"))
     }
     func configure(_ asset: PHAsset, manager: PHImageManager) {
         reset(); self.manager = manager; assetID = asset.localIdentifier

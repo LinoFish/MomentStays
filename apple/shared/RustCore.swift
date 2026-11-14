@@ -53,6 +53,13 @@ enum RustCore {
         }
     }
 
+    static func hdrFeatureFacts(_ input: [UInt8]) throws -> Data {
+        try call(3,input) { _,response in
+            let metadata = try JSONSerialization.jsonObject(with:Data(bytes(response,0)))
+            return try JSONSerialization.data(withJSONObject:metadata,options:.sortedKeys) + Data(bytes(response,1))
+        }
+    }
+
     static func auxiliaryHashes(_ input: [UInt8]) throws -> [String] {
         try call(2, input) { reply, _ in
             guard let hashes = reply.hashes else { throw Failure("Rust bridge: missing auxiliary hashes") }
@@ -70,6 +77,7 @@ private final class RustEngineContext {
     var progress: ((BatchProgress)->Void)?
     var existing: ((URL,URL)->ExistingOutputDecision)?
     var rows: (([ScanRow])->Void)?
+    var outputTimes: OutputTimeProcessor?
 }
 private func rustContext(_ pointer: UnsafeMutableRawPointer?) -> RustEngineContext {
     Unmanaged<RustEngineContext>.fromOpaque(pointer!).takeUnretainedValue()
@@ -83,9 +91,9 @@ extension RustCore {
     static func engine(_ request: [String:Any], token: StopToken? = nil,
                        progress: ((BatchProgress)->Void)? = nil,
                        existing: ((URL,URL)->ExistingOutputDecision)? = nil,
-                       rows: (([ScanRow])->Void)? = nil) throws -> [String:Any] {
+                       rows: (([ScanRow])->Void)? = nil, outputTimes: OutputTimeProcessor? = nil) throws -> [String:Any] {
         let context = RustEngineContext()
-        context.progress = progress; context.existing = existing; context.rows = rows
+        context.progress = progress; context.existing = existing; context.rows = rows; context.outputTimes = outputTimes
         var host = MsNative()
         host.context = Unmanaged.passUnretained(context).toOpaque()
         host.progress = { ctx,p,n in
@@ -105,6 +113,23 @@ extension RustCore {
         host.rows_ready = { ctx,p,n in
             guard let a = rustJSON(p,n) as? [[String:Any]] else { return }
             rustContext(ctx).rows?(a.compactMap(RustCore.scanRow))
+        }
+        if outputTimes != nil {
+            host.prepare_output_times = { ctx,stage,source,p,n,out,err in
+                guard let stage = stage, let source = source,
+                      let manifest = rustJSON(p,n) as? [String:Any],
+                      let prepare = rustContext(ctx).outputTimes else { return 1 }
+                do {
+                    let report = try prepare(URL(fileURLWithPath:String(cString:stage)),URL(fileURLWithPath:String(cString:source)),manifest)
+                    let bytes = try JSONSerialization.data(withJSONObject:report,options:.sortedKeys)
+                    bytes.withUnsafeBytes { raw in ms_buffer_append(out,raw.bindMemory(to:UInt8.self).baseAddress,raw.count) }
+                    return 0
+                } catch {
+                    let bytes = Data(error.localizedDescription.utf8)
+                    bytes.withUnsafeBytes { raw in ms_buffer_append(err,raw.bindMemory(to:UInt8.self).baseAddress,raw.count) }
+                    return -1
+                }
+            }
         }
         let input = try JSONSerialization.data(withJSONObject:request,options:[.sortedKeys])
         return try withExtendedLifetime((context,token)) {
@@ -165,6 +190,7 @@ extension RustCore {
         req["repair_auxiliary_duration"] = options.repairAuxiliaryDuration
         req["export_data_files"] = options.exportDataFiles
         req["exif_file_times"] = options.exifFileTimes
+        if let time = options.photoTime { req["photo_time"] = time }
         if let index = options.coverIndex { req["cover_candidate_index"] = index }
         req["cover_selections"] = options.coverSelections
         req["manual_covers"] = options.manualCovers.mapValues { $0.json }
@@ -178,13 +204,13 @@ extension RustCore {
         return req
     }
     static func run(sources: [URL], output: URL, options: ConversionOptions, token: StopToken, scanRows: [ScanRow]?,
-                    concurrency: Int?, existing: ((URL,URL)->ExistingOutputDecision)?, progress: @escaping (BatchProgress)->Void) throws -> BatchOutcome {
+                    concurrency: Int?, existing: ((URL,URL)->ExistingOutputDecision)?, outputTimes: OutputTimeProcessor? = nil, progress: @escaping (BatchProgress)->Void) throws -> BatchOutcome {
         var req = batchRequest(options)
         req["inputs"] = sources.map { $0.path }; req["output"] = output.path; req["include_report_data"] = true
         req["concurrency"] = concurrency ?? BatchScheduling.limit(scanning:false)
         req["ask_existing_output"] = existing != nil
         if let rows = scanRows { req["scan_rows"] = rows.map(rowJSON) }
-        let v = try engine(req,token:token,progress:progress,existing:existing)
+        let v = try engine(req,token:token,progress:progress,existing:existing,outputTimes:outputTimes)
         return BatchOutcome(counts:v["counts"] as? [String:Int] ?? [:],report:(v["report"] as? String).map { URL(fileURLWithPath:$0) },
             reportData:v["report_data"] as? [String:Any] ?? [:],cancelled:v["cancelled"] as? Bool ?? false)
     }

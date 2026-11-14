@@ -148,7 +148,9 @@ fn rename_fallback(from: &Path, to: &Path, swap: bool) -> std::io::Result<()> {
 }
 
 /// Swift `NativeBatch.publish`.
+#[allow(clippy::too_many_arguments)] // Transaction inputs and the host callback stay explicit.
 pub fn publish(
+    native: &dyn crate::engine::Native,
     stage: &Stage,
     target: &Path,
     source: &Path,
@@ -157,7 +159,41 @@ pub fn publish(
     overwrite: bool,
     export_data_files: bool,
 ) -> Result<()> {
-    let verified = verify(stage.path())?;
+    let mut verified = verify(stage.path())?;
+    let time_report = native.prepare_output_times(stage.path(), source, &verified)?;
+    let expects_time = verified["options"]["photo_time"].is_object()
+        || verified["burst"]["identity"]["photo_time"].is_object();
+    if expects_time && time_report.is_null() {
+        return failure("当前宿主未接入 PhotoTime 时间写入，未发布结果");
+    }
+    let time_processed = !time_report.is_null();
+    if time_processed {
+        verified["photo_time"] = time_report;
+        let names = string_map(&verified["output_files"])
+            .ok_or_else(|| Error::new("时间处理缺少资源角色"))?;
+        for name in names.values() {
+            verified["output_sha256"][name] = json!(hash_file(&stage.path().join(name))?);
+        }
+        write_json(&verified, &stage.path().join(MANIFEST))?;
+        verified = verify(stage.path())?;
+    }
+    if time_processed {
+        if let Some(members) = verified["burst"]["identity"]["members"].as_object() {
+            for (path, expected) in members {
+                if expected.as_str() != Some(hash_file(Path::new(path))?.as_str()) {
+                    return failure("时间处理期间连拍来源变化，整组未发布");
+                }
+            }
+        }
+        if let (Some(path), Some(expected)) = (
+            verified["paired_video_source"].as_str(),
+            verified["paired_video_sha256"].as_str(),
+        ) {
+            if hash_file(Path::new(path))? != expected {
+                return failure("时间处理期间原配对视频变化，未发布");
+            }
+        }
+    }
     if hash_file(source)? != source_hash {
         return failure("转换期间原片发生变化，未发布结果");
     }
@@ -325,8 +361,10 @@ pub fn verify_manifest(folder: &Path, manifest: &Value) -> Result<()> {
         return failure("静态 HDR 输出不能包含视频或配对角色");
     }
     if keys.contains("static")
-        && (manifest["source_format"].as_str() != Some("static-hdr")
-            || manifest.get("identifier").is_some()
+        && (!matches!(
+            manifest["source_format"].as_str(),
+            Some("static-hdr" | "static-time")
+        ) || manifest.get("identifier").is_some()
             || manifest["timing"] != json!({"applicable":false}))
     {
         return failure("静态 HDR 输出清单无效");

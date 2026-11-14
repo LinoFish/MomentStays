@@ -174,6 +174,18 @@ pub fn handle(
         "burst-filename" => Ok(
             json!({"candidate":crate::engine::burst::filename_candidate(req["filename"].as_str().unwrap_or(""))}),
         ),
+        "honor-hdr-preflight" => {
+            let path = Path::new(
+                req["source"]
+                    .as_str()
+                    .ok_or_else(|| Error::new("缺少来源"))?,
+            );
+            let bytes = crate::engine::read(path)?;
+            Ok(match crate::engine::hdr::honor::preflight(&bytes) {
+                Ok(()) => json!({"supported":true}),
+                Err(e) => json!({"supported":false,"reason":e.0}),
+            })
+        }
         "burst-plan" => {
             let rows: Vec<_> = req["scan_rows"]
                 .as_array()

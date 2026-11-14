@@ -20,6 +20,7 @@ final class MacPlatformServices: NSObject {
     private var activeTask: DeliveryTask?
     private var pendingOriginalExport: FileExportRecord?
     private var consumingMigration = false
+    private var pendingSources: [URL] = []
     private var lastTask: DeliveryTask? {
         didSet {
             model.recentOutput = lastTask.map { URL(fileURLWithPath:$0.output) }
@@ -63,6 +64,11 @@ final class MacPlatformServices: NSObject {
             if let self = self, let scope = self.lastScope, scope.direction != direction { self.stopMonitoring() }
         }.store(in: &subscriptions)
         model.$reviewedMigration.receive(on: DispatchQueue.main).sink { [weak self] _ in self?.consumeMigration() }.store(in:&subscriptions)
+        model.$migrationTargetConfirmed.removeDuplicates().receive(on:DispatchQueue.main).sink { [weak self] confirmed in
+            guard confirmed, let self = self, !self.pendingSources.isEmpty else { return }
+            let urls = self.pendingSources; self.pendingSources = []
+            self.openSources(urls)
+        }.store(in:&subscriptions)
         lastTask = deliveryStore.tasks().first(where: { $0.hasRecord })
         model.recentOutput = lastTask.map { URL(fileURLWithPath: $0.output) }
         model.recentTasksAvailable = lastTask != nil
@@ -77,6 +83,7 @@ final class MacPlatformServices: NSObject {
 
     var actions: WorkspaceActions {
         WorkspaceActions(chooseSources: { [weak self] in self?.chooseSources() },
+            chooseFolder: { [weak self] in self?.chooseSources(foldersOnly:true) },
             clearSources: { [weak self] in self?.clearSources() },
             chooseOutput: { [weak self] in self?.chooseOutput() },
             chooseDestination: { [weak self] destination in self?.chooseDestination(destination) },
@@ -97,27 +104,38 @@ final class MacPlatformServices: NSObject {
 
     func openSources(_ urls: [URL]) {
         guard model.canAppendSources else { return }
+        guard model.migrationTargetConfirmed else {
+            pendingSources = Array(Set(pendingSources + urls))
+            model.workspaceStep = .direction
+            return
+        }
         stopMonitoring(); model.librarySummary = ""
         model.appendSources(urls)
+        model.workspaceStep = .importPhotos
     }
 
     func clearSources() {
         guard !model.isBusy, !model.sharing else { return }
         dropRequest = UUID(); stopMonitoring(); origins = [:]; lastScope = nil
         autoStartPending = false
+        pendingSources = []
         model.clearSources()
     }
 
-    func chooseSources() {
-        guard model.migrationTargetConfirmed, model.canAppendSources, let window = window, window.attachedSheet == nil else { return }
+    func chooseSources(foldersOnly: Bool = false) {
+        guard model.migrationTargetConfirmed else { model.workspaceStep = .direction; return }
+        guard model.canImportSources, let window = window, window.attachedSheet == nil else { return }
         let panel = NSOpenPanel()
-        panel.title = model.settings.direction == .toAndroid ? "选择完整实况配对（图片与 MOV）或文件夹" : "选择照片或来源文件夹"
-        panel.canChooseDirectories = true; panel.canChooseFiles = true; panel.allowsMultipleSelection = true
-        panel.prompt = "选择并扫描"
+        panel.title = AppText.text(foldersOnly ? "从文件夹导入" : model.settings.direction == .toAndroid ? "选择含完整实况配对的图片或文件夹" : "选择照片或来源文件夹")
+        panel.canChooseDirectories = true; panel.canChooseFiles = !foldersOnly; panel.allowsMultipleSelection = true
+        let extensions = model.settings.direction == .androidToAndroid || model.settings.direction == .honorToGoogle ? ["jpg","jpeg"] : ["jpg","jpeg","heic","heif"]
+        panel.allowedContentTypes = extensions.compactMap { UTType(filenameExtension:$0) }
+        panel.prompt = AppText.text("选择并扫描")
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK else { return }
             self?.stopMonitoring(); self?.model.librarySummary = ""
             self?.model.appendSources(panel.urls)
+            self?.model.workspaceStep = .importPhotos
         }
     }
 
@@ -136,7 +154,7 @@ final class MacPlatformServices: NSObject {
     func chooseOutput() {
         if model.settings.direction == .toApple { chooseDestination(.folder); return }
         guard !model.isBusy, !model.sharing, !model.isPreview, let parent = settingsDialogParent else { return }
-        let panel = NSOpenPanel(); panel.title = "选择输出位置"; panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出位置"); panel.prompt = "选择"
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.output?.deletingLastPathComponent()
         panel.beginSheetModal(for: parent) { [weak self] response in
@@ -145,7 +163,8 @@ final class MacPlatformServices: NSObject {
     }
 
     func importPhotos() {
-        guard model.migrationTargetConfirmed, model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle else { return }
+        guard model.migrationTargetConfirmed else { model.workspaceStep = .direction; return }
+        guard model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle else { return }
         guard let window = window, window.attachedSheet == nil, let id = model.beginLibraryImport() else { return }
         dropRequest = UUID(); stopMonitoring()
         let direction = model.settings.direction
@@ -169,7 +188,12 @@ final class MacPlatformServices: NSObject {
 
     func start() {
         guard window?.attachedSheet == nil, !model.sharing else { return }
+        guard model.workspaceStep == .preview else {
+            if model.canReviewMigration { model.workspaceStep = .preview }
+            return
+        }
         model.approveMigrationReview()
+        if model.reviewedMigration != nil { model.workspaceStep = .results }
     }
 
     private func consumeMigration() {
@@ -207,7 +231,7 @@ final class MacPlatformServices: NSObject {
 
     func chooseUnconvertedOutput() {
         guard !model.isBusy, !model.sharing, let parent = settingsDialogParent else { return }
-        let panel = NSOpenPanel(); panel.title = "选择未转换照片的导出位置"; panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择未转换照片的导出位置"); panel.prompt = "选择"
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.unconvertedOutput
         panel.beginSheetModal(for:parent) { [weak self] response in
@@ -303,7 +327,7 @@ final class MacPlatformServices: NSObject {
     func exportResults(_ selected: DeliveryTask? = nil) {
         guard !model.isBusy, !model.sharing, let window = window, window.attachedSheet == nil,
               let task = selected ?? (lastTask?.results.isEmpty == false ? lastTask : deliveryStore.tasks().first { !$0.results.isEmpty }), !task.results.isEmpty else { return }
-        let panel = NSOpenPanel(); panel.title = "导出完整转换结果"; panel.prompt = "导出到此位置"
+        let panel = NSOpenPanel(); panel.title = AppText.text("导出完整转换结果"); panel.prompt = "导出到此位置"
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.beginSheetModal(for:window) { [weak self] response in
             guard let self = self, response == .OK, let output = panel.url else { return }
@@ -406,7 +430,7 @@ final class MacPlatformServices: NSObject {
             self.pickAlbum(parent:parent) { id,title in commit(folder,id,title) }
         }
         if destination == .photos { album(nil); return }
-        let panel = NSOpenPanel(); panel.title = "选择输出文件夹"; panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出文件夹"); panel.prompt = "选择"
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.output
         panel.beginSheetModal(for:parent) { response in
@@ -430,15 +454,15 @@ final class MacPlatformServices: NSObject {
             guard let parent = parent, self.settingsDialogParent === parent, !self.model.isBusy, !self.model.sharing else { return }
             if case .failure(let error) = result { self.model.errorMessage = error.localizedDescription; return }
             let albums = PhotoLibraryService.albums()
-            let alert = NSAlert(); alert.messageText = "输出相册"
-            alert.informativeText = "选择已有用户相册，或输入新相册名称。仅在转换成功后创建相册。"
+            let alert = NSAlert(); alert.messageText = AppText.text("输出相册")
+            alert.informativeText = AppText.text("选择已有用户相册，或输入新相册名称。仅在转换成功后创建相册。")
             let popup = NSPopUpButton(frame:NSRect(x:0,y:38,width:300,height:28),pullsDown:false)
-            popup.addItem(withTitle:"按下方名称创建／查找")
+            popup.addItem(withTitle:AppText.text("按下方名称创建／查找"))
             popup.addItems(withTitles:albums.map { $0.localizedTitle ?? "未命名相册" })
             if let index = albums.firstIndex(where:{ $0.localIdentifier == self.model.settings.albumID }) { popup.selectItem(at:index + 1) }
             let name = NSTextField(frame:NSRect(x:0,y:0,width:300,height:26)); name.stringValue = self.model.settings.albumTitle
             let view = NSView(frame:NSRect(x:0,y:0,width:300,height:70)); view.addSubview(popup); view.addSubview(name); alert.accessoryView = view
-            alert.addButton(withTitle:"选择"); alert.addButton(withTitle:"取消")
+            alert.addButton(withTitle:AppText.text("选择")); alert.addButton(withTitle:AppText.text("取消"))
             alert.beginSheetModal(for:parent) { response in
                 guard response == .alertFirstButtonReturn else { return }
                 let index = popup.indexOfSelectedItem
@@ -512,7 +536,7 @@ final class MacPlatformServices: NSObject {
             width: min(760, max(WindowSizing.recent.width, window.contentLayoutRect.width - 24)),
             height: min(580, max(WindowSizing.recent.height, window.contentLayoutRect.height - 24))),
             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        panel.title = "最近转换结果"
+        panel.title = AppText.text("最近转换结果")
         panel.contentMinSize = WindowSizing.recent
         panel.isReleasedWhenClosed = false
         var retryTask: DeliveryTask?
@@ -557,7 +581,7 @@ final class MacPlatformServices: NSObject {
         if let old = reportWindow { old.close() }
         let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
             styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
-        panel.title = "处理报告"; panel.isReleasedWhenClosed = false
+        panel.title = AppText.text("处理报告"); panel.isReleasedWhenClosed = false
         panel.contentMinSize = WindowSizing.report
         panel.contentView = NSHostingView(rootView:ReportView(report:report,actions:actions)
             .frame(minWidth:WindowSizing.report.width,minHeight:WindowSizing.report.height))
@@ -569,15 +593,15 @@ final class MacPlatformServices: NSObject {
         guard let window = window, model.phase == .awaitingDecision else { reply(.cancel); return }
         if let decision = batchDecision { reply(decision); return }
         let alert = NSAlert(); outputAlert = alert
-        alert.messageText = "已有输出"
-        alert.informativeText = "照片：\(source.lastPathComponent)\n已有输出：\(target.path)\n\n校验并复用会核对来源、范围、设置和输出文件，匹配时继续且不重新处理。跳过会保留已有文件。覆盖会在新结果完成并通过校验后替换输出文件夹；失败时保留旧结果。"
+        alert.messageText = AppText.text("已有输出")
+        alert.informativeText = AppText.text("照片：\(source.lastPathComponent)\n已有输出：\(target.path)\n\n校验并复用会核对来源、范围、设置和输出文件，匹配时继续且不重新处理。跳过会保留已有文件。覆盖会在新结果完成并通过校验后替换输出文件夹；失败时保留旧结果。")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "校验并复用")
-        alert.addButton(withTitle: "覆盖")
-        alert.addButton(withTitle: "跳过")
-        alert.addButton(withTitle: "停止本次任务").keyEquivalent = "\u{1b}"
+        alert.addButton(withTitle: AppText.text("校验并复用"))
+        alert.addButton(withTitle: AppText.text("覆盖"))
+        alert.addButton(withTitle: AppText.text("跳过"))
+        alert.addButton(withTitle: AppText.text("停止本次任务")).keyEquivalent = "\u{1b}"
         alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = "将此选择应用于本次所有已有输出"
+        alert.suppressionButton?.title = AppText.text("将此选择应用于本次所有已有输出")
         alert.beginSheetModal(for: window) { [weak self, weak alert] response in
             let choice: ExistingOutputDecision
             switch response {
@@ -629,7 +653,7 @@ final class MacPlatformServices: NSObject {
             if output {
                 if ordered.count == 1, let url = ordered.first { self.model.setOutput(url) }
                 else { self.model.errorMessage = "请拖入一个输出文件夹。" }
-            } else if !ordered.isEmpty { self.stopMonitoring(); self.model.librarySummary = ""; self.model.appendSources(ordered) }
+            } else if !ordered.isEmpty { self.openSources(ordered) }
         }
         return true
     }
@@ -687,19 +711,19 @@ struct RecentTasksView: View {
         VStack(alignment:.leading,spacing:0) {
             HStack {
                 VStack(alignment:.leading,spacing:4) {
-                    Text("最近结果").font(.title3.weight(.semibold))
-                    Text(tasks.isEmpty ? "处理与导出任务会保留在这里" : "\(tasks.count) 次任务")
+                    Text(AppText.text("最近结果")).font(.title3.weight(.semibold))
+                    Text(AppText.text(tasks.isEmpty ? "处理与导出任务会保留在这里" : "\(tasks.count) 次任务"))
                         .font(.callout).foregroundColor(.secondary)
                 }
                 Spacer()
-                Button("完成",action:close).keyboardShortcut(.defaultAction)
+                Button(AppText.text("完成"),action:close).keyboardShortcut(.defaultAction)
             }.padding(16)
             Divider()
             if tasks.isEmpty {
                 VStack(spacing:12) {
                     Image(systemName:"clock.arrow.circlepath").font(.title).foregroundColor(.secondary)
-                    Text("暂无转换结果").font(.headline)
-                    Text("完成转换后，可在这里查看文件、再次导入或共享。")
+                    Text(AppText.text("暂无转换结果")).font(.headline)
+                    Text(AppText.text("完成转换后，可在这里查看文件、再次导入或共享。"))
                         .font(.callout).foregroundColor(.secondary).multilineTextAlignment(.center)
                 }.padding(24).frame(maxWidth:.infinity,maxHeight:.infinity)
             } else {
@@ -710,7 +734,7 @@ struct RecentTasksView: View {
                     Divider()
                     taskActions(task)
                 } else {
-                    Text("选择一条记录查看结果").foregroundColor(.secondary)
+                    Text(AppText.text("选择一条记录查看结果")).foregroundColor(.secondary)
                         .frame(maxWidth:.infinity,maxHeight:.infinity)
                 }
             }
@@ -719,15 +743,15 @@ struct RecentTasksView: View {
         .tint(InterfaceStyle.accent).accentColor(InterfaceStyle.accent)
         .frame(minWidth:WindowSizing.recent.width,minHeight:WindowSizing.recent.height)
         .dismissOnEscape(close)
-        .alert("移除记录与缓存？",isPresented:$cleanupPresented) {
-            Button("取消",role:.cancel) {}
-            Button("移除",role:.destructive) {
+        .alert(AppText.text("移除记录与缓存？"),isPresented:$cleanupPresented) {
+            Button(AppText.text("取消"),role:.cancel) {}
+            Button(AppText.text("移除"),role:.destructive) {
                 guard let task = selectedTask else { return }
                 do { tasks = try remove(task); selection = tasks.first?.id; cleanupError = nil }
                 catch { cleanupError = error.localizedDescription }
             }
         } message: {
-            Text("移除此任务的记录和应用缓存。用户输出文件夹与图库照片会保留；缓存清理后无法再次导入或共享。")
+            Text(AppText.text("移除此任务的记录和应用缓存。用户输出文件夹与图库照片会保留；缓存清理后无法再次导入或共享。"))
         }
     }
 
@@ -737,7 +761,7 @@ struct RecentTasksView: View {
                 historyRow(task).tag(task.id)
             }
         }.listStyle(.plain).frame(minHeight:100,idealHeight:150,maxHeight:180)
-            .accessibilityLabel("转换历史")
+            .accessibilityLabel(AppText.text("转换历史"))
     }
 
     private func historyRow(_ task: DeliveryTask) -> some View {
@@ -746,7 +770,7 @@ struct RecentTasksView: View {
                 Text(task.created,style:.date)
                 Text(task.created,style:.time).foregroundColor(.secondary)
             }
-            Text((task.results.isEmpty ? "原样导出任务" : task.resultSummary) + " · " + MigrationTargetPreset.current(task.settings).title)
+            Text(AppText.text((task.results.isEmpty ? "原样导出任务" : task.resultSummary) + " · " + MigrationTargetPreset.current(task.settings).title))
                 .font(.callout).foregroundColor(.secondary)
         }.padding(.vertical,6)
     }
@@ -755,24 +779,24 @@ struct RecentTasksView: View {
         ScrollView {
             VStack(alignment:.leading,spacing:12) {
               Group {
-                Label(deliveryStatus(task),systemImage:task.cancelled ? "stop.circle" : "tray.full")
+                Label(AppText.text(deliveryStatus(task)),systemImage:task.cancelled ? "stop.circle" : "tray.full")
                     .font(.headline).textSelection(.enabled)
-                Text(task.settings.direction.title).font(.callout).foregroundColor(.secondary)
-                if !task.processingSummary.isEmpty { Text(task.processingSummary).font(.caption).foregroundColor(.secondary) }
+                Text(AppText.text(task.settings.direction.title)).font(.callout).foregroundColor(.secondary)
+                if !task.processingSummary.isEmpty { Text(AppText.text(task.processingSummary)).font(.caption).foregroundColor(.secondary) }
                 Divider()
-                Text("保存位置").font(.callout.weight(.semibold))
-                Text(task.output).font(.callout).textSelection(.enabled).fixedSize(horizontal:false,vertical:true)
-                if task.settings.destination.importsPhotos { Text("相册：" + task.settings.albumTitle).font(.callout) }
-                if task.cancelled { Text("仅保留已完成的结果。").font(.callout).foregroundColor(.secondary) }
+                Text(AppText.text("保存位置")).font(.callout.weight(.semibold))
+                Text(AppText.text(task.output)).font(.callout).textSelection(.enabled).fixedSize(horizontal:false,vertical:true)
+                if task.settings.destination.importsPhotos { Text(AppText.text("相册：") + task.settings.albumTitle).font(.callout) }
+                if task.cancelled { Text(AppText.text("仅保留已完成的结果。")).font(.callout).foregroundColor(.secondary) }
               }
               Group {
                 if let record = task.originalExport { exportDetails(record) }
                 if let record = task.resultExport { exportDetails(record) }
                 if !task.results.isEmpty && !filesAvailable(task) {
-                    Label("部分文件已移走或清理，请重新转换后重试。",systemImage:"exclamationmark.triangle")
+                    Label(AppText.text("部分文件已移走或清理，请重新转换后重试。"),systemImage:"exclamationmark.triangle")
                         .font(.callout).foregroundColor(.secondary)
                 }
-                if let error = cleanupError { Text(error).foregroundColor(.red).textSelection(.enabled) }
+                if let error = cleanupError { Text(AppText.text(error)).foregroundColor(.red).textSelection(.enabled) }
               }
             }.frame(maxWidth:.infinity,alignment:.leading).padding(16)
         }.frame(maxHeight:.infinity)
@@ -781,11 +805,11 @@ struct RecentTasksView: View {
     private func exportDetails(_ record: FileExportRecord) -> some View {
         VStack(alignment:.leading,spacing:6) {
             Divider()
-            Text(record.summary).font(.callout.weight(.semibold))
-            Text(record.output).font(.caption).textSelection(.enabled)
-            if let detail = record.detail { Text(detail).font(.callout).foregroundColor(.secondary).textSelection(.enabled) }
+            Text(AppText.text(record.summary)).font(.callout.weight(.semibold))
+            Text(AppText.text(record.output)).font(.caption).textSelection(.enabled)
+            if let detail = record.detail { Text(AppText.text(detail)).font(.callout).foregroundColor(.secondary).textSelection(.enabled) }
             ForEach(Array(exportLines(record).enumerated()),id:\.offset) { line in
-                Text(line.element).font(.caption).foregroundColor(.secondary).textSelection(.enabled)
+                Text(AppText.text(line.element)).font(.caption).foregroundColor(.secondary).textSelection(.enabled)
             }
         }
     }
@@ -804,20 +828,20 @@ struct RecentTasksView: View {
 
     private func taskActions(_ task: DeliveryTask) -> some View {
         HStack(spacing:12) {
-            Menu("更多") {
-                Button("移除记录与缓存…",role:.destructive) { cleanupPresented = true }
+            Menu(AppText.text("更多")) {
+                Button(AppText.text("移除记录与缓存…"),role:.destructive) { cleanupPresented = true }
                     .disabled(model.isBusy || model.sharing)
             }.fixedSize()
             Spacer(minLength:0)
-            Button("查看文件") { NSWorkspace.shared.activateFileViewerSelecting(existingFiles(task)) }
+            Button(AppText.text("查看文件")) { NSWorkspace.shared.activateFileViewerSelecting(existingFiles(task)) }
                 .disabled(existingFiles(task).isEmpty)
-            Button("导出转换结果…") { export(task) }
+            Button(AppText.text("导出转换结果…")) { export(task) }
                 .disabled(task.results.isEmpty || model.isBusy || model.sharing)
             if task.originalExport != nil {
-                Button("继续原样导出") { originals(task) }.disabled(model.isBusy || model.sharing)
+                Button(AppText.text("继续原样导出")) { originals(task) }.disabled(model.isBusy || model.sharing)
             }
             if canRedeliver(task) {
-                Button(task.settings.direction.exportsAndroid ? "再次共享…" : "再次导入图库…") { retry(task) }
+                Button(AppText.text(task.settings.direction.exportsAndroid ? "再次共享…" : "再次导入图库…")) { retry(task) }
                     .disabled(!filesAvailable(task) || model.isBusy || model.sharing)
             }
         }.padding(16).recordLayout("recent-actions")

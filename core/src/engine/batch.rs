@@ -240,6 +240,7 @@ pub fn run(
         .collect();
     let mut static_indices: HashSet<usize> = HashSet::new();
     let mut hdr_indices: HashSet<usize> = HashSet::new();
+    let mut time_indices: HashSet<usize> = HashSet::new();
     let mut inspected: BTreeMap<usize, ScanRow> = BTreeMap::new();
     {
         perform(
@@ -270,7 +271,11 @@ pub fn run(
                     hdr_indices.insert(i);
                 }
                 if row.confirmed_static && !row.is_static_hdr() && row.burst.is_none() {
-                    static_indices.insert(i);
+                    if options.photo_time.is_some() {
+                        time_indices.insert(i);
+                    } else {
+                        static_indices.insert(i);
+                    }
                 }
                 inspected.insert(i, row);
             },
@@ -350,6 +355,9 @@ pub fn run(
                     label,
                     &namespace[..8]
                 ));
+            }
+            if time_indices.contains(i) {
+                return destination.join(format!("{}.time-repair", relatives[*i]));
             }
             destination.join(format!(
                 "{}{}",
@@ -447,7 +455,7 @@ pub fn run(
                 } else if invalid_choice {
                     failure("连拍成员版本变化，代表帧或独立导出确认已失效")
                 } else {
-                    crate::engine::burst::convert_with_policy(
+                    crate::engine::burst::convert_with_time_policy(
                         native,
                         plan,
                         &selected,
@@ -460,8 +468,11 @@ pub fn run(
                         overwrite,
                         options.legacy_hdr,
                         options.exif_file_times,
+                        options.photo_time.as_ref(),
                     )
                 }
+            } else if time_indices.contains(&active[offset]) {
+                crate::engine::static_time::convert(native, file, target, options, token, overwrite)
             } else if hdr_indices.contains(&active[offset]) {
                 crate::engine::static_hdr::convert(
                     native, file, target, options, token, overwrite, &timings,
@@ -487,6 +498,16 @@ pub fn run(
                 && !result["verification"].is_object()
             {
                 if let Ok(manifest) = verify(target) {
+                    if let Some(time) = manifest.get("photo_time") {
+                        result["photo_time"] = time.clone();
+                        if let Some(detail) = result["detail"].as_str() {
+                            let records = time["records"].as_array();
+                            let count = records
+                                .map(|a| a.iter().filter(|v| v["status"] == "written").count())
+                                .unwrap_or(0);
+                            result["detail"]=json!(format!("{detail}；PhotoTime 补缺 {count} 个照片资源，其余按记录保留或未识别"));
+                        }
+                    }
                     result["verification"] = manifest;
                 }
             }

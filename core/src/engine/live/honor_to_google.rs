@@ -154,6 +154,7 @@ pub fn convert(
         "output_files":{"motionphoto":name},"output_sha256":{name.clone():sha256_hex(&result)},"timing":timing,"hdr":report,"warnings":processed.warnings});
     write_json(&m, &stage.path().join(output::MANIFEST))?;
     output::publish(
+        native,
         &stage,
         target,
         source,

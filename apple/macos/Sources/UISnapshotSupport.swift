@@ -23,8 +23,20 @@ final class UISnapshotSupport {
         if argument("--direction") == "to-android" { model.updateSettings { $0.direction = .toAndroid } }
         if argument("--direction") == "android-to-android" { model.updateSettings { $0.direction = .androidToAndroid } }
         guard argument("--ui-snapshot") != nil else { return }
+        if let route = argument("--ui-route").flatMap(MigrationTargetPreset.init(rawValue:)) { model.selectMigrationTarget(route) }
+        if CommandLine.arguments.contains("--ui-photo-time") {
+            model.updateSettings { $0.photoTimeRepair = true; $0.exifFileTimes = true }
+        }
+        if let source = argument("--ui-source") {
+            if !model.migrationTargetConfirmed { model.selectMigrationTarget(model.migrationTarget) }
+            model.appendSources([URL(fileURLWithPath:source)])
+            model.workspaceStep = .importPhotos
+            return
+        }
         model.loadPreview(count: Int(argument("--ui-fixtures") ?? "24") ?? 24,
             progressPreview: CommandLine.arguments.contains("--ui-progress-preview"))
+        if argument("--ui-route") != nil { model.selectMigrationTarget(model.migrationTarget) }
+        model.workspaceStep = model.migrationTargetConfirmed ? .importPhotos : .direction
         if CommandLine.arguments.contains("--ui-long-locations") { model.loadPreviewLocations() }
         if CommandLine.arguments.contains("--ui-clear-preview") { model.clearSources() }
         if let source = argument("--ui-motion-source") {
@@ -59,6 +71,30 @@ final class UISnapshotSupport {
         let height = Double(argument("--ui-height") ?? "700") ?? 700
         resize(width: width, height: height)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            if CommandLine.arguments.contains("--ui-inspect-first-burst"), let item = self.model.items.first(where:{$0.row.burst != nil}) {
+                self.model.selection = item.id; self.model.previewVisible = true
+            }
+            if let route = self.argument("--ui-click-route"), let frame = self.frames["direction-card-" + route] {
+                self.click(frame)
+                if CommandLine.arguments.contains("--ui-click-next") {
+                    DispatchQueue.main.asyncAfter(deadline:.now()+0.2) {
+                        if let next = self.frames["primary-action"] { self.click(next) }
+                    }
+                }
+            }
+            if let number = self.argument("--ui-step").flatMap(Int.init), let step = WorkspaceStep(rawValue:number) {
+                if step == .results { self.model.configurePreviewResults() }
+                self.model.workspaceStep = step
+            }
+            if CommandLine.arguments.contains("--ui-expand-first-burst"),
+               let frame = self.frames.first(where:{$0.key.hasPrefix("burst-disclosure-")})?.value {
+                self.click(frame)
+                if CommandLine.arguments.contains("--ui-collapse-first-burst") {
+                    DispatchQueue.main.asyncAfter(deadline:.now()+0.25) {
+                        if let next = self.frames.first(where:{$0.key.hasPrefix("burst-disclosure-")})?.value { self.click(next) }
+                    }
+                }
+            }
             if CommandLine.arguments.contains("--ui-source-menu") { self.model.sourceMenuRequested = true }
             if CommandLine.arguments.contains("--ui-output-menu"), let content = self.window.contentView,
                let arrow = self.descendants(content).first(where: { $0.identifier?.rawValue == "output-mode-button" }) as? NSButton { arrow.performClick(nil) }
@@ -110,7 +146,11 @@ final class UISnapshotSupport {
     }
     private func click(_ frame: CGRect) {
         guard let content = window.contentView else { return }
-        let point = NSPoint(x:frame.midX,y:content.bounds.height - frame.midY)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps:true)
+        let local = NSPoint(x:frame.midX,y:content.isFlipped ? frame.midY : content.bounds.height - frame.midY)
+        let point = content.convert(local,to:nil)
+        interactions.append("click frame=\(frame) point=\(point) hit=\(String(describing:content.hitTest(local)))")
         let timestamp = ProcessInfo.processInfo.systemUptime
         guard let down = NSEvent.mouseEvent(with:.leftMouseDown,location:point,modifierFlags:[],timestamp:timestamp,
             windowNumber:window.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:0),
@@ -217,7 +257,10 @@ final class UISnapshotSupport {
             "task_phase":model.phase.rawValue,"can_stop":model.canStop,"task_progress":model.progress.map { $0 as Any } ?? NSNull(),
             "motion_reduced":InterfaceMotion.reduced(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion),
             "preview_visible":model.previewVisible,"detail_expanded":model.detailExpanded,"interaction_checks":interactions,
-            "row_count": model.items.count, "inspector_visible": frames["inspector"] != nil,
+            "row_count": model.items.count, "workspace_step":model.workspaceStep.rawValue,
+            "route_confirmed":model.migrationTargetConfirmed,"library_import_allowed":model.canImportFromLibrary,
+            "result_scope_count":model.resultScopeIDs?.count ?? 0,
+            "inspector_visible": frames["inspector"] != nil,
             "settings_sheet_visible": window.attachedSheet != nil,
             "sheet_width": window.attachedSheet?.frame.width ?? 0,
             "library_picker": libraryPicker?.diagnosticMetrics ?? [:],
@@ -283,7 +326,9 @@ final class UISnapshotSupport {
     }
     private func finishSnapshot(_ path: String) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            let target = self.reportWindow ?? self.window.attachedSheet ?? self.window
+            let popover = CommandLine.arguments.contains("--ui-capture-popover")
+                ? NSApp.windows.first(where: { $0.isVisible && String(describing:type(of:$0)).contains("Popover") }) : nil
+            let target = popover ?? self.reportWindow ?? self.window.attachedSheet ?? self.window
             target.contentView?.layoutSubtreeIfNeeded()
             if let capture = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(target.windowNumber), [.boundsIgnoreFraming, .bestResolution]),
                let png = NSBitmapImageRep(cgImage: capture).representation(using: .png, properties: [:]) {

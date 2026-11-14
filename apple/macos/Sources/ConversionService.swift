@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 struct ConversionJob {
     let sources: [URL]
@@ -86,7 +87,8 @@ final class ConversionService: ConversionServing {
              progress: @escaping (BatchProgress) -> Void, completion: @escaping (Result<BatchOutcome, Error>) -> Void) {
         worker.async {
             let result = Result {
-                try NativeBatch.run(sources: job.sources, output: job.output, options: job.options, token: token, scanRows: job.scanRows,
+                let outputTimes = try PhotoTimeOutputProcessor.make(options:job.options,sources:job.sources,token:token)
+                return try NativeBatch.run(sources: job.sources, output: job.output, options: job.options, token: token, scanRows: job.scanRows,
                     existingOutput: { source, target in
                         let latch = OutputDecisionLatch()
                         DispatchQueue.main.async {
@@ -94,7 +96,7 @@ final class ConversionService: ConversionServing {
                             existingOutput(source, target) { latch.resolve($0) }
                         }
                         return latch.wait(token: token)
-                    }) { update in
+                    },outputTimes:outputTimes) { update in
                         // Every per-file result matters; don't drop terminal rows when batching progress.
                         DispatchQueue.main.async { progress(update) }
                     }
@@ -123,6 +125,11 @@ final class SourceInspectionCache {
         var payload: URL?
         var parseError: String?
         var neutralReady = false
+        var timeChecked = false
+        var captureTimeMissing: Bool?
+        var privateHDRSupported: Bool?
+        var privateHDRReason: String?
+        var hdrChecked = false
         var projections: [ConversionDirection:ScanRow] = [:]
         var pairVersions: [Stamp]?
         init(_ version:SourceVersion) { self.version = version }
@@ -193,7 +200,7 @@ final class SourceInspectionCache {
     }
     private func rebase(_ row:ScanRow, relative:String, version:SourceVersion) -> ScanRow {
         ScanRow(source:row.source,relative:relative,isMotion:row.isMotion,hdr:row.hdr,cover:row.cover,detail:row.detail,
-            manufacturer:row.manufacturer,manufacturerDetail:row.manufacturerDetail,confirmedStatic:row.confirmedStatic,version:version,burst:row.burst)
+            manufacturer:row.manufacturer,manufacturerDetail:row.manufacturerDetail,confirmedStatic:row.confirmedStatic,version:version,burst:row.burst,captureTimeMissing:row.captureTimeMissing,privateHDRSupported:row.privateHDRSupported,privateHDRReason:row.privateHDRReason)
     }
     private func neutral(_ file:URL, relative:String, entry:Entry, bytes:[UInt8]) throws -> Result<NativeMotionPhoto,Error> {
         if entry.neutralReady {
@@ -252,7 +259,7 @@ final class SourceInspectionCache {
                 let versions = try siblings(file)
                 if entry.pairVersions != versions { entry.projections[.toAndroid] = nil; entry.pairVersions = versions }
             }
-            let row: ScanRow
+            var row: ScanRow
             if let cached = entry.projections[direction] { projectionHitCount += 1; row = rebase(cached,relative:relative,version:version) }
             else if direction == .toAndroid {
                 pairValidationCount += 1
@@ -267,6 +274,19 @@ final class SourceInspectionCache {
                     row = AndroidTransfer.scanFile(file,relative:relative,bytes:bytes,parsed:parsed,direction:direction.rawValue)
                 }
             }
+            if !entry.timeChecked {
+                entry.captureTimeMissing = SourcePhotoTimeFacts.missing(at:file)
+                entry.timeChecked = true
+            }
+            if row.hdr == "荣耀私有 HDR" && !entry.hdrChecked {
+                let facts = try? RustCore.engine(["mode":"honor-hdr-preflight","source":file.path])
+                entry.privateHDRSupported = facts?["supported"] as? Bool ?? false
+                entry.privateHDRReason = facts?["reason"] as? String ?? "无法验证荣耀私有 HDR 标定配置"
+                entry.hdrChecked = true
+            }
+            row.privateHDRSupported = entry.privateHDRSupported
+            row.privateHDRReason = entry.privateHDRReason
+            row.captureTimeMissing = entry.captureTimeMissing
             guard SourceVersion.read(file) == version else {
                 entries[file] = nil
                 throw Failure("检查期间来源发生变化，请重试")
@@ -281,5 +301,188 @@ final class SourceInspectionCache {
             progress(index + 1,selected.entries.count)
         }
         return result
+    }
+}
+
+// Source facts only. Never infer a date or write the input while scanning.
+enum SourcePhotoTimeFacts {
+    static func missing(at url: URL) -> Bool? {
+        guard let image = CGImageSourceCreateWithURL(url as CFURL,nil),
+              CGImageSourceGetCount(image) == 1,
+              let properties = CGImageSourceCopyPropertiesAtIndex(image,0,nil) as? [String:Any],
+              (properties[kCGImagePropertyPixelWidth as String] as? Int ?? 0) > 0,
+              (properties[kCGImagePropertyPixelHeight as String] as? Int ?? 0) > 0 else { return nil }
+        let exif = properties[kCGImagePropertyExifDictionary as String] as? [String:Any] ?? [:]
+        let tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String:Any] ?? [:]
+        let iptc = properties[kCGImagePropertyIPTCDictionary as String] as? [String:Any] ?? [:]
+        var dates = [iptc["DateCreated"] as? String,iptc["DigitalCreationDate"] as? String,
+                     exif[kCGImagePropertyExifDateTimeOriginal as String] as? String,
+                     exif[kCGImagePropertyExifDateTimeDigitized as String] as? String,
+                     tiff[kCGImagePropertyTIFFDateTime as String] as? String]
+        if let metadata = CGImageSourceCopyMetadataAtIndex(image,0,nil),
+           let tag = CGImageMetadataCopyTagMatchingImageProperty(metadata,kCGImagePropertyExifDictionary,kCGImagePropertyExifDateTimeOriginal) {
+            dates.append(CGImageMetadataTagCopyValue(tag) as? String)
+        }
+        return !dates.compactMap { $0 }.contains { !$0.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty }
+    }
+}
+
+// Runs synchronously on Rust workers, exclusively inside an unpublished resource group.
+enum PhotoTimeOutputProcessor {
+    static func make(options: ConversionOptions, sources: [URL], token: StopToken) throws -> OutputTimeProcessor? {
+        guard let settings = options.photoTime,
+              let zoneID = settings["zone"] as? String, let zone = TimeZone(identifier:zoneID),
+              let reference = settings["epoch"] as? Double, reference > 0 else { return nil }
+        let synthetic = settings["synthetic"] as? Bool ?? false
+        let base = Date(timeIntervalSince1970:reference)
+        let originalNames = options.photoTimeOriginalNames
+        let originalName: (URL) -> String = { originalNames[$0.standardizedFileURL.path] ?? $0.lastPathComponent }
+        let files = try NativeBatch.selection(sources).entries.sorted {
+            let order = originalName($0).compare(originalName($1),options:[.numeric,.caseInsensitive],locale:Locale(identifier:"en_US_POSIX"))
+            return order == .orderedSame ? $0.path < $1.path : order == .orderedAscending
+        }
+        var fallback: [String:Date] = [:]
+        var sourceMissing: [String:Bool] = [:]
+        for file in files {
+            let key = file.standardizedFileURL.path
+            if let missing = SourcePhotoTimeFacts.missing(at:file) {
+                sourceMissing[key] = missing
+                if missing && PhotoTimeRepair.inferredTime(filename:originalName(file),zone:zone) == nil {
+                    fallback[key] = base.addingTimeInterval(Double(fallback.count))
+                }
+            }
+        }
+        let frozenFallback = fallback
+        let frozenSourceMissing = sourceMissing
+        return { stage,source,manifest in
+            guard !token.isCancelled else { throw Failure("已停止，时间补全未发布") }
+            guard let names = manifest["output_files"] as? [String:String] else { throw Failure("时间补全缺少完整输出资源") }
+            let members = (manifest["burst"] as? [String:Any])?["members"] as? [[String:Any]] ?? []
+            var records: [[String:Any]] = []
+            var dates: [String:Date] = [:]
+            for (role,name) in names.sorted(by:{$0.key < $1.key}) {
+                guard !name.contains("/"), !name.contains("\\"), name != ".", name != ".." else { throw Failure("时间补全输出路径无效") }
+                let output = stage.appendingPathComponent(name)
+                guard ["jpg","jpeg","heic","heif"].contains(output.pathExtension.lowercased()) else { continue }
+                let origin = members.first(where:{$0["file"] as? String == name}).flatMap { $0["source"] as? String }.map { URL(fileURLWithPath:$0) } ?? source
+                let input = PhotoTimeRepair.Input(photo:output,originalFilename:originalName(origin))
+                let planned = PhotoTimeRepair.planSecondStep(inputs:[input],now:frozenFallback[origin.standardizedFileURL.path] ?? base,zone:zone)
+                if let rejected = planned.rejected.first { throw Failure(rejected.reason) }
+                if !planned.preserved.isEmpty {
+                    records.append(["file":name,"status":"preserved","source":"existing-metadata"])
+                    if let date = captureDate(output,zone:zone) { dates[name] = date }
+                    continue
+                }
+                guard let plan = planned.plans.first else { throw Failure("无法生成照片时间计划") }
+                if frozenSourceMissing[origin.standardizedFileURL.path] == false {
+                    throw Failure("原片已有非空时间，但当前输出未完整传递；未使用文件名或合成时间覆盖，请检查此处理组合")
+                }
+                if plan.source == .filenameOrder && !synthetic {
+                    records.append(["file":name,"status":"unrecognized","detail":"没有可靠时间；未启用合成排序时间，未写元数据"])
+                    continue
+                }
+                guard role != "motionphoto" else { throw Failure("当前目标动态容器的时间重封装尚未支持；未拆成静态照片或发布不完整结果") }
+                let candidate = stage.appendingPathComponent(".time-" + UUID().uuidString + "." + output.pathExtension)
+                defer { try? FileManager.default.removeItem(at:candidate) }
+                let originalAttributes = try FileManager.default.attributesOfItem(atPath:output.path)
+                try PhotoTimeRepair.write(plan,to:candidate,verifyFeatures:verifyFeatures)
+                var retainedTimes: [FileAttributeKey:Any] = [:]
+                for key in [FileAttributeKey.creationDate,.modificationDate] { retainedTimes[key] = originalAttributes[key] }
+                try FileManager.default.setAttributes(retainedTimes,ofItemAtPath:candidate.path)
+                guard !token.isCancelled else { throw Failure("已停止，时间补全未发布") }
+                // Only this private staging member is replaced; originals and published results stay read-only.
+                _ = try FileManager.default.replaceItemAt(output,withItemAt:candidate)
+                dates[name] = captureDate(output,zone:zone) ?? plan.date
+                records.append(["file":name,"status":"written","source":plan.source.rawValue,"original_filename":originalName(origin),
+                                "date":ISO8601DateFormatter().string(from:plan.date),"zone":plan.zone.identifier,
+                                "synthetic":plan.source == .filenameOrder])
+            }
+            var fileTimeRecords: [[String:Any]] = []
+            if options.exifFileTimes {
+                let sharedDate = (manifest["burst"] == nil) ? names["still"].flatMap { dates[$0] } ?? (dates.count == 1 ? dates.values.first : nil) : nil
+                for name in names.values {
+                    let file = stage.appendingPathComponent(name)
+                    let date = dates[name] ?? sharedDate
+                    if let date = date {
+                        try FileManager.default.setAttributes([.creationDate:date,.modificationDate:date],ofItemAtPath:file.path)
+                        let actual = try FileManager.default.attributesOfItem(atPath:file.path)
+                        guard let modified = actual[.modificationDate] as? Date, let created = actual[.creationDate] as? Date,
+                              abs(modified.timeIntervalSince(date)) < 1, abs(created.timeIntervalSince(date)) < 1 else {
+                            throw Failure("输出文件创建或修改时间未正确写入，未发布")
+                        }
+                        fileTimeRecords.append(["file":name,"status":"written","date":ISO8601DateFormatter().string(from:date)])
+                    } else {
+                        fileTimeRecords.append(["file":name,"status":"source-file-time-fallback","detail":"没有可用 EXIF 时间，沿用来源文件时间"])
+                    }
+                }
+            }
+            return ["settings":settings,"records":records,"file_times":options.exifFileTimes,"file_time_records":fileTimeRecords]
+        }
+    }
+    private static func captureDate(_ url: URL, zone: TimeZone) -> Date? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL,nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [String:Any] else { return nil }
+        let exif = props[kCGImagePropertyExifDictionary as String] as? [String:Any] ?? [:]
+        guard let text = exif[kCGImagePropertyExifDateTimeOriginal as String] as? String else { return nil }
+        var fixed = zone
+        if let offset = exif[kCGImagePropertyExifOffsetTimeOriginal as String] as? String {
+            let clean = offset.replacingOccurrences(of:":",with:"")
+            if clean.count == 5, let hours = Int(clean.dropFirst().prefix(2)), let minutes = Int(clean.suffix(2)),
+               hours <= 14, minutes < 60, let z = TimeZone(secondsFromGMT:(clean.first == "-" ? -1 : 1) * (hours*3600+minutes*60)) { fixed = z }
+        }
+        return PhotoTimeRepair.formatter(zone:fixed).date(from:text)
+    }
+    private static func verifyFeatures(_ before: URL, _ after: URL) throws {
+        let original = Array(try Data(contentsOf:before)), candidate = Array(try Data(contentsOf:after))
+        guard try RustCore.codingHash(original) == RustCore.codingHash(candidate),
+              try RustCore.auxiliaryHashes(original) == RustCore.auxiliaryHashes(candidate),
+              try RustCore.hdrFeatureFacts(original) == RustCore.hdrFeatureFacts(candidate),
+              let a = CGImageSourceCreateWithURL(before as CFURL,nil),
+              let b = CGImageSourceCreateWithURL(after as CFURL,nil),
+              var pa = CGImageSourceCopyPropertiesAtIndex(a,0,nil) as? [String:Any],
+              var pb = CGImageSourceCopyPropertiesAtIndex(b,0,nil) as? [String:Any] else {
+            throw Failure("时间补全改变了图像编码或 HDR 资源，未发布")
+        }
+        let beforeGain = CGImageSourceCopyAuxiliaryDataInfoAtIndex(a,0,kCGImageAuxiliaryDataTypeHDRGainMap) as? [String:Any]
+        let afterGain = CGImageSourceCopyAuxiliaryDataInfoAtIndex(b,0,kCGImageAuxiliaryDataTypeHDRGainMap) as? [String:Any]
+        if let beforeGain = beforeGain, let afterGain = afterGain {
+            guard beforeGain[kCGImageAuxiliaryDataInfoData as String] as? Data == afterGain[kCGImageAuxiliaryDataInfoData as String] as? Data,
+                  NSDictionary(dictionary:beforeGain[kCGImageAuxiliaryDataInfoDataDescription as String] as? [String:Any] ?? [:]).isEqual(to:afterGain[kCGImageAuxiliaryDataInfoDataDescription as String] as? [String:Any] ?? [:]) else {
+                throw Failure("时间补全改变了 HDR 增益图，未发布")
+            }
+            let beforeMetadata = beforeGain[kCGImageAuxiliaryDataInfoMetadata as String]
+            let afterMetadata = afterGain[kCGImageAuxiliaryDataInfoMetadata as String]
+            if let beforeMetadata = beforeMetadata, let afterMetadata = afterMetadata {
+                guard CFGetTypeID(beforeMetadata as CFTypeRef) == CGImageMetadataGetTypeID(),
+                      CFGetTypeID(afterMetadata as CFTypeRef) == CGImageMetadataGetTypeID() else { throw Failure("HDR 元数据类型无法验证") }
+                let x = CGImageMetadataCreateXMPData(beforeMetadata as! CGImageMetadata,nil) as Data?
+                let y = CGImageMetadataCreateXMPData(afterMetadata as! CGImageMetadata,nil) as Data?
+                guard x == y else { throw Failure("时间补全改变了 HDR 增益图元数据，未发布") }
+            } else if (beforeMetadata != nil) != (afterMetadata != nil) { throw Failure("HDR 增益图元数据未完整保留") }
+        } else {
+            guard (beforeGain != nil) == (afterGain != nil) else { throw Failure("HDR 辅助资源未完整保留") }
+            if !(try RustCore.auxiliaryHashes(original)).isEmpty || (pa[kCGImagePropertyDepth as String] as? Int ?? 8) > 8 {
+                throw Failure("系统不能验证此 HDR/辅助资源的时间写入保留，未发布；请关闭补缺或更改处理范围")
+            }
+        }
+        // Compare every property except the explicitly requested date fields and file size.
+        for key in [kCGImagePropertyExifDictionary as String,kCGImagePropertyTIFFDictionary as String,kCGImagePropertyIPTCDictionary as String] {
+            if var value = pa[key] as? [String:Any] {
+                for dateKey in ["DateTimeOriginal","DateTimeDigitized","DateTime","OffsetTime","OffsetTimeOriginal","OffsetTimeDigitized","DateCreated","DigitalCreationDate","DigitalCreationTime","TimeCreated"] { value[dateKey] = nil }
+                pa[key] = value
+            }
+            if var value = pb[key] as? [String:Any] {
+                for dateKey in ["DateTimeOriginal","DateTimeDigitized","DateTime","OffsetTime","OffsetTimeOriginal","OffsetTimeDigitized","DateCreated","DigitalCreationDate","DigitalCreationTime","TimeCreated"] { value[dateKey] = nil }
+                pb[key] = value
+            }
+        }
+        pa[kCGImagePropertyFileSize as String] = nil; pb[kCGImagePropertyFileSize as String] = nil
+        if let value = pa[kCGImagePropertyExifDictionary as String] as? [String:Any], value.isEmpty { pa[kCGImagePropertyExifDictionary as String] = nil }
+        if let value = pb[kCGImagePropertyExifDictionary as String] as? [String:Any], value.isEmpty { pb[kCGImagePropertyExifDictionary as String] = nil }
+        if let value = pa[kCGImagePropertyTIFFDictionary as String] as? [String:Any], value.isEmpty { pa[kCGImagePropertyTIFFDictionary as String] = nil }
+        if let value = pb[kCGImagePropertyTIFFDictionary as String] as? [String:Any], value.isEmpty { pb[kCGImagePropertyTIFFDictionary as String] = nil }
+        if let value = pa[kCGImagePropertyIPTCDictionary as String] as? [String:Any], value.isEmpty { pa[kCGImagePropertyIPTCDictionary as String] = nil }
+        if let value = pb[kCGImagePropertyIPTCDictionary as String] as? [String:Any], value.isEmpty { pb[kCGImagePropertyIPTCDictionary as String] = nil }
+        guard NSDictionary(dictionary:pa).isEqual(to:pb) else { throw Failure("时间补全未能完整保留其他元数据或照片特性，未发布") }
     }
 }

@@ -24,6 +24,9 @@ typedef struct {
     /* Decisions: 0 skip, 1 overwrite, 2 cancel, 3 verify/resume, -1 request policy. */
     int32_t (*existing_output)(void *, const char *source, const char *target);
     void (*rows_ready)(void *, const uint8_t *json, size_t len);
+    /* Private staging only. Return 0 with JSON report, 1 if inactive, -1 with error. */
+    int32_t (*prepare_output_times)(void *, const char *stage, const char *source,
+        const uint8_t *manifest, size_t len, MsBuffer *report, MsBuffer *err);
 } MsNative;
 void *ms_stop_new(void);
 void ms_stop_cancel(const void *token);

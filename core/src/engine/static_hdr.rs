@@ -11,6 +11,12 @@ use std::path::Path;
 
 /// Admit only complete stills without motion claims and with known HDR resources.
 pub fn inspect(native: &dyn Native, data: &[u8]) -> Result<Option<&'static str>> {
+    if let Some(source) = crate::oppo_uhdr::read(data)? {
+        if native.image_decodes(source.base) == Some(false) {
+            return failure("OPPO UHDR 主图损坏");
+        }
+        return Ok(Some("OPPO UHDR（实验）"));
+    }
     if crate::live::still_content_identifier(data)?.is_some() {
         return failure("图片带 Apple 实况配对标识，必须检查完整配对；不能作为独立静态 HDR 处理");
     }
@@ -49,8 +55,13 @@ pub fn inspect(native: &dyn Native, data: &[u8]) -> Result<Option<&'static str>>
 }
 
 fn settings(options: &ConversionOptions) -> Value {
-    json!({"direction":options.direction,"legacy_hdr":options.legacy_hdr,
-        "android":options.android.json(),"hdr_policy":hdr::POLICY,"export_data_files":options.export_data_files})
+    let mut value = json!({"direction":options.direction,"legacy_hdr":options.legacy_hdr,
+        "android":options.android.json(),"hdr_policy":hdr::POLICY,"export_data_files":options.export_data_files,
+        "oppo_uhdr_profile":crate::oppo_uhdr::PROFILE});
+    if let Some(ref time) = options.photo_time {
+        value["photo_time"] = time.clone();
+    }
+    value
 }
 
 pub fn convert(
@@ -77,6 +88,10 @@ pub fn convert(
     }
     let source_hash = timings.measure("source_hash", || hash_file(source))?;
     let original = read(source)?;
+    let oppo = crate::oppo_uhdr::read(&original)?;
+    if oppo.is_some() && options.direction != "to-apple" {
+        return failure("OPPO UHDR 标准化首版仅向苹果方向开放");
+    }
     let kind =
         inspect(native, &original)?.ok_or_else(|| crate::Error::new("来源不是可处理的静态 HDR"))?;
     if options.direction == "to-android"
@@ -94,7 +109,7 @@ pub fn convert(
             || m["options"] != opts
             || m["hdr"]
                 .get("profile")
-                .is_some_and(|v| v != hdr::honor::PROFILE)
+                .is_some_and(|v| v != hdr::honor::PROFILE && v != crate::oppo_uhdr::PROFILE)
         {
             return failure("已有静态输出与来源或设置不同，请显式选择覆盖");
         }
@@ -109,15 +124,38 @@ pub fn convert(
     if token.is_cancelled() {
         return failure("已停止");
     }
-    let processed = hdr::process(
-        native,
-        original.clone(),
-        hdr::Options {
-            try_private_hdr: options.legacy_hdr,
-            already_ultra_hdr: kind == "Ultra HDR",
-            allow_legacy_conversion: true,
-        },
-    )?;
+    let processed = if let Some(ref source) = oppo {
+        let (image, mut report, warnings) = if options.legacy_hdr {
+            let image = crate::oppo_uhdr::convert(native, source)?;
+            let report = crate::oppo_uhdr::report(source);
+            let warnings = vec![report["reason"].as_str().unwrap().to_string()];
+            (image, report, warnings)
+        } else {
+            (
+                original.clone(),
+                json!({"input":"oppo-private-uhdr","status":"unsupported-preserved",
+                "reason":"私有 HDR 尝试转换已关闭，OPPO UHDR 原文件保留"}),
+                vec![],
+            )
+        };
+        hdr::annotate(&mut report);
+        hdr::Processed {
+            image,
+            report: report.as_object().cloned().unwrap(),
+            warnings,
+            honor_extension: None,
+        }
+    } else {
+        hdr::process(
+            native,
+            original.clone(),
+            hdr::Options {
+                try_private_hdr: options.legacy_hdr,
+                already_ultra_hdr: kind == "Ultra HDR",
+                allow_legacy_conversion: true,
+            },
+        )?
+    };
     let mut image = processed.image;
     let mut report = Value::Object(processed.report);
     // Reuse the existing HEIC/JPEG exporter when its actual encoding options apply.
@@ -144,7 +182,7 @@ pub fn convert(
         && kind == "Ultra HDR"
         && report["outcome"] == "preserved"
         && crate::hdr::known_ultra_version(&image)?;
-    if image == original && !original_copy {
+    if image == original && !original_copy && options.photo_time.is_none() {
         return Ok(
             json!({"status":"skipped","source":paths::json(source),"hdr":report,
             "detail":format!("{}；没有可执行的静态转换，可按已选策略原样导出",hdr::summary(&report))}),
@@ -156,7 +194,9 @@ pub fn convert(
     if native.image_decodes(&image) == Some(false) {
         return failure("静态 HDR 输出无法解码");
     }
-    if options.direction != "to-android"
+    if let Some(ref source) = oppo {
+        crate::oppo_uhdr::verify_preserved(source.base, &image)?;
+    } else if options.direction != "to-android"
         && format::coding_hash(&image)? != format::coding_hash(&original)?
     {
         return failure("静态主图编码发生意外变化");
@@ -170,7 +210,9 @@ pub fn convert(
     let names = json!({"static":name});
     write(&stage.path().join(&name), &image)?;
     let _ = super::stamp_output_time(source, &stage.path().join(&name), options.exif_file_times);
-    let processing_kind = if original_copy {
+    let processing_kind = if image == original && options.photo_time.is_some() {
+        "time-metadata-repair"
+    } else if original_copy {
         "original-copy"
     } else {
         "hdr-conversion"
@@ -181,6 +223,7 @@ pub fn convert(
         "timing":{"applicable":false},"hdr":report,"warnings":processed.warnings});
     write_json(&m, &stage.path().join(output::MANIFEST))?;
     output::publish(
+        native,
         &stage,
         target,
         source,

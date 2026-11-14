@@ -10,6 +10,8 @@ struct ManualCoverChoice: Codable, Equatable {
     var json: [String:Any] { ["source_sha256":source_sha256,"source_version":source_version,"track_index":track_index,"frame_index":frame_index] }
 }
 
+typealias OutputTimeProcessor = (URL, URL, [String:Any]) throws -> [String:Any]
+
 struct ConversionOptions {
     var direction = "to-apple"
     var android = AndroidOptions()
@@ -21,6 +23,8 @@ struct ConversionOptions {
     var repairAuxiliaryDuration = false
     var exportDataFiles = true
     var exifFileTimes = false
+    var photoTime: [String:Any]?
+    var photoTimeOriginalNames: [String:String] = [:]
     var coverIndex: Int?
     var coverSelections: [String:Int] = [:]
     var candidateDelivery = "static"
@@ -29,6 +33,11 @@ struct ConversionOptions {
     var manualCover: ManualCoverChoice?
     var manualCovers: [String:ManualCoverChoice] = [:]
     var json: [String:Any] {
+        var value = baseJSON
+        if let time = photoTime { value["photo_time"] = time }
+        return value
+    }
+    private var baseJSON: [String:Any] {
         if direction == "honor-to-google" { var r: [String:Any] = ["direction":direction,"legacy_hdr":legacyHDR,"hdr_policy":"supported-private-hdr-2","export_data_files":exportDataFiles]; if exifFileTimes { r["exif_file_times"] = true }; return r }
         if direction == "android-to-android" { var r: [String:Any] = ["direction":direction,"target":"honor","layout":AndroidTransfer.revision,"vendor":"google","container":"jpeg","export_data_files":exportDataFiles]; if exifFileTimes { r["exif_file_times"] = true }; return r }
         if direction == "to-android" { var r: [String:Any] = ["direction":direction,"android":android.json,"legacy_hdr":legacyHDR,"hdr_policy":"supported-private-hdr-2","time_domain":timeDomain,"export_data_files":exportDataFiles]; if exifFileTimes { r["exif_file_times"] = true }; return r }
@@ -112,7 +121,10 @@ struct ScanRow {
     var confirmedStatic = false
     var version: SourceVersion?
     var burst: BurstFrame? = nil
-    var isStaticHDR: Bool { confirmedStatic && ["Ultra HDR","ISO HDR","旧 Apple HDR","荣耀私有 HDR","HEIC HDR"].contains(hdr) }
+    var captureTimeMissing: Bool? = nil
+    var privateHDRSupported: Bool? = nil
+    var privateHDRReason: String? = nil
+    var isStaticHDR: Bool { confirmedStatic && ["Ultra HDR","ISO HDR","旧 Apple HDR","荣耀私有 HDR","HEIC HDR","OPPO UHDR（实验）"].contains(hdr) }
     var isConvertible: Bool { burst.map { $0.supported } ?? (isMotion || isStaticHDR) }
     var needsInspection: Bool { burst.map { !$0.supported } ?? (!isMotion && !confirmedStatic) }
 }
@@ -294,9 +306,10 @@ enum NativeBatch {
     static func run(sources: [URL], output: URL, options: ConversionOptions, token: StopToken,
                     scanRows: [ScanRow]? = nil, concurrency: Int? = nil,
                     existingOutput: ((URL,URL)->ExistingOutputDecision)? = nil,
+                    outputTimes: OutputTimeProcessor? = nil,
                     progress: @escaping (BatchProgress)->Void) throws -> BatchOutcome {
         return try RustCore.run(sources:sources,output:output,options:options,token:token,scanRows:scanRows,
-            concurrency:concurrency,existing:existingOutput,progress:progress)
+            concurrency:concurrency,existing:existingOutput,outputTimes:outputTimes,progress:progress)
     }
 }
 

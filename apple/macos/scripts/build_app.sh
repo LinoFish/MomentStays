@@ -16,7 +16,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 sources=(apple/shared/RustCore.swift apple/shared/MotionLive.swift apple/shared/PhotoFormat.swift apple/shared/BatchEngine.swift apple/shared/CoverCandidates.swift apple/shared/AndroidExport.swift apple/shared/AndroidTransfer.swift
-  apple/macos/Sources/ConversionSettings.swift apple/macos/Sources/ConversionService.swift apple/macos/Sources/WorkspaceModel.swift apple/macos/Sources/DeliveryModels.swift apple/macos/Sources/PhotoLibraryService.swift apple/macos/Sources/SystemSharingService.swift
+  apple/macos/Sources/ConversionSettings.swift apple/macos/Sources/PhotoTimeRepair.swift apple/macos/Sources/ConversionService.swift apple/macos/Sources/WorkspaceModel.swift apple/macos/Sources/DeliveryModels.swift apple/macos/Sources/PhotoLibraryService.swift apple/macos/Sources/SystemSharingService.swift
   apple/macos/Sources/InterfaceSupport.swift apple/macos/Sources/ExportSettingsView.swift apple/macos/Sources/MotionPreview.swift apple/macos/Sources/PhotoTimelineView.swift apple/macos/Sources/PhotoQueueView.swift apple/macos/Sources/WorkspaceView.swift apple/macos/Sources/ReportView.swift
   apple/macos/Sources/PhotosLibraryPicker.swift apple/macos/Sources/MacPlatformServices.swift apple/macos/Sources/UISnapshotSupport.swift apple/macos/Sources/AppIconAppearance.swift apple/macos/Sources/App.swift)
 if [[ ${#architectures[@]} -gt 1 ]]; then
@@ -39,7 +39,8 @@ else
   xcrun lipo -create "${binaries[@]}" -output "$app/Contents/MacOS/MomentStays"
 fi
 cp apple/macos/packaging/Info.plist "$app/Contents/Info.plist"
-for language in zh-Hans zh-Hant zh; do
+cp apple/macos/packaging/Workbench.en.json "$app/Contents/Resources/Workbench.en.json"
+for language in en zh-Hans zh-Hant zh; do
   rm -rf "$app/Contents/Resources/$language.lproj"
   cp -R "apple/macos/packaging/$language.lproj" "$app/Contents/Resources/$language.lproj"
 done

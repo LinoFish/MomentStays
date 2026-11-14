@@ -202,9 +202,9 @@ struct PhotoMotionPreview: View {
                 .subtleAnimation(controller.coverRevision,duration:0.12)
                 if let frame = controller.frame { previewImage(frame).transaction { $0.animation = nil } }
                 HStack {
-                    Text(item.isMotion ? "动态照片" : item.row.confirmedStatic ? "静态照片" : "需检查")
+                    Text(AppText.text(item.isMotion ? "动态照片" : item.row.confirmedStatic ? "静态照片" : "需检查"))
                     Spacer(minLength: 0)
-                    if controller.frame != nil, let time = controller.frameTime { Text(String(format: "预览 %.2f s", time)).monospacedDigit() }
+                    if controller.frame != nil, let time = controller.frameTime { Text(AppText.text(String(format: "预览 %.2f s", time))).monospacedDigit() }
                 }
                 .font(.system(size: 11, weight: .medium)).foregroundColor(.white)
                 .padding(.horizontal, 7).padding(.vertical, 4)
@@ -213,7 +213,7 @@ struct PhotoMotionPreview: View {
             .frame(height: height).clipped().contentShape(Rectangle()).onTapGesture(perform: select)
             if item.isMotion { timeline.padding(.horizontal, 10).padding(.vertical, 6) }
             if item.isMotion && direction == "to-apple" {
-                if showsCandidateStatus { Text(controller.candidateStatus).font(.callout).foregroundColor(.secondary).padding(10) }
+                if showsCandidateStatus { Text(AppText.text(controller.candidateStatus)).font(.callout).foregroundColor(.secondary).padding(10) }
             }
         }
         .onAppear { prepare() }
@@ -248,12 +248,12 @@ struct PhotoMotionPreview: View {
                 Button { chooseMarker(marker) } label: { markerLabel(title,selected:selected) }
                     .buttonStyle(.plain)
                     .disabled(!allowsCoverSelection || marker.issue != nil)
-                    .help(marker.issue ?? marker.title)
-                    .accessibilityLabel(marker.title)
+                    .help(AppText.text(marker.issue ?? marker.title))
+                    .accessibilityLabel(AppText.text(marker.title))
             } else { markerMenu(group,title:title,selected:selected) }
         }
         .frame(width:CoverTimelineGroup.controlWidth,height:28)
-        .accessibilityValue(selected ? "当前封面" : "未选择")
+        .accessibilityValue(AppText.text(selected ? "当前封面" : "未选择"))
         .accessibilityIdentifier("cover-timeline-" + group.id)
     }
 
@@ -261,18 +261,18 @@ struct PhotoMotionPreview: View {
                 Menu {
                     ForEach(group.markers) { marker in
                         Button { chooseMarker(marker) } label: {
-                            Label(marker.title,systemImage:marker.index == selectedCover ? "checkmark" : "photo")
-                        }.disabled(marker.issue != nil).help(marker.issue ?? marker.title)
+                            Label(AppText.text(marker.title),systemImage:marker.index == selectedCover ? "checkmark" : "photo")
+                        }.disabled(marker.issue != nil).help(AppText.text(marker.issue ?? marker.title))
                     }
                 } label: { markerLabel(title,selected:selected) }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                     .disabled(!allowsCoverSelection)
-                    .help(group.markers.map(\.title).joined(separator:"\n"))
-                    .accessibilityLabel("相邻封面，" + group.markers.map(\.title).joined(separator:"，"))
+                    .help(AppText.text(group.markers.map(\.title).joined(separator:"\n")))
+                    .accessibilityLabel(AppText.text("相邻封面，" + group.markers.map(\.title).joined(separator:"，")))
     }
 
     private func markerLabel(_ title: String, selected: Bool) -> some View {
-        Text(title).font(.system(size:11,weight:selected ? .semibold : .medium)).lineLimit(1)
+        Text(AppText.text(title)).font(.system(size:11,weight:selected ? .semibold : .medium)).lineLimit(1)
             .padding(.horizontal,7).frame(height:24)
             .foregroundColor(selected ? .black : .primary)
             .background(selected ? InterfaceStyle.accent : InterfaceStyle.content)
@@ -319,15 +319,15 @@ struct PhotoMotionPreview: View {
                 }.frame(width:geometry.size.width,height:direction == "to-apple" ? 50 : 20,alignment:.topLeading)
             }.frame(height:direction == "to-apple" ? 50 : 20)
             HStack(spacing: 4) {
-                if let cover = controller.coverTime { Text(String(format: "封面 %.2f s", cover)) }
-                else { Text(controller.duration == nil ? "视频预览不可用" : "封面无法定位") }
+                if let cover = controller.coverTime { Text(AppText.text(String(format: "封面 %.2f s", cover))) }
+                else { Text(AppText.text(controller.duration == nil ? "视频预览不可用" : "封面无法定位")) }
                 Spacer(minLength: 0)
-                if let duration = controller.duration { Text(String(format: "%.2f s", duration)) }
+                if let duration = controller.duration { Text(AppText.text(String(format: "%.2f s", duration))) }
             }
             .font(.system(size: 11)).foregroundColor(.secondary).monospacedDigit().lineLimit(1)
             .accessibilityElement(children:.ignore)
-            .accessibilityLabel("原始动态照片时间线")
-            .accessibilityValue(accessibilityValue)
+            .accessibilityLabel(AppText.text("原始动态照片时间线"))
+            .accessibilityValue(AppText.text(accessibilityValue))
             .accessibilityAdjustableAction { adjustment in adjustPreview(adjustment) }
             .focusable()
             .onMoveCommand { direction in
@@ -335,7 +335,7 @@ struct PhotoMotionPreview: View {
                 else if direction == .right { adjustPreview(.increment) }
             }
         }
-        .help(controller.message)
+        .help(AppText.text(controller.message))
     }
 
     private func timelineInset(_ width: CGFloat) -> CGFloat {
@@ -534,7 +534,7 @@ struct ManualMainFrameEditor: View {
     private var height: CGFloat { min(650,max(360,availableSize.height-24)) }
     var body: some View {
         VStack(alignment:.leading,spacing:12) {
-            Text("人工定位动态封面").font(.headline)
+            Text(AppText.text("人工定位动态封面")).font(.headline)
             Text(item.name).lineLimit(2).truncationMode(.middle).help(item.name)
             ScrollView { editorContent }
             Divider()
@@ -545,15 +545,15 @@ struct ManualMainFrameEditor: View {
     }
     private var editorContent: some View {
         VStack(alignment:.leading,spacing:12) {
-            Text("原片封面时间未确定。选择动态标记后仍需确认；原相机静态照片保持不变。")
+            Text(AppText.text("原片封面时间未确定。选择动态标记后仍需确认；原相机静态照片保持不变。"))
                 .font(.callout).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
             if !controller.hints.isEmpty {
-                Text("可能位置来自源尾标，按毫秒尝试映射；单位与时间域待确认，点击仅预览。")
+                Text(AppText.text("可能位置来自源尾标，按毫秒尝试映射；单位与时间域待确认，点击仅预览。"))
                     .font(.caption).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
             }
             framePreview
             if controller.count > 0 { sourceTimeline; frameActions }
-            Text(controller.message).font(.callout).monospacedDigit().textSelection(.enabled).fixedSize(horizontal:false,vertical:true)
+            Text(AppText.text(controller.message)).font(.callout).monospacedDigit().textSelection(.enabled).fixedSize(horizontal:false,vertical:true)
             sourceNotes
         }.frame(maxWidth:.infinity,alignment:.leading)
     }
@@ -563,33 +563,33 @@ struct ManualMainFrameEditor: View {
             if let image = controller.image { Image(decorative:image,scale:1).resizable().scaledToFit() }
             else if controller.isLoading { ProgressView() }
             else { VStack(spacing:10) {
-                Label("无法显示所选画面",systemImage:"exclamationmark.triangle")
-                Button("重试") { if controller.count > 0 { controller.move(to:controller.position) } else { controller.load(item,confirmed:confirmed) } }
+                Label(AppText.text("无法显示所选画面"),systemImage:"exclamationmark.triangle")
+                Button(AppText.text("重试")) { if controller.count > 0 { controller.move(to:controller.position) } else { controller.load(item,confirmed:confirmed) } }
             }.foregroundColor(.white) }
-        }.frame(height:min(240,max(140,height*0.36))).accessibilityLabel("主视频所选画面")
+        }.frame(height:min(240,max(140,height*0.36))).accessibilityLabel(AppText.text("主视频所选画面"))
     }
     private var frameActions: some View {
         HStack {
-            Button("上一帧") { controller.move(to:controller.position-1) }.disabled(controller.position == 0)
-            Button("下一帧") { controller.move(to:controller.position+1) }.disabled(controller.position >= controller.count-1)
+            Button(AppText.text("上一帧")) { controller.move(to:controller.position-1) }.disabled(controller.position == 0)
+            Button(AppText.text("下一帧")) { controller.move(to:controller.position+1) }.disabled(controller.position >= controller.count-1)
         }
     }
     @ViewBuilder private var sourceNotes: some View {
         if !controller.rawHint.isEmpty {
-            Text("源尾标：" + controller.rawHint).font(.caption).monospacedDigit()
-            Text("菱形为源字段的可能位置：按毫秒尝试映射，单位与时间域尚未确定；点击仅预览，须另行确认。")
+            Text(AppText.text("源尾标：" + controller.rawHint)).font(.caption).monospacedDigit()
+            Text(AppText.text("菱形为源字段的可能位置：按毫秒尝试映射，单位与时间域尚未确定；点击仅预览，须另行确认。"))
                 .font(.caption).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
-            if controller.hints.isEmpty { Text("源提示无法定位；仍可逐帧选择。").font(.caption).foregroundColor(.secondary) }
-            if !controller.hintIssue.isEmpty { Text(controller.hintIssue).font(.caption).foregroundColor(.secondary) }
+            if controller.hints.isEmpty { Text(AppText.text("源提示无法定位；仍可逐帧选择。")).font(.caption).foregroundColor(.secondary) }
+            if !controller.hintIssue.isEmpty { Text(AppText.text(controller.hintIssue)).font(.caption).foregroundColor(.secondary) }
         }
     }
     private var confirmationActions: some View {
         HStack {
-            Button("取消",action:cancel).keyboardShortcut(.cancelAction).accessibilityIdentifier("cancel-manual-frame")
+            Button(AppText.text("取消"),action:cancel).keyboardShortcut(.cancelAction).accessibilityIdentifier("cancel-manual-frame")
             Spacer()
-            Button("确认此帧") { if let choice = controller.choice { confirm(choice) } }
+            Button(AppText.text("确认此帧")) { if let choice = controller.choice { confirm(choice) } }
                 .disabled(controller.choice == nil).keyboardShortcut(.defaultAction)
-                .accessibilityLabel("确认此帧，保留原静态照片").accessibilityIdentifier("confirm-manual-frame")
+                .accessibilityLabel(AppText.text("确认此帧，保留原静态照片")).accessibilityIdentifier("confirm-manual-frame")
         }
     }
     private var sourceTimeline: some View {
@@ -601,27 +601,27 @@ struct ManualMainFrameEditor: View {
             }.frame(height:controller.hints.isEmpty ? 0 : 30)
             Slider(value:Binding(get:{controller.currentTime},set:{controller.seek($0)}),in:0...max(0.000001,controller.endTime))
                 .padding(.horizontal,ManualHintGroup.controlWidth/2).disabled(controller.count <= 1)
-                .accessibilityLabel("当前播放位置，按真实PTS逐帧选择").accessibilityIdentifier("manual-frame-slider")
-            HStack { Text("0 s"); Spacer(); Text(String(format:"末帧 %.3f s",controller.endTime)) }
+                .accessibilityLabel(AppText.text("当前播放位置，按真实PTS逐帧选择")).accessibilityIdentifier("manual-frame-slider")
+            HStack { Text(AppText.text("0 s")); Spacer(); Text(AppText.text(String(format:"末帧 %.3f s",controller.endTime))) }
                 .font(.caption).monospacedDigit().foregroundColor(.secondary)
         }
     }
     @ViewBuilder private func hintControl(_ group:ManualHintGroup) -> some View {
         if group.hints.count == 1, let hint = group.hints.first {
             Button { controller.preview(hint) } label: { hintLabel(hint.title) }
-                .buttonStyle(.plain).help(hint.detail).accessibilityLabel("待确认源提示，" + hint.title)
-                .accessibilityHint(hint.detail).accessibilityIdentifier("manual-hint-" + group.id)
+                .buttonStyle(.plain).help(AppText.text(hint.detail)).accessibilityLabel(AppText.text("待确认源提示，" + hint.title))
+                .accessibilityHint(AppText.text(hint.detail)).accessibilityIdentifier("manual-hint-" + group.id)
         } else {
             Menu {
-                ForEach(group.hints) { hint in Button(hint.title) { controller.preview(hint) }.help(hint.detail) }
+                ForEach(group.hints) { hint in Button(AppText.text(hint.title)) { controller.preview(hint) }.help(AppText.text(hint.detail)) }
             } label: { hintLabel("可能位置 \(group.hints.count)处") }
                 .menuStyle(.borderlessButton).fixedSize()
-                .help(group.hints.map(\.detail).joined(separator:"\n"))
-                .accessibilityLabel("相邻待确认源提示，\(group.hints.count)处").accessibilityIdentifier("manual-hint-" + group.id)
+                .help(AppText.text(group.hints.map(\.detail).joined(separator:"\n")))
+                .accessibilityLabel(AppText.text("相邻待确认源提示，\(group.hints.count)处")).accessibilityIdentifier("manual-hint-" + group.id)
         }
     }
     private func hintLabel(_ text:String) -> some View {
-        Label(text,systemImage:"diamond").font(.caption).lineLimit(1)
+        Label(AppText.text(text),systemImage:"diamond").font(.caption).lineLimit(1)
             .padding(.horizontal,6).padding(.vertical,4).background(InterfaceStyle.selection).cornerRadius(6)
     }
 }

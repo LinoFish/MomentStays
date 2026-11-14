@@ -33,6 +33,7 @@ pub mod live;
 pub mod live2motion;
 pub mod model;
 pub mod mp4;
+pub mod oppo_uhdr;
 pub mod output;
 pub mod pyjpeg;
 pub mod pymotion;

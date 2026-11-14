@@ -499,6 +499,7 @@ pub fn convert(
     });
     crate::engine::write_json(&manifest, &stage.path().join("manifest.json"))?;
     output::publish(
+        native,
         &stage,
         target,
         source,

@@ -44,6 +44,16 @@ pub struct HeicGain {
 /// Host codecs and services. Every method has a refusing default, so a
 /// host implements only what it supports.
 pub trait Native: Sync {
+    /// Host metadata stage. Only unpublished private output files may be changed.
+    fn prepare_output_times(
+        &self,
+        _stage: &Path,
+        _source: &Path,
+        _manifest: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        Ok(serde_json::Value::Null)
+    }
+
     /// Decode audio through the target platform; None on unavailable backends.
     /// Silence is valid: this checks decodability, not perceived loudness.
     fn audio_decodes(&self, _path: &Path, _expected_tracks: usize) -> Result<Option<bool>> {

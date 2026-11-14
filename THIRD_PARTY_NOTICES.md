@@ -25,11 +25,14 @@ The following versions and license expressions are recorded by `core/Cargo.lock`
 | Crate | Locked version | License expression |
 | --- | --- | --- |
 | [base64](https://github.com/marshallpierce/rust-base64) | 0.22.1 | `MIT OR Apache-2.0` |
+| [jpeg-decoder](https://github.com/image-rs/jpeg-decoder) | 0.3.2 | `MIT OR Apache-2.0` |
+| [oxideav-h265](https://github.com/OxideAV/oxideav-h265) | 0.0.17 | `MIT` |
 | [libc](https://github.com/rust-lang/libc) | 0.2.191 | `MIT OR Apache-2.0` |
 | [md-5](https://github.com/RustCrypto/hashes) | 0.10.6 | `MIT OR Apache-2.0` |
 | [memchr](https://github.com/BurntSushi/memchr) | 2.8.3 | `Unlicense OR MIT` |
 | [memmap2](https://github.com/RazrFalcon/memmap2-rs) | 0.9.12 | `MIT OR Apache-2.0` |
 | [serde_json](https://github.com/serde-rs/json) | 1.0.154 | `MIT OR Apache-2.0` |
+| [serde](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` |
 | [sha2](https://github.com/RustCrypto/hashes) | 0.10.9 | `MIT OR Apache-2.0` |
 
 ### Transitive and build dependencies
@@ -37,6 +40,9 @@ The following versions and license expressions are recorded by `core/Cargo.lock`
 | Crate | Locked version | License expression |
 | --- | --- | --- |
 | [block-buffer](https://github.com/RustCrypto/utils) | 0.10.4 | `MIT OR Apache-2.0` |
+| [bytemuck](https://github.com/Lokathor/bytemuck) | 1.25.2 | `Zlib OR Apache-2.0 OR MIT` |
+| [oxideav-core](https://github.com/OxideAV/oxideav-core) | 0.1.43 | `MIT` |
+| [thiserror](https://github.com/dtolnay/thiserror) / thiserror-impl | 2.0.21 | `MIT OR Apache-2.0` |
 | [cfg-if](https://github.com/rust-lang/cfg-if) | 1.0.5 | `MIT OR Apache-2.0` |
 | [cpufeatures](https://github.com/RustCrypto/utils) | 0.2.17 | `MIT OR Apache-2.0` |
 | [crypto-common](https://github.com/RustCrypto/traits) | 0.1.7 | `MIT OR Apache-2.0` |
@@ -49,7 +55,6 @@ The following versions and license expressions are recorded by `core/Cargo.lock`
 | [itoa](https://github.com/dtolnay/itoa) | 1.0.18 | `MIT OR Apache-2.0` |
 | [proc-macro2](https://github.com/dtolnay/proc-macro2) | 1.0.107 | `MIT OR Apache-2.0` |
 | [quote](https://github.com/dtolnay/quote) | 1.0.47 | `MIT OR Apache-2.0` |
-| [serde](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` |
 | [serde_core](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` |
 | [serde_derive](https://github.com/serde-rs/serde) | 1.0.229 | `MIT OR Apache-2.0` |
 | [syn](https://github.com/dtolnay/syn) | 3.0.9 | `MIT OR Apache-2.0` |
@@ -128,3 +133,105 @@ Specifications and documentation remain subject to their publishers' terms. Ackn
 The build copies `LICENSE`, `COPYRIGHT` and this file into the app's Resources directory. The DMG contains the signed app and an Applications link. Website font copyright and the complete OFL are also retained with the font files in the GitHub Pages branch.
 
 A distributed GPL-covered binary must be accompanied by corresponding-source access as required by GPLv3 section 6. Release tags identify the corresponding project source and build/install scripts. Third-party dependencies and assets keep their own licenses; the project's GPL declaration does not relicense them, system frameworks, Skills or users' input media.
+
+## 8. Software gain-map codec licence notices
+
+The experimental OPPO UHDR path uses `jpeg-decoder` with default features disabled
+and `oxideav-h265` (PCM encoder only) with `oxideav-core`. It does not link x265,
+FFmpeg or libheif. The added locked dependency graph contains no GPL/LGPL crate.
+These permissive copyright licences do not grant or settle HEVC patent rights.
+The following notices are included in the app through this file.
+
+### oxideav-h265 0.0.17 / oxideav-core 0.1.43
+
+```text
+MIT License
+
+Copyright (c) 2026 Karpelès Lab Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### jpeg-decoder 0.3.2
+
+```text
+MIT License
+
+Copyright (c) 2016 The jpeg-decoder Developers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### bytemuck 1.25.2
+
+```text
+MIT License
+
+Copyright (c) 2019 Daniel "Lokathor" Gee.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice (including the next paragraph) shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### thiserror / thiserror-impl 2.0.21
+
+```text
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```

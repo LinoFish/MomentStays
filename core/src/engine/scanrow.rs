@@ -45,7 +45,12 @@ impl ScanRow {
         self.confirmed_static
             && matches!(
                 self.hdr.as_str(),
-                "Ultra HDR" | "ISO HDR" | "旧 Apple HDR" | "荣耀私有 HDR" | "HEIC HDR"
+                "Ultra HDR"
+                    | "ISO HDR"
+                    | "旧 Apple HDR"
+                    | "荣耀私有 HDR"
+                    | "HEIC HDR"
+                    | "OPPO UHDR（实验）"
             )
     }
     pub fn needs_inspection(&self) -> bool {
@@ -148,7 +153,9 @@ pub fn scan_file(
                         row.confirmed_static = true;
                         row.hdr = kind.into();
                         row.cover = "不适用".into();
-                        row.detail = "静态 HDR，可处理并导出静态图片".into();
+                        row.detail = if kind == "OPPO UHDR（实验）" {
+                            "实验性 OPPO UHDR，仅向苹果方向输出 ISO HDR HEIC；保留主图与增益图编码，Apple HDR 显示兼容性待验证"
+                        } else { "静态 HDR，可处理并导出静态图片" }.into();
                     }
                     Err(e) => {
                         row.confirmed_static = false;

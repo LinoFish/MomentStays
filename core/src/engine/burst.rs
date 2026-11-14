@@ -452,6 +452,33 @@ pub fn convert_with_policy(
     legacy_hdr: bool,
     exif_file_times: bool,
 ) -> Result<Value> {
+    convert_with_time_policy(
+        native,
+        plan,
+        selected,
+        choice,
+        target,
+        token,
+        overwrite,
+        legacy_hdr,
+        exif_file_times,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)] // Keep the existing conversion boundary with optional date policy.
+pub fn convert_with_time_policy(
+    native: &dyn Native,
+    plan: &Value,
+    selected: &[PathBuf],
+    choice: Choice<'_>,
+    target: &Path,
+    token: &StopToken,
+    overwrite: bool,
+    legacy_hdr: bool,
+    exif_file_times: bool,
+    photo_time: Option<&Value>,
+) -> Result<Value> {
     let google = plan["source_format"] == "google-burst";
     let format = source_format(plan);
     let revision = revision(format)?;
@@ -536,7 +563,10 @@ pub fn convert_with_policy(
     } else {
         "burst-marker-conversion"
     };
-    let identity = json!({"group":plan["id"],"members":hashes,"selected":selected,"representative":representative,"independent":independent,"hdr_policy":super::hdr::POLICY,"legacy_hdr":legacy_hdr});
+    let mut identity = json!({"group":plan["id"],"members":hashes,"selected":selected,"representative":representative,"independent":independent,"hdr_policy":super::hdr::POLICY,"legacy_hdr":legacy_hdr});
+    if let Some(time) = photo_time {
+        identity["photo_time"] = time.clone();
+    }
     let group = uuid(&identity.to_string());
     if !overwrite && target.exists() {
         let m = output::verify(target)?;
@@ -641,6 +671,7 @@ pub fn convert_with_policy(
     validate_inventory(plan)?;
     // Reuse publication's final cancellation/atomic exchange; group sources were all checked above.
     output::publish(
+        native,
         &stage,
         target,
         &all[0],

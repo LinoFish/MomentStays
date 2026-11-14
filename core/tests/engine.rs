@@ -347,6 +347,7 @@ fn c_abi_runs_requests_and_reports_progress() {
         progress: Some(progress),
         existing_output: None,
         rows_ready: None,
+        prepare_output_times: None,
     };
     let req =
         json!({"mode": "batch", "inputs": [src.0], "output": out.0, "export_data_files": false})

@@ -64,6 +64,7 @@ pub struct ConversionOptions {
     /// off). Recorded in the options JSON only when enabled, so existing
     /// outputs keep resuming unchanged while the switch is off.
     pub exif_file_times: bool,
+    pub photo_time: Option<Value>,
     pub cover_index: Option<i64>,
     /// Normalized source path -> candidate index.
     pub cover_selections: BTreeMap<String, i64>,
@@ -87,6 +88,7 @@ impl Default for ConversionOptions {
             repair_auxiliary_duration: false,
             export_data_files: true,
             exif_file_times: false,
+            photo_time: None,
             cover_index: None,
             cover_selections: BTreeMap::new(),
             candidate_delivery: "static".into(),
@@ -100,6 +102,13 @@ impl Default for ConversionOptions {
 
 impl ConversionOptions {
     pub fn json(&self) -> Value {
+        let mut v = self.base_json();
+        if let Some(ref time) = self.photo_time {
+            v["photo_time"] = time.clone();
+        }
+        v
+    }
+    fn base_json(&self) -> Value {
         if self.direction == "honor-to-google" {
             let mut v = json!({"direction":self.direction,"legacy_hdr":self.legacy_hdr,"hdr_policy":super::hdr::POLICY,"export_data_files":self.export_data_files});
             if self.exif_file_times {
@@ -209,6 +218,7 @@ impl ConversionOptions {
             repair_auxiliary_duration: b("repair_auxiliary_duration", false),
             export_data_files: b("export_data_files", true),
             exif_file_times: b("exif_file_times", false),
+            photo_time: req.get("photo_time").filter(|v| v.is_object()).cloned(),
             cover_index: req["cover_candidate_index"].as_i64(),
             cover_selections: selections,
             candidate_delivery: s("candidate_delivery", "static"),

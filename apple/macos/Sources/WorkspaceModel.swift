@@ -2,14 +2,38 @@ import Foundation
 import Combine
 
 enum MigrationPhotoFeature: String, CaseIterable, Identifiable {
-    case live, hdr, burst
+    case live, hdr, burst, missingTime
     var id: String { rawValue }
-    var title: String { self == .live ? "实况" : self == .hdr ? "HDR" : "连拍" }
+    var title: String { self == .live ? "实况" : self == .hdr ? "HDR" : self == .burst ? "连拍" : "缺失时间" }
     func includes(_ item: PhotoQueueItem) -> Bool {
         switch self {
         case .live: return item.isMotion
         case .hdr: return item.hdr.localizedCaseInsensitiveContains("HDR")
         case .burst: return item.row.burst != nil
+        case .missingTime: return item.row.captureTimeMissing == true
+        }
+    }
+}
+
+enum WorkspaceStep: Int, CaseIterable, Identifiable {
+    case direction = 1, importPhotos, conversion, preview, results
+    var id: Int { rawValue }
+    var title: String {
+        switch self {
+        case .direction: return "转换方向"
+        case .importPhotos: return "导入照片"
+        case .conversion: return "选择转换特性"
+        case .preview: return "导出预览"
+        case .results: return "执行结果"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .direction: return "选择来源与目标，确定可导入范围"
+        case .importPhotos: return "添加照片，确定本轮范围"
+        case .conversion: return "选择本轮要处理的照片特性"
+        case .preview: return "检查预计输出，选择导出位置"
+        case .results: return "查看执行进度与逐项结果"
         }
     }
 }
@@ -73,6 +97,8 @@ struct PhotoQueueItem: Identifiable {
     var resultState: PhotoState?
     var resultDetail: String?
     var originalDelivery: String? = nil
+    var originalExportState: PhotoState? = nil
+    var originalExportOutput: String? = nil
     var id: String { source.path }
     var name: String { source.lastPathComponent }
     private let allowsStaticHDR: Bool
@@ -334,13 +360,25 @@ final class WorkspaceModel: ObservableObject {
             selectionVersions[item.id] = SourceVersion.read(item.source)
         } else { selectionVersions[item.id] = nil }
     }
+    // Commit a marquee selection once on mouse-up, including an explicit empty set.
+    func setExplicitSelection(_ ids: Set<String>) {
+        guard !isBusy, !sharing else { return }
+        let valid = ids.intersection(Set(items.map(\.id)))
+        let added = valid.subtracting(selectedIDs)
+        selectionVersions = selectionVersions.filter { valid.contains($0.key) }
+        for item in items where added.contains(item.id) {
+            selectionVersions[item.id] = SourceVersion.read(item.source)
+        }
+        hasExplicitSelection = true
+        selectedIDs = valid
+    }
     func clearSelection() {
         guard !isBusy, !sharing else { return }
         selectedIDs = []; selectionVersions = [:]; hasExplicitSelection = false
     }
     var manualItems: [PhotoQueueItem] { items.filter { category($0) == .manual } }
     private var conversionItems: [PhotoQueueItem] {
-        items.filter { $0.isConvertible && ($0.row.burst == nil || settings.direction == .toApple) && category($0) != .manual &&
+        items.filter { actionBlockingReason($0) == nil && $0.isConvertible && ($0.row.burst == nil || settings.direction == .toApple) && category($0) != .manual &&
             (hasExplicitSelection ? selectedIDs.contains($0.id) : [.ready,.converted].contains(category($0))) }
     }
     func confirmManualMidpoint(_ item: PhotoQueueItem) {
@@ -401,11 +439,13 @@ final class WorkspaceModel: ObservableObject {
     @Published var sharing = false
     @Published var recentTasksAvailable = false
     @Published var recentOutput: URL?
+    @Published var workspaceStep: WorkspaceStep = .direction
+    @Published private(set) var resultScopeIDs: Set<String>?
     @Published var settingsPresented = false
     @Published var advancedExpanded = false
     @Published var experimentalExpanded = false
     @Published var detailExpanded = false
-    @Published var previewVisible = true
+    @Published var previewVisible = false
     @Published var sourceMenuRequested = false
     @Published private(set) var migrationTargetConfirmed = false
     @Published var migrationReviewPresented = false
@@ -442,7 +482,12 @@ final class WorkspaceModel: ObservableObject {
     init(service: ConversionServing = ConversionService()) { self.service = service }
     var isBusy: Bool { phase.isBusy }
     var manualDecisionPending: Bool { manualPlan != nil || migrationReviewPresented || reviewedMigration != nil }
-    var outputIsChosen: Bool { settings.destination != .ask && (settings.direction != .toApple || settings.outputConfirmed == true) && (settings.destination.usesCache || output != nil) }
+    var outputIsChosen: Bool { settings.destination != .ask && settings.outputConfirmed == true && (settings.destination.usesCache || output != nil) }
+    func selectDeliveryMode(_ value: OutputDestination) {
+        guard settings.direction.exportsAndroid, !isBusy, !sharing, settings.destinations.contains(value) else { return }
+        let confirmedFolder = settings.outputConfirmed == true && !settings.destination.usesCache
+        updateSettings { $0.destination = value; $0.outputConfirmed = value.usesCache || confirmedFolder }
+    }
     var canStart: Bool { manualPlan == nil && !isBusy && !sharing && !manualPreparation && !manualPromptPresented && scanComplete && outputIsChosen && (!conversionItems.isEmpty || !manualItems.isEmpty) }
     var canSwitchDirection: Bool { !sharing && (!isBusy || phase == .scanning || phase == .projecting) }
     var canAppendSources: Bool { !sharing && !isPreview && (!isBusy || inspectionActive && [.scanning,.projecting,.stopping].contains(phase)) }
@@ -494,6 +539,10 @@ final class WorkspaceModel: ObservableObject {
                 next.outputConfirmed = false
             }
         }
+        if next.photoTimeRepair == true && (settings.photoTimeRepair != true || next.photoTimeReference == nil) {
+            next.photoTimeReference = Date().timeIntervalSince1970
+            next.photoTimeZone = TimeZone.current.identifier
+        }
         next.normalize()
         let changed = next.options.json as NSDictionary != settings.options.json as NSDictionary || next.coverSelections != settings.coverSelections || next.manualMidpoints != settings.manualMidpoints || next.manualCovers != settings.manualCovers || next.burstChoices != settings.burstChoices
         settings = next
@@ -513,7 +562,7 @@ final class WorkspaceModel: ObservableObject {
         sourceLabel = label ?? (sources.count == 1 ? sources[0].lastPathComponent : "\(sources.count) 个文件／文件夹")
         let base = NativeBatch.root(NativeBatch.normalized(first))
         output = defaultOutput ?? base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + (settings.direction.exportsAndroid ? " Motion Photos" : " Live Photos"))
-        items = []; burstGroups = []; burstReviewPresented = false; burstOutput = nil; settings.burstChoices = nil
+        items = []; resultScopeIDs = nil; burstGroups = []; burstReviewPresented = false; burstOutput = nil; settings.burstChoices = nil
         selection = nil; report = nil; sourceOrigins = [:]
         settings.coverSelections = nil
         candidateCapabilities = [:]; coverVersions = [:]; manualVersions = [:]; settings.manualMidpoints = nil; settings.manualCovers = nil; clearSelection(); cancelManualPreparation()
@@ -533,11 +582,12 @@ final class WorkspaceModel: ObservableObject {
         let merged = Set(sources).union(incoming).sorted { $0.path < $1.path }
         guard !merged.isEmpty else { return }
         guard merged != sources else { let message = "这些来源已在列表中"; notice = message; status = message; return }
-        if let output = output, !settings.destination.usesCache {
+        if let output = output, settings.outputConfirmed == true, !settings.destination.usesCache {
             do { try NativeBatch.validateOutput(sources:merged,output:output) }
             catch { errorMessage = error.localizedDescription; return }
         }
         let wasEmpty = sources.isEmpty
+        resultScopeIDs = nil
         sources = merged
         sourceOrigins.merge(origins.filter { incoming.contains(URL(fileURLWithPath:$0.key)) },uniquingKeysWith:{ _,new in new })
         sourceLabel = wasEmpty ? (label ?? (merged.count == 1 ? merged[0].lastPathComponent : "\(merged.count) 个文件／文件夹")) : "多处来源 · \(merged.count) 项"
@@ -555,6 +605,7 @@ final class WorkspaceModel: ObservableObject {
         operation = UUID(); token.cancel(); service.clearInspections()
         migrationSource = nil; migrationSearch = ""; migrationFeatureFilters = []; reviewedMigration = nil
         sources = []; items = []; burstGroups = []; burstReviewPresented = false; burstOutput = nil; settings.burstChoices = nil
+        resultScopeIDs = nil
         selection = nil; rowIndices = [:]; sourceOrigins = [:]; scanComplete = false
         sourceLabel = "尚未选择原片"; settings.coverSelections = nil
         candidateCapabilities = [:]; coverVersions = [:]; manualVersions = [:]; settings.manualMidpoints = nil; settings.manualCovers = nil; clearSelection(); cancelManualPreparation()
@@ -578,8 +629,8 @@ final class WorkspaceModel: ObservableObject {
             output = destination; notice = nil
             if settings.direction == .toApple {
                 if settings.destination == .ask { settings.destination = .folder }
-                settings.outputConfirmed = true
             }
+            settings.outputConfirmed = true
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -637,8 +688,12 @@ final class WorkspaceModel: ObservableObject {
         }
         let retained = preservingResults ? Dictionary(items.map { ($0.id,$0) },uniquingKeysWith:{ first,_ in first }) : [:]
         func queueItem(_ row: ScanRow) -> PhotoQueueItem {
-            var item = PhotoQueueItem(row,allowsStaticHDR:sourceOrigins[row.source.path] == nil)
-            if let old = retained[item.id], old.row.version != nil, old.row.version == row.version { item.resultState = old.resultState; item.resultDetail = old.resultDetail }
+            var item = PhotoQueueItem(row,allowsStaticHDR:sourceOrigins[row.source.path] == nil && (row.hdr != "OPPO UHDR（实验）" || settings.direction == .toApple))
+            if let old = retained[item.id], old.row.version != nil, old.row.version == row.version {
+                item.resultState = old.resultState; item.resultDetail = old.resultDetail
+                item.originalDelivery = old.originalDelivery; item.originalExportState = old.originalExportState
+                item.originalExportOutput = old.originalExportOutput
+            }
             return item
         }
         let phase: TaskPhase = projection ? .projecting : .scanning
@@ -696,6 +751,7 @@ final class WorkspaceModel: ObservableObject {
             manualPromptPresented = true
             return
         }
+        resultScopeIDs = nil
         launchConversion(outputOverride:outputOverride, following:followsConversionResults)
     }
 
@@ -703,7 +759,7 @@ final class WorkspaceModel: ObservableObject {
         guard !isBusy, !isPreview else { return }
         guard let output = outputOverride ?? output else { cancelManualPreparation(); notice = "请先选择输出位置"; return }
         manualPlan = nil; manualPreparation = false; pendingOutput = nil
-        let targets = targetIDs.map { ids in items.filter { ids.contains($0.id) && $0.isConvertible && category($0) != .manual } } ?? conversionItems
+        let targets = targetIDs.map { ids in items.filter { ids.contains($0.id) && isMigrationReady($0) && category($0) != .manual } } ?? conversionItems
         let versions = coverVersions.merging(manualVersions,uniquingKeysWith:{ _,new in new }).merging(selectionVersions,uniquingKeysWith:{ _,new in new })
         let changed = Set(versions.compactMap { SourceVersion.read(URL(fileURLWithPath:$0.key)) != $0.value ? $0.key : nil }).union(items.compactMap { item in
             guard let version = item.row.version, SourceVersion.read(item.source) != version else { return nil }
@@ -717,6 +773,10 @@ final class WorkspaceModel: ObservableObject {
         followsConversionResults = following
         manualPreparation = false; pendingOutput = nil; manualPlan = nil
         var capturedSettings = settings
+        if !targets.contains(where:{$0.isMotion && $0.row.burst == nil}) {
+            capturedSettings.exportMode = .livePhoto; capturedSettings.track = .primary
+            capturedSettings.coverSelections = nil; capturedSettings.manualCovers = nil
+        }
         // Only confirmed unknown-cover sources enter this job. Known timestamps
         // still take precedence in the engine; unconfirmed items never enter it.
         if targets.contains(where:{ settings.manualMidpoints?[$0.id] == true }) { capturedSettings.missingTime = .midpoint }
@@ -730,9 +790,11 @@ final class WorkspaceModel: ObservableObject {
         do { destination = try prepareConversion(capturedSettings,output) }
         catch { errorMessage = error.localizedDescription; return }
         var options = capturedSettings.options
+        options.photoTimeOriginalNames = sourceOrigins.mapValues { $0.filename }
         options.burstPlans = burstGroups
         for group in burstGroups { options.burstChoices[group.id] = burstChoice(group) }
         let job = ConversionJob(sources: targets.map(\.source), output: destination, options: options, scanRows: targets.map(\.row))
+        if resultScopeIDs == nil { resultScopeIDs = Set(targets.map(\.id)) }
         let id = begin(.converting, message: "正在准备转换…"), currentToken = token
         report = nil; progress = 0
         for index in items.indices where targets.contains(where:{ $0.id == items[index].id }) { items[index].resultState = nil; items[index].resultDetail = nil }
@@ -824,6 +886,21 @@ final class WorkspaceModel: ObservableObject {
     }
 
     #if UI_DIAGNOSTICS
+    func configurePreviewResults() {
+        guard isPreview else { return }
+        let states: [PhotoState] = [.converted,.copied,.failed]
+        let files: [[String:Any]] = items.enumerated().map { index,item in
+            let state = states[index % states.count]
+            return ["source":item.id,"status":state.rawValue,
+                    "processing_kind":state == .copied ? "original-copy" : "conversion",
+                    "detail":state == .failed ? "诊断样本：必要资源无法校验，未发布成片；原片保留。" : state == .copied ? "诊断样本：完整原资源已输出，未计为转换。" : "诊断样本：文件已生成并校验；相册交付单独记录。"]
+        }
+        resultScopeIDs = Set(items.map(\.id))
+        report = ConversionReport(BatchOutcome(counts:["converted":files.filter{$0["status"] as? String == "converted"}.count,
+            "copied":files.filter{$0["status"] as? String == "copied"}.count,"failed":files.filter{$0["status"] as? String == "failed"}.count],
+            report:nil,reportData:["files":files],cancelled:false))
+        phase = .completed; status = "诊断结果预览"
+    }
     // Synthetic task states exercise toolbar availability without starting a job.
     func configurePreviewTask(_ phase: TaskPhase, interactive: Bool) {
         guard isPreview else { return }
@@ -869,12 +946,31 @@ final class WorkspaceModel: ObservableObject {
 // Presentation plans use the existing checked scan rows. Media decisions and
 // resource-copy plans remain owned by the Rust engine.
 extension WorkspaceModel {
+    var canImportSources: Bool { migrationTargetConfirmed && canAppendSources }
+    var canImportFromLibrary: Bool {
+        migrationTargetConfirmed && settings.direction != .androidToAndroid && settings.direction != .honorToGoogle
+    }
+    var importScopeDescription: String {
+        switch settings.direction {
+        case .toApple: return "本地 JPEG / HEIC 实况、受支持的 HDR 与连拍；普通静态照片可在下一步仅处理时间或原样导出。相册来源按可用原始资源检查。"
+        case .toAndroid: return "导入完整 Apple 实况照片（图片及同位置 MOV），或从相册选择实况；静态 HDR 按实际已支持能力处理。"
+        case .androidToAndroid: return "仅支持已验证的 Google Motion Photo JPEG → 荣耀；从本地文件导入，不支持 HEIC 或相册来源。"
+        case .honorToGoogle: return "仅支持已识别的荣耀实况 JPEG → Google；从本地文件导入，不支持 HEIC 或相册来源。"
+        }
+    }
     var migrationTarget: MigrationTargetPreset { MigrationTargetPreset.current(settings) }
     func selectMigrationTarget(_ target: MigrationTargetPreset) {
         guard canSwitchDirection else { return }
         migrationTargetConfirmed = true
         reviewedMigration = nil
         updateSettings { $0.direction = target.direction; $0.vendor = target.vendor }
+    }
+    var isTimeOnlyWorkspace: Bool {
+        guard settings.photoTimeRepair == true, settings.direction == .toApple,
+              (settings.liveConversion == false || !availableLive || settings.exportMode != .auxiliaryOnly), !migrationScopeItems.isEmpty else { return false }
+        return migrationScopeItems.allSatisfy {
+            sourceOrigins[$0.id] == nil && $0.row.confirmedStatic && !$0.row.isStaticHDR && !$0.isMotion && $0.row.burst == nil
+        }
     }
     var canReviewMigration: Bool {
         migrationTargetConfirmed && scanComplete && !isBusy && !sharing &&
@@ -883,14 +979,83 @@ extension WorkspaceModel {
     var migrationScopeItems: [PhotoQueueItem] {
         items.filter { (hasExplicitSelection ? selectedIDs.contains($0.id) : category($0) != .converted) }
     }
+    func timeOriginalFilename(_ item: PhotoQueueItem) -> String { sourceOrigins[item.id]?.filename ?? item.name }
+    func isTimeRepairCandidate(_ item: PhotoQueueItem) -> Bool {
+        sourceOrigins[item.id] == nil && settings.photoTimeRepair == true && (settings.liveConversion == false || !availableLive || settings.exportMode != .auxiliaryOnly) && item.row.confirmedStatic && item.row.burst == nil &&
+            item.row.captureTimeMissing == true && !item.isMotion &&
+            (settings.photoTimeSynthetic == true || PhotoTimeRepair.inferredTime(filename:timeOriginalFilename(item),zone:TimeZone(identifier:settings.photoTimeZone ?? "") ?? .current) != nil)
+    }
     var migrationReadyItems: [PhotoQueueItem] {
-        migrationScopeItems.filter { item in
-            guard item.isConvertible, category(item) == .ready else { return false }
+        migrationScopeItems.filter { isMigrationReady($0) }
+    }
+    func isMigrationReady(_ item: PhotoQueueItem) -> Bool {
+            if actionBlockingReason(item) != nil { return false }
+            if settings.photoTimeRepair == true && settings.direction != .toApple && item.isMotion && item.row.captureTimeMissing == true { return false }
+            guard isTimeRepairCandidate(item) || item.isConvertible && category(item) == .ready else { return false }
             if let group = burstGroups.first(where:{ $0.members.contains(where:{ $0.source == item.id }) }) {
                 return burstBlockingReason(group) == nil
             }
             return true
+    }
+    var availableLive: Bool { migrationScopeItems.contains { $0.isMotion && $0.row.burst == nil } }
+    var availableBurst: Bool { settings.direction == .toApple && migrationScopeItems.contains { $0.row.burst?.supported == true } }
+    var availableHDR: Bool { settings.privateHDRExperimentAvailable && migrationScopeItems.contains { $0.isConvertible && ($0.row.isStaticHDR || $0.hdr.contains("HDR")) && ($0.hdr != "荣耀私有 HDR" || $0.row.privateHDRSupported == true) } }
+    var availableTime: Bool { migrationScopeItems.contains { ($0.row.confirmedStatic && !$0.row.isStaticHDR && !$0.isMotion && $0.row.burst == nil) || isMigrationReady($0) } }
+    var availableMetadataTime: Bool { settings.direction == .toApple || migrationScopeItems.contains { !$0.isMotion && $0.row.burst == nil } }
+    func actionBlockingReason(_ item: PhotoQueueItem) -> String? {
+        if item.hdr == "荣耀私有 HDR" && !item.isMotion && item.row.burst == nil && item.row.privateHDRSupported != true {
+            return item.row.privateHDRReason ?? "荣耀私有 HDR 未通过配置检查，不能转换"
         }
+        if item.row.isStaticHDR && !item.isMotion && item.row.burst == nil && availableLive && settings.liveConversion != false && (settings.exportMode != .livePhoto || settings.track != .primary) {
+            return "本轮实况附加输出选项与静态 HDR 的组合尚未支持；请调整实况选项或分批处理"
+        }
+        if !settings.legacyHDR && settings.direction == .toAndroid && settings.container == .jpeg && ["heic","heif"].contains(item.source.pathExtension.lowercased()) && item.hdr.contains("HDR") {
+            return "目标 JPEG 需要 HDR 重建，未选择 HDR 时不能安全保留；请调整格式或特性"
+        }
+        if item.row.burst != nil {
+            if settings.burstConversion == false { return settings.legacyHDR ? "仅 HDR 尚不能安全保留原连拍封装；请启用连拍或原样输出" : "未选择连拍转换；原连拍资源保持不变" }
+        } else if item.isMotion {
+            if settings.liveConversion == false { return settings.legacyHDR ? "仅 HDR 尚不能安全保留此原动态封装；请启用实况或原样输出" : "未选择实况转换；原动态资源保持不变" }
+        } else if item.row.isStaticHDR && !settings.legacyHDR { return "未选择 HDR 转换；原 HDR 资源保持不变" }
+        if settings.legacyHDR && item.hdr == "荣耀私有 HDR" && item.row.privateHDRSupported != true {
+            if !item.isMotion && item.row.burst == nil { return item.row.privateHDRReason ?? "当前荣耀私有 HDR 不在已验证配置内，不能转换 HDR" }
+        }
+        if !settings.legacyHDR && item.hdr.contains("HDR") && settings.coverIndex(for:item.source) != nil {
+            return "自选封面不能保留未选择转换的 HDR；请恢复原封面或调整特性"
+        }
+        return nil
+    }
+    func previewRisk(_ item: PhotoQueueItem) -> Bool {
+        isMigrationReady(item) && (settings.photoTimeRepair == true || settings.legacyHDR && item.hdr.contains("HDR") || item.hdr == "荣耀私有 HDR")
+    }
+    func anticipatedStatus(_ item: PhotoQueueItem) -> String {
+        if let reason = actionBlockingReason(item) { return "不会转换：" + reason }
+        if previewRisk(item) { return item.hdr == "荣耀私有 HDR" && item.row.privateHDRSupported != true ? "部分可执行：HDR 不可转换" : "可能失败，需执行校验" }
+
+        if isMigrationReady(item) { return "预计可执行" }
+        if isTimeOnlyWorkspace && item.row.captureTimeMissing == false { return "已有时间，无需补缺" }
+        if category(item) == .manual { return "需确认封面" }
+        if category(item) == .converted { return "已有有效结果" }
+        if unconvertedExport != .none { return "预计原样输出" }
+        return "本轮不转换"
+    }
+    func expectedResources(_ item: PhotoQueueItem) -> String {
+        if !isMigrationReady(item) {
+            return unconvertedExport != .none ? "预计按完整原资源输出；仍需检查必要资源是否可读。" : "不生成转换成片；原因见本次计划。"
+        }
+        if isTimeRepairCandidate(item) { return "预计输出：补缺时间的静态照片副本，保持原格式" }
+        if item.isMotion { return "预计输出：目标动态格式与必要配对资源" }
+        if item.row.burst != nil { return "预计输出：所选连拍成员与组资源" }
+        return "预计输出：静态 HDR 单图，不生成实况视频"
+    }
+    func anticipatedTime(_ item: PhotoQueueItem) -> String? {
+        guard settings.photoTimeRepair == true, item.row.captureTimeMissing == true else { return nil }
+        let zone = TimeZone(identifier:settings.photoTimeZone ?? "") ?? .current
+        if let inferred = PhotoTimeRepair.inferredTime(filename:timeOriginalFilename(item),zone:zone) {
+            let origin = inferred.source == .unixTimestamp ? "Unix 时间" : "文件名候选，待核对"
+            return "预计时间：" + PhotoTimeRepair.formatter(zone:zone).string(from:inferred.date) + " · " + origin + " · " + zone.identifier
+        }
+        return settings.photoTimeSynthetic == true ? "按冻结基准与原文件名顺序生成合成时间，非真实拍摄时间。" : "没有可靠时间，保留原元数据，不计为补缺成功。"
     }
     var migrationUnconvertedItems: [PhotoQueueItem] {
         let ready = Set(migrationReadyItems.map(\.id))
@@ -910,6 +1075,7 @@ extension WorkspaceModel {
         selectedIDs.subtracting(visibleMigrationItems(in:queueScope).map(\.id)).count
     }
     func migrationPlanSummary(_ item: PhotoQueueItem) -> String {
+        if let reason = actionBlockingReason(item) { return reason }
         if displayState(item) == .copied { return "照片已按原资源输出，未计为转换。已有已校验结果，本轮不重复处理。" }
         if category(item) == .converted { return "已有已校验结果；不作为本次新转换" }
         if sourceOrigins[item.id] != nil && !item.isMotion && item.row.burst == nil {
@@ -923,6 +1089,12 @@ extension WorkspaceModel {
             }
         }
         if category(item) == .manual { return "需人工确认动态封面；未确认可在本轮跳过，原静态图不变" }
+        if isTimeRepairCandidate(item) {
+            return "PhotoTime：只补全输出副本的缺失拍摄时间，保留原编码与其他特性；没有可靠日期且未选合成排序时间时不写拍摄时间。"
+        }
+        if settings.photoTimeRepair == true && settings.direction != .toApple && item.isMotion && item.row.captureTimeMissing == true {
+            return "时间写入尚不支持当前目标动态容器的安全重封装；请关闭补缺选项或更改路线，不会静默拆为静态图。"
+        }
         if !item.isConvertible || category(item) == .inspect { return item.detail.isEmpty ? "当前不能转换；可选择原样导出，不承诺目标兼容" : item.detail }
         if !item.isMotion { return "静态 HDR：独立单图处理；没有视频、封面或实况配对" }
         var parts = [settings.direction == .toApple ? "实况转换为 Apple 配对资源" : "实况转换为目标动态格式", "保留动态、声音与可信封面"]
@@ -944,6 +1116,10 @@ extension WorkspaceModel {
         let ready = migrationReadyItems
         let originals = unconvertedExport == .none ? [] : migrationUnconvertedItems
         let tracked = ready + originals
+        resultScopeIDs = Set(tracked.map(\.id))
+        for index in items.indices where resultScopeIDs?.contains(items[index].id) == true {
+            items[index].originalDelivery = nil; items[index].originalExportState = nil; items[index].originalExportOutput = nil
+        }
         let versions = Dictionary(tracked.compactMap { item in item.row.version.map { (item.id,$0) } },uniquingKeysWith:{ first,_ in first })
         reviewedMigration = MigrationReviewSnapshot(settings:settings,readyIDs:Set(ready.map(\.id)),originalRows:originals.map(\.row),
             choice:unconvertedExport,originalsOutput:unconvertedOutput,versions:versions,followsResults:queueScope == .ready)
@@ -977,6 +1153,8 @@ extension WorkspaceModel {
             let title = ["copied":"已生成副本","resumed":"已校验复用","skipped":"已跳过","failed":"失败"][status] ?? status
             for index in items.indices where sources.contains(items[index].id) {
                 items[index].originalDelivery = "原样导出：" + title + (entry["detail"].flatMap { $0 as? String }.map { " · " + $0 } ?? "")
+                items[index].originalExportState = ["copied","resumed"].contains(status) ? .copied : PhotoState(rawValue:status)
+                items[index].originalExportOutput = entry["output"] as? String
             }
         }
     }

@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         brand.layoutAttribute = .right
         window.addTitlebarAccessoryViewController(brand)
         window.isMovableByWindowBackground = true
-        window.title = AppName.display; window.isReleasedWhenClosed = false
+        window.title = AppText.text(AppName.display); window.isReleasedWhenClosed = false
         window.delegate = self; platform.window = window
         var root = WorkspaceView(model: model, actions: platform.actions)
         #if UI_DIAGNOSTICS
@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NSApp.activate(ignoringOtherApps: true)
         #if UI_DIAGNOSTICS
         diagnostics.start()
+        // Snapshot sources are prepared explicitly; Cocoa may also interpret
+        // diagnostic path arguments as document-open requests.
+        if startupArgument("--ui-snapshot") != nil { pendingOpen = []; return }
         #endif
         if !pendingOpen.isEmpty { platform.openSources(pendingOpen); pendingOpen = [] }
         else if let path = startupArgument("--open-source") { platform.openSources([URL(fileURLWithPath: path)]) }
@@ -65,17 +68,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let menu = NSMenu()
         func section(_ title: String) -> NSMenu {
             let item = NSMenuItem(); menu.addItem(item)
-            let child = NSMenu(title: title); item.submenu = child; return child
+            let child = NSMenu(title:AppText.text(title)); item.submenu = child; return child
         }
         func command(_ menu: NSMenu, _ title: String, _ action: Selector, _ key: String = "") {
-            menu.addItem(withTitle: title, action: action, keyEquivalent: key).target = self
+            menu.addItem(withTitle: AppText.text(title), action: action, keyEquivalent: key).target = self
         }
         let app = section(AppName.display)
         command(app, "关于 \(AppName.display)", #selector(about))
         app.addItem(.separator())
-        app.addItem(withTitle: "隐藏 \(AppName.display)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: AppText.text("隐藏 \(AppName.display)"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(.separator())
-        app.addItem(withTitle: "退出 \(AppName.display)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: AppText.text("退出 \(AppName.display)"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let file = section("文件")
         file.delegate = self
         command(file, "选择照片或文件夹…", #selector(chooseSources), "o")
@@ -89,21 +92,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         command(file, "打开输出文件夹", #selector(openOutput))
         command(file, "查看转换报告", #selector(showReport))
         file.addItem(.separator())
-        file.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        file.addItem(withTitle: AppText.text("关闭窗口"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         let edit = section("编辑")
-        edit.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
-        edit.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(withTitle: AppText.text("撤销"), action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: AppText.text("剪切"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: AppText.text("拷贝"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: AppText.text("粘贴"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: AppText.text("全选"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         let task = section("任务")
         command(task, "开始处理", #selector(start), "\r")
         command(task, "停止任务", #selector(stop), ".")
         command(task, "重新扫描", #selector(rescan), "r")
         command(task, "迁移选项…", #selector(showSettings), ",")
         let windowMenu = section("窗口")
-        windowMenu.addItem(withTitle: "最小化", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowMenu.addItem(withTitle: "缩放", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(withTitle: AppText.text("最小化"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: AppText.text("缩放"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         NSApp.windowsMenu = windowMenu
         let help = section("帮助")
         command(help, UserGuide.title(for: .current), #selector(showHelp), "?")
@@ -121,8 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         case #selector(start): return model.canApproveMigration && !model.sharing && window?.attachedSheet == nil
         case #selector(stop): return model.canStop
         case #selector(rescan): return model.canRescan
-        case #selector(importPhotos): return model.migrationTargetConfirmed && model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
-        case #selector(chooseSources): return model.migrationTargetConfirmed && model.canAppendSources && window?.attachedSheet == nil
+        case #selector(importPhotos): return model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
+        case #selector(chooseSources): return model.canAppendSources && window?.attachedSheet == nil
         case #selector(chooseOutput): return !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
         case #selector(exportResults): return model.resultExportAvailable && !model.isBusy && !model.sharing
         case #selector(shareResults): return model.shareReady && !model.isBusy && !model.sharing
@@ -139,26 +142,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func shareResults() { platform.shareResults() }
     @objc private func recentResults() { platform.showRecentTasks() }
     @objc private func stopMonitoring() { platform.stopMonitoring() }
-    @objc private func chooseSources() { model.sourceMenuRequested = true }
-    @objc private func chooseOutput() { platform.chooseOutput() }
+    @objc private func chooseSources() { platform.chooseSources() }
+    @objc private func chooseOutput() {
+        guard model.migrationTargetConfirmed else { model.workspaceStep = .direction; return }
+        guard !model.items.isEmpty else { model.workspaceStep = .importPhotos; return }
+        model.workspaceStep = .preview; platform.chooseOutput()
+    }
     @objc private func importPhotos() { platform.importPhotos() }
     @objc private func start() { platform.start() }
     @objc private func stop() { model.stop() }
     @objc private func rescan() { model.rescan() }
     @objc private func openOutput() { platform.openOutput() }
     @objc private func showReport() { platform.showReport() }
-    @objc private func showSettings() { model.settingsPresented = true }
+    @objc private func showSettings() {
+        model.workspaceStep = !model.migrationTargetConfirmed ? .direction : model.items.isEmpty ? .importPhotos : .conversion
+    }
     @objc private func showHelp() {
         NSWorkspace.shared.open(UserGuide.url(for: .current))
     }
     @objc private func about() {
         guard window.attachedSheet == nil else { return }
-        let alert = NSAlert(); alert.messageText = AppName.display
-        alert.informativeText = "Android 动态照片 ↔ Apple Live Photo\n\n原生 SwiftUI 界面，适用于 macOS 12 或更新版本。\n转换在本机完成，原片只读。\n图库中的 iCloud 原件可能需要下载。"
-        alert.addButton(withTitle: "好"); alert.beginSheetModal(for: window)
+        let alert = NSAlert(); alert.messageText = AppText.text(AppName.display)
+        alert.informativeText = AppText.text("Android 动态照片 ↔ Apple Live Photo\n\n原生 SwiftUI 界面，适用于 macOS 12 或更新版本。\n转换在本机完成，原片只读。\n图库中的 iCloud 原件可能需要下载。")
+        alert.addButton(withTitle: AppText.text("好")); alert.beginSheetModal(for: window)
     }
 
     func application(_ sender: NSApplication, openFiles filenames: [String]) {
+        #if UI_DIAGNOSTICS
+        if startupArgument("--ui-snapshot") != nil { sender.reply(toOpenOrPrint:.success); return }
+        #endif
         guard !filenames.isEmpty, model.canAppendSources, window?.attachedSheet == nil else { sender.reply(toOpenOrPrint: .failure); return }
         let urls = filenames.map { URL(fileURLWithPath: $0) }
         if window == nil { pendingOpen.append(contentsOf: urls) } else { platform.openSources(urls) }

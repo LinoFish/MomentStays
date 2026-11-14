@@ -175,6 +175,7 @@ pub fn convert(
     }
     timings.measure("validation_and_publish", || {
         output::publish(
+            native,
             &stage,
             target,
             source,

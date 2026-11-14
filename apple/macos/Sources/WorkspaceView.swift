@@ -6,36 +6,40 @@ struct WorkspaceView: View {
     @ObservedObject var model: WorkspaceModel
     let actions: WorkspaceActions
     var layoutObserver: ([String: CGRect]) -> Void = { _ in }
-    @State private var outputDropTargeted = false
     @State private var showingError = false
-    @FocusState private var settingsFocused: Bool
+    @State private var showingOutputChoices = false
+    @State private var furthestStep: WorkspaceStep = .direction
+
     private var queueScope: Binding<PhotoQueueScope> {
-        Binding(get:{ model.queueScope },set:{ model.selectQueueScope($0) })
+        Binding(get:{ .all },
+                set:{ model.selectQueueScope($0) })
+    }
+    private var canContinueImport: Bool {
+        model.migrationTargetConfirmed && !model.isBusy && !model.sharing && !model.items.isEmpty &&
+            (!model.hasExplicitSelection || !model.selectedIDs.isEmpty)
+    }
+    private var executionActive: Bool {
+        let phases: [TaskPhase] = [.converting,.awaitingDecision,.delivering,.stopping]
+        return phases.contains(model.phase) || model.sharing
+    }
+    private var queueIsVisible: Bool {
+        model.workspaceStep != .direction
     }
 
     var body: some View {
         GeometryReader { geometry in
             let layout = WorkspaceLayout(size:geometry.size)
-            VStack(spacing:0) {
-                workspaceHeader(layout)
+            HStack(spacing:0) {
+                workspaceCanvas(layout)
+                    .frame(maxWidth:.infinity,maxHeight:.infinity)
                 Divider()
-                HStack(spacing:0) {
-                    sourceSidebar.frame(width:geometry.size.width < 1000 ? 148 : layout.sidebarWidth)
-                    Divider()
-                    PhotoQueueView(model:model,actions:actions,short:layout.short,scope:queueScope)
-                        .environment(\.workspaceTaskFeedback,AnyView(WorkspaceTaskFeedback(model:model,actions:actions,showError:{ showingError = true })))
-                        .frame(maxWidth:.infinity,maxHeight:.infinity)
-                }
+                workflowSidebar(compact:geometry.size.height < 800)
+                    .frame(width:geometry.size.width < 900 ? 264 : 300)
+                    .frame(maxHeight:.infinity)
             }
             .padding(.top,28).background(InterfaceStyle.canvas)
             .coordinateSpace(name:"workspace").recordLayout("workspace")
             .onPreferenceChange(LayoutFramesKey.self,perform:layoutObserver)
-            .sheet(isPresented:$model.settingsPresented,onDismiss:{ settingsFocused = true }) {
-                ExportSettingsSheet(model:model,availableSize:geometry.size,actions:actions)
-            }
-            .sheet(isPresented:$model.migrationReviewPresented) {
-                MigrationPlanSheet(model:model,actions:actions,availableSize:geometry.size)
-            }
         }
         .ignoresSafeArea(.container,edges:.top).font(.body)
         .tint(InterfaceStyle.accent).accentColor(InterfaceStyle.accent)
@@ -45,163 +49,390 @@ struct WorkspaceView: View {
                let value = PhotoQueueScope(rawValue:CommandLine.arguments[index + 1]) { model.selectQueueScope(value) }
             #endif
         }
-        .alert("无法完成操作",isPresented:$showingError) { Button("好",role:.cancel) {} }
-            message: { Text(model.errorMessage ?? "") }
+        .onChange(of:model.workspaceStep) { step in
+            if step.rawValue > furthestStep.rawValue { furthestStep = step }
+        }
+        .onChange(of:model.phase) { phase in
+            if phase == .converting { model.workspaceStep = .results }
+        }
+        .onChange(of:model.sources.isEmpty) { empty in
+            if empty && !executionActive { model.workspaceStep = model.migrationTargetConfirmed ? .importPhotos : .direction; furthestStep = model.workspaceStep }
+        }
+        .onChange(of:model.settingsPresented) { presented in
+            if presented {
+                model.settingsPresented = false
+                model.workspaceStep = !model.migrationTargetConfirmed ? .direction : model.items.isEmpty ? .importPhotos : .conversion
+            }
+        }
+        .onChange(of:model.migrationReviewPresented) { presented in
+            if presented {
+                model.migrationReviewPresented = false
+                model.workspaceStep = model.canReviewMigration ? .preview : model.migrationTargetConfirmed ? .importPhotos : .direction
+            }
+        }
+        .alert(AppText.text("无法完成操作"),isPresented:$showingError) { Button(AppText.text("好"),role:.cancel) {} }
+            message: { Text(AppText.text(model.errorMessage ?? "")) }
     }
 
-    private var target: Binding<MigrationTargetPreset?> {
-        Binding(get:{ model.migrationTargetConfirmed ? model.migrationTarget : nil },set:{ if let value = $0 { model.selectMigrationTarget(value) } })
+    private func workspaceCanvas(_ layout: WorkspaceLayout) -> some View {
+        VStack(spacing:0) {
+            HStack(alignment:.center,spacing:12) {
+                HStack(alignment:.firstTextBaseline,spacing:8) {
+                    Text(AppText.text(model.workspaceStep.title)).font(.headline).fixedSize()
+                    Text(AppText.text(model.workspaceStep.detail)).font(.caption).foregroundColor(.secondary)
+                        .lineLimit(1).truncationMode(.tail).help(AppText.text(model.workspaceStep.detail))
+                }
+                Spacer(minLength:0)
+                resultMenu
+            }.padding(.horizontal,12).padding(.vertical,6)
+            Divider()
+            // Keep the browser mounted across steps so marquee, preview and scroll state survive.
+            ZStack {
+                PhotoQueueView(model:model,actions:actions,short:layout.short,scope:queueScope,
+                               showsProcessingScopes:false,selectionEnabled:queueIsVisible && !executionActive)
+                    .environment(\.workspaceTaskFeedback,AnyView(taskFeedback))
+                    .opacity(queueIsVisible ? 1 : 0)
+                    .allowsHitTesting(queueIsVisible)
+                    .accessibilityHidden(!queueIsVisible)
+                if model.workspaceStep == .direction { directionCanvas }
+            }.frame(maxWidth:.infinity,maxHeight:.infinity)
+        }
     }
-    private var destination: Binding<OutputDestination> {
-        Binding(get:{ model.settings.destination },set:{ value in model.updateSettings { $0.destination = value } })
+    private var taskFeedback: some View {
+        WorkspaceTaskFeedback(model:model,actions:actions,showError:{ showingError = true })
+    }
+
+    private func workflowSidebar(compact: Bool) -> some View {
+        VStack(spacing:0) {
+            VStack(alignment:.leading,spacing:10) {
+                HStack {
+                    Text(AppText.text("操作步骤")).font(.headline)
+                    Spacer(minLength:0)
+                    Text(AppText.text("第 \(model.workspaceStep.rawValue) 步 / 共 \(WorkspaceStep.allCases.count) 步"))
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                VStack(spacing:3) {
+                    ForEach(WorkspaceStep.allCases) { step in workflowStep(step,compact:compact) }
+                }.accessibilityElement(children:.contain)
+                    .accessibilityLabel(AppText.text("完整操作流程，共五步"))
+                Divider()
+                HStack(spacing:8) {
+                    Button(AppText.text("返回")) {
+                        if let previous = WorkspaceStep(rawValue:model.workspaceStep.rawValue - 1) {
+                            model.workspaceStep = previous
+                        }
+                    }.disabled(model.workspaceStep == .direction)
+                    primaryAction.frame(maxWidth:.infinity)
+                }.controlSize(.large).recordLayout("command-bar")
+                Text(AppText.text(primaryActionHint)).font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal:false,vertical:true)
+                    .frame(maxWidth:.infinity,minHeight:28,alignment:.leading)
+            }.padding(12)
+            Divider()
+            Group {
+                switch model.workspaceStep {
+                case .direction:
+                    directionSummary
+                case .importPhotos:
+                    sourceSidebar
+                case .conversion:
+                    ExportSettingsView(model:model,actions:actions,section:.conversion)
+                case .preview:
+                    ExportSettingsView(model:model,actions:actions,section:.delivery)
+                case .results:
+                    resultSidebar
+                }
+            }
+            .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
+            .disabled(executionActive)
+        }.background(InterfaceStyle.content).recordLayout("workflow-sidebar")
+    }
+    private func workflowStep(_ step: WorkspaceStep, compact: Bool) -> some View {
+        let current = model.workspaceStep == step
+        let available = canVisit(step)
+        return Button {
+            guard available else { return }
+            model.workspaceStep = step
+        } label: {
+            HStack(alignment:.top,spacing:9) {
+                Text(AppText.text("\(step.rawValue)")).font(.caption.weight(.semibold))
+                    .frame(width:24,height:24)
+                    .background(current ? InterfaceStyle.accent : InterfaceStyle.canvas)
+                    .foregroundColor(current ? InterfaceStyle.accentForeground : .secondary)
+                    .clipShape(Circle())
+                VStack(alignment:.leading,spacing:2) {
+                    HStack {
+                        Text(AppText.text(step.title)).font(.callout.weight(current ? .semibold : .regular))
+                        Spacer(minLength:0)
+                        Text(AppText.text(current ? "当前" : available ? "可查看" : "待进行"))
+                            .font(.caption2).foregroundColor(.secondary)
+                    }
+                }
+            }.padding(.horizontal,8).padding(.vertical,5).frame(maxWidth:.infinity,alignment:.leading)
+                .background(current ? InterfaceStyle.selection : .clear)
+                .cornerRadius(InterfaceStyle.controlRadius)
+                .contentShape(Rectangle())
+        }.buttonStyle(WorkflowStepButtonStyle()).disabled(!available)
+            // Future steps stay legible, and explain their prerequisites instead of disappearing.
+            .help(AppText.text(available ? "查看\(step.title)，保留当前选择和设置" : "完成前面的步骤后进入\(step.title)"))
+            .accessibilityLabel(AppText.text("第 \(step.rawValue) 步，\(step.title)"))
+            .accessibilityHint(AppText.text(step.detail))
+            .accessibilityValue(AppText.text(current ? "当前步骤" : available ? "可查看" : "完成前面的步骤后进入"))
+            .accessibilityAddTraits(current ? .isSelected : [])
+            .accessibilityIdentifier("workflow-step-\(step.rawValue)")
+            .recordLayout("workflow-step-\(step.rawValue)")
+    }
+    private func canVisit(_ step: WorkspaceStep) -> Bool {
+        switch step {
+        case .direction: return true
+        case .importPhotos: return model.migrationTargetConfirmed
+        case .conversion: return model.migrationTargetConfirmed && (furthestStep.rawValue >= step.rawValue || canContinueImport)
+        case .preview: return model.migrationTargetConfirmed && (furthestStep.rawValue >= step.rawValue || model.canReviewMigration)
+        case .results: return furthestStep == .results || executionActive || model.report != nil
+        }
+    }
+    private var directionCanvas: some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:22) {
+                Text(AppText.text("转换会修改输出副本的格式或元数据；建议保留原图存档备份。源文件保持只读。"))
+                    .font(.callout).foregroundColor(.secondary)
+                Text(AppText.text("仅支持下列已验证路线。实况、HDR、连拍的实际可执行范围以扫描和预览为准；私有 HDR 为实验功能，默认关闭，不支持任意安卓互转。"))
+                    .font(.caption).foregroundColor(.secondary)
+                directionGroup("安卓到苹果",presets:[.apple])
+                directionGroup("苹果到安卓",presets:[.google,.xiaomi,.samsung,.huawei,.honor,.oppo,.vivo])
+                directionGroup("安卓到安卓",presets:[.googleToHonor,.honorToGoogle])
+            }.padding(16).frame(maxWidth:.infinity,alignment:.leading)
+        }.background(InterfaceStyle.gallery).recordLayout("direction-canvas")
+    }
+    private func directionGroup(_ title: String, presets: [MigrationTargetPreset]) -> some View {
+        VStack(alignment:.leading,spacing:10) {
+            Text(AppText.text(title)).font(.headline)
+            LazyVGrid(columns:[GridItem(.adaptive(minimum:210),spacing:12)],alignment:.leading,spacing:12) {
+                ForEach(presets,id:\.self) { preset in directionCard(preset) }
+            }
+        }
+    }
+    private func directionCard(_ preset: MigrationTargetPreset) -> some View {
+        let selected = model.migrationTargetConfirmed && model.migrationTarget == preset
+        return Button { model.selectMigrationTarget(preset); model.workspaceStep = .importPhotos } label: {
+            HStack(alignment:.top,spacing:10) {
+                Image(systemName:preset == .apple ? "photo.on.rectangle" : "iphone")
+                    .font(.title3).foregroundColor(InterfaceStyle.accent).frame(width:24)
+                VStack(alignment:.leading,spacing:5) {
+                    Text(AppText.text(directionCardTitle(preset))).font(.callout.weight(.semibold)).foregroundColor(.primary)
+                    Text(AppText.text(directionSupportSummary(preset)))
+                        .font(.caption).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
+                }.frame(maxWidth:.infinity,alignment:.leading)
+                Image(systemName:"chevron.right").foregroundColor(.secondary)
+            }.padding(14).frame(maxWidth:.infinity,minHeight:76,alignment:.topLeading)
+                .background(selected ? InterfaceStyle.selection : InterfaceStyle.content)
+                .cornerRadius(InterfaceStyle.photoRadius)
+                .overlay(RoundedRectangle(cornerRadius:InterfaceStyle.photoRadius)
+                    .stroke(selected ? InterfaceStyle.accent : InterfaceStyle.separator,lineWidth:selected ? 2 : 0.5))
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).disabled(!model.canSwitchDirection || executionActive)
+            .help(AppText.text(preset.detail)).accessibilityLabel(AppText.text(preset.title))
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityIdentifier("direction-card-" + preset.rawValue)
+            .recordLayout("direction-card-" + preset.rawValue)
+    }
+    private func directionSupportSummary(_ preset: MigrationTargetPreset) -> String {
+        if preset == .apple { return "实况；本地静态 HDR；荣耀/华为 JPEG 连拍。Google/三星连拍为实验支持。私有 HDR 仅部分配置。" }
+        if preset == .googleToHonor { return "仅 Google 实况 JPEG → 荣耀；不支持 HEIC、相册来源或连拍。" }
+        if preset == .honorToGoogle { return "仅已识别荣耀实况 JPEG → Google；不支持 HEIC、相册来源或连拍。" }
+        return "Apple 实况 · " + (preset.vendor.supportsHEIC ? "JPEG / HEIC" : "JPEG") + "；静态 HDR 仅本地已支持类型；不支持连拍转换。"
+    }
+    private func directionCardTitle(_ preset: MigrationTargetPreset) -> String {
+        if preset == .apple { return "Apple 照片" }
+        if preset == .googleToHonor { return "Google → 荣耀" }
+        if preset == .honorToGoogle { return "荣耀 → Google" }
+        if preset == .google { return "Google / 通用" }
+        return preset.vendor.title
+    }
+    private var directionSummary: some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:12) {
+                Text(AppText.text(model.migrationTargetConfirmed ? "已选方向" : "先选择转换方向")).font(.headline)
+                if model.migrationTargetConfirmed {
+                    Text(AppText.text(model.migrationTarget.title)).font(.callout.weight(.medium))
+                    Text(AppText.text(model.importScopeDescription)).font(.callout).foregroundColor(.secondary)
+                } else {
+                    Text(AppText.text("在左侧选择来源与目标。导入入口会按此方向开放，照片特性在导入后单独选择。"))
+                        .font(.callout).foregroundColor(.secondary)
+                }
+                if !model.sources.isEmpty {
+                    Text(AppText.text("更改方向后复用有效解析，重新检查适用范围；保留来源和勾选，不兼容项会说明原因。"))
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            }.padding(12).frame(maxWidth:.infinity,alignment:.leading)
+        }
+    }
+    private var resultSidebar: some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:12) {
+                Text(AppText.text(executionActive ? "正在执行" : "本轮结果")).font(.headline)
+                Text(AppText.text(model.status)).font(.callout).fixedSize(horizontal:false,vertical:true)
+                if let report = model.report {
+                    Text(AppText.text(report.summary)).font(.caption).foregroundColor(.secondary)
+                }
+                if !model.deliverySummary.isEmpty {
+                    Text(AppText.text(model.deliverySummary)).font(.caption).foregroundColor(.secondary)
+                }
+                if model.canOpenOutput { Button(AppText.text("打开输出文件夹"),action:actions.openOutput) }
+                if model.report != nil { Button(AppText.text("查看完整报告"),action:actions.showReport) }
+                Text(AppText.text("文件生成、原样输出与图库交付分别记录；可以从结果菜单重试交付。"))
+                    .font(.caption).foregroundColor(.secondary)
+            }.frame(maxWidth:.infinity,alignment:.leading).padding(12)
+        }
+    }
+    @ViewBuilder private var primaryAction: some View {
+        if model.isBusy || model.sharing {
+            Button(action:model.stop) {
+                Label(AppText.text(model.phase == .stopping ? "停止中" : "停止"),systemImage:"stop.fill")
+                    .frame(maxWidth:.infinity)
+            }.disabled(!model.canStop).recordLayout("primary-action").accessibilityIdentifier("stop-button")
+        } else {
+            Button(action:advance) {
+                Text(AppText.text(primaryActionTitle)).lineLimit(1).frame(maxWidth:.infinity)
+            }.buttonStyle(.borderedProminent).tint(InterfaceStyle.accent)
+                .foregroundColor(InterfaceStyle.accentForeground)
+                .disabled(!canAdvance).recordLayout("primary-action")
+                .accessibilityIdentifier(model.workspaceStep == .preview ? "convert-button" : "workflow-next")
+                .popover(isPresented:$showingOutputChoices,arrowEdge:.trailing) { outputLocationChoices }
+        }
+    }
+    private var outputLocationChoices: some View {
+        let allowsPhotos = model.settings.direction == .toApple && model.settings.exportMode != .auxiliaryOnly
+        return VStack(alignment:.leading,spacing:4) {
+            outputChoice("相册",symbol:"photo.on.rectangle",destination:.photos).disabled(!allowsPhotos)
+            outputChoice("文件夹",symbol:"folder",destination:.folder)
+            outputChoice("相册和文件夹",symbol:"square.stack",destination:.folderAndPhotos).disabled(!allowsPhotos)
+            if !allowsPhotos {
+                Text(AppText.text("当前方向或仅辅助视频模式只支持文件夹输出")).font(.caption).foregroundColor(.secondary)
+            }
+        }.padding(8).frame(width:240)
+    }
+    private func outputChoice(_ title: String, symbol: String, destination: OutputDestination) -> some View {
+        Button {
+            showingOutputChoices = false
+            DispatchQueue.main.asyncAfter(deadline:.now()+0.15) {
+                if destination == .folder && model.settings.direction != .toApple { actions.chooseOutput() }
+                else { actions.chooseDestination(destination) }
+            }
+        } label: {
+            Label(AppText.text(title),systemImage:symbol).frame(maxWidth:.infinity,alignment:.leading)
+                .padding(.horizontal,8).padding(.vertical,7).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+    }
+    private var canAdvance: Bool {
+        switch model.workspaceStep {
+        case .direction: return model.migrationTargetConfirmed && !executionActive
+        case .importPhotos: return canContinueImport
+        case .conversion: return model.canReviewMigration
+        case .preview: return !model.outputIsChosen ? model.canReviewMigration : model.canApproveMigration
+        case .results: return !model.isBusy && !model.sharing
+        }
+    }
+    private func advance() {
+        guard canAdvance else { return }
+        switch model.workspaceStep {
+        case .direction: model.workspaceStep = .importPhotos
+        case .importPhotos: model.workspaceStep = .conversion
+        case .conversion: model.workspaceStep = .preview
+        case .preview:
+            if !model.outputIsChosen { showingOutputChoices = true; return }
+            model.approveMigrationReview()
+            if model.reviewedMigration != nil { model.workspaceStep = .results }
+        case .results: model.workspaceStep = .importPhotos
+        }
+    }
+    private var primaryActionTitle: String {
+        switch model.workspaceStep {
+        case .direction: return "导入照片"
+        case .importPhotos: return "选择转换特性"
+        case .conversion: return "预览导出"
+        case .preview:
+            if !model.outputIsChosen { return "选择输出位置…" }
+            if model.migrationReadyItems.isEmpty && model.unconvertedExport != .none {
+                return "原样导出 \(model.migrationUnconvertedItems.count) 张"
+            }
+            return "开始执行 \(model.migrationReadyItems.count) 张"
+        case .results: return "返回照片"
+        }
+    }
+    private var primaryActionHint: String {
+        if executionActive { return model.phase == .stopping ? "等待安全停止" : "任务已冻结，可只读浏览前面的步骤" }
+        if model.hasExplicitSelection && model.selectedIDs.isEmpty { return "已选 0 张，请重新勾选照片" }
+        switch model.workspaceStep {
+        case .direction: return model.migrationTargetConfirmed ? "方向已选，下一步导入照片" : "请选择左侧的方向卡片"
+        case .importPhotos:
+            if model.isBusy { return "正在识别来源，请稍候" }
+            return model.items.isEmpty ? "添加照片后选择本轮范围" : "本轮 \(model.migrationScopeItems.count) 张，筛选不改变选择"
+        case .conversion:
+            return model.isTimeOnlyWorkspace ? "仅补缺照片时间；原照片格式保持不变" : "只选择本轮处理特性，转换方向在第一步更改"
+        case .preview:
+            if !model.outputIsChosen { return "请选择本轮输出位置" }
+            if model.unconvertedExport == .separateLocation && model.unconvertedOutput == nil { return "请选择原样导出目录" }
+            return "按本轮就绪范围执行，预估不代表实际成功"
+        case .results: return "保留本轮结果，可返回查看照片"
+        }
     }
     private var addButton: some View {
-        SourceMenuButton(requested:$model.sourceMenuRequested,disabled:!model.migrationTargetConfirmed || !model.canAppendSources,
-            title:model.sources.isEmpty ? "添加照片" : "添加来源…",details:model.migrationTargetConfirmed ? model.sources.map(\.path).joined(separator:"\n") : "请先选择转换方向",
-            hasSources:!model.sources.isEmpty,prominentWhenEmpty:true,allowsLibrary:model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle,
+        SourceMenuButton(requested:$model.sourceMenuRequested,disabled:!model.canImportSources,
+            title:model.sources.isEmpty ? "添加照片" : "添加来源…",details:model.sources.map(\.path).joined(separator:"\n"),
+            hasSources:!model.sources.isEmpty,prominentWhenEmpty:true,allowsLibrary:model.canImportFromLibrary,
             addFiles:actions.chooseSources,addLibrary:actions.importPhotos)
             .frame(maxWidth:.infinity).frame(height:24).recordLayout("add-button")
     }
-    private var outputControl: some View {
-        OutputLocationControl(title:outputSummary,details:outputHelp,
-            symbol:model.settings.destination.importsPhotos ? "photo.on.rectangle" : model.settings.destination.shares ? "square.and.arrow.up" : "folder",
-            disabled:!model.migrationTargetConfirmed || model.isBusy || model.sharing,destination:destination,destinations:model.settings.destinations,
-            outputPath:model.settings.destination.usesCache ? nil : model.output?.path,
-            changeLocation:{ if model.settings.destination.usesCache { model.settingsPresented = true } else { actions.chooseOutput() } },
-            chooseFolder:actions.chooseOutput,chooseAlbum:actions.chooseAlbum,
-            copyPath:{ if let output = model.output { actions.copy(output.path) } },
-            chooseDestination:model.settings.direction == .toApple ? actions.chooseDestination : nil)
-            .frame(height:20).frame(minWidth:150,maxWidth:.infinity)
-            .help(outputHelp).accessibilityLabel("输出：" + outputSummary)
-            .background(outputDropTargeted ? InterfaceStyle.selection : .clear)
-            .onDrop(of:[.fileURL],isTargeted:$outputDropTargeted) { providers in
-                guard model.migrationTargetConfirmed, !model.isBusy, !model.sharing, !model.settings.destination.usesCache else { return false }
-                return actions.acceptDrop(providers,true)
-            }.recordLayout("output-control")
-    }
-    // One command row reads left to right as the task flow: direction → output → options → start.
-    private func workspaceHeader(_ layout: WorkspaceLayout) -> some View {
-        let roomy = layout.size.width >= 940
-        return HStack(alignment:.bottom,spacing:12) {
-            VStack(alignment:.leading,spacing:3) {
-                Text("转换方向").font(.caption).foregroundColor(.secondary)
-                Picker("转换方向",selection:target) {
-                    Text("选择转换方向…").tag(Optional<MigrationTargetPreset>.none)
-                    ForEach(MigrationTargetPreset.allCases,id:\.self) { Text($0.title).tag(Optional($0)) }
-                }.labelsHidden().disabled(!model.canSwitchDirection)
-                    .help(model.migrationTargetConfirmed ? model.migrationTarget.detail : "先选择来源 → 去向的转换方向，再添加对应来源")
-                    .accessibilityIdentifier("migration-target").recordLayout("conversion-directions")
-            }.frame(minWidth:170,maxWidth:280)
-            Image(systemName:"arrow.right").font(.caption).foregroundColor(.secondary)
-                .padding(.bottom,5).accessibilityHidden(true)
-            VStack(alignment:.leading,spacing:3) {
-                HStack(spacing:6) {
-                    Text(model.unconvertedExport == .none ? "输出位置" : "输出位置 · 含未转换原片")
-                        .lineLimit(1)
-                        .help(model.unconvertedExport == .none ? "文件生成与交付位置；可在选项中启用未转换照片原样导出" : originalExportHelp)
-                    if model.settings.privateHDRExperimentEnabled {
-                        Text("· 实验功能已启用").lineLimit(1)
-                            .help("私有 HDR 转换为实验性功能，可在选项中的「实验性功能」查看和修改")
-                            .accessibilityIdentifier("experimental-enabled-summary")
-                    }
-                }.font(.caption).foregroundColor(.secondary)
-                outputControl
-            }.frame(maxWidth:.infinity,alignment:.leading)
-            resultMenu.padding(.bottom,1)
-            Button { model.settingsPresented = true } label: {
-                if roomy { Label("选项…",systemImage:"slider.horizontal.3") }
-                else { Image(systemName:"slider.horizontal.3").frame(height:16) }
-            }
-                .frame(minHeight:24)
-                .focused($settingsFocused).disabled(!model.migrationTargetConfirmed || model.isBusy || model.sharing)
-                .accessibilityLabel("选项").accessibilityIdentifier("settings-button").recordLayout("settings-button")
-                .help("处理、原样导出与实验性功能设置（⌘,）")
-            VStack(alignment:.trailing,spacing:3) {
-                Text(primaryActionHint).font(.caption).foregroundColor(.secondary)
-                    .lineLimit(1).truncationMode(.tail).help(primaryActionHint)
-                primaryAction.frame(maxWidth:.infinity)
-            }.frame(width:148)
-        }.padding(.horizontal,layout.margin).padding(.vertical,10).recordLayout("command-bar")
-    }
     private var resultMenu: some View {
         Menu {
-            Button("导出结果到其他位置…",action:actions.exportResults)
+            Button(AppText.text("导出结果到其他位置…"),action:actions.exportResults)
                 .disabled(!model.resultExportAvailable || model.isBusy || model.sharing)
                 .accessibilityIdentifier("export-results-button")
-            if model.shareReady { Button("共享完整结果…",action:actions.shareResults).disabled(model.isBusy || model.sharing) }
-            Button("打开输出文件夹",action:actions.openOutput).disabled(!model.canOpenOutput).help(model.outputOpenHelp)
-            if model.report != nil { Button("处理报告…",action:actions.showReport).disabled(model.isBusy) }
+            if model.shareReady { Button(AppText.text("共享完整结果…"),action:actions.shareResults).disabled(model.isBusy || model.sharing) }
+            Button(AppText.text("打开输出文件夹"),action:actions.openOutput).disabled(!model.canOpenOutput).help(AppText.text(model.outputOpenHelp))
+            if model.report != nil { Button(AppText.text("处理报告…"),action:actions.showReport).disabled(model.isBusy) }
             Divider()
-            Button("最近结果与交付…",action:actions.recentResults).disabled(model.isBusy || model.sharing)
-            if model.libraryMonitoring { Button("停止图库监测",action:actions.toggleLibraryMonitoring).disabled(model.isBusy) }
+            Button(AppText.text("最近结果与交付…"),action:actions.recentResults).disabled(model.isBusy || model.sharing)
+            if model.libraryMonitoring { Button(AppText.text("停止图库监测"),action:actions.toggleLibraryMonitoring).disabled(model.isBusy) }
             Divider()
             Link(UserGuide.title(for:locale),destination:UserGuide.url(for:locale))
         } label: { Image(systemName:"checkmark.rectangle.stack") }
             .menuStyle(.borderlessButton).fixedSize()
-            .help(resultMenuHelp)
-            .accessibilityLabel("结果与交付")
+            .help(AppText.text(resultMenuHelp))
+            .accessibilityLabel(AppText.text("结果与交付"))
             .recordLayout("workspace-more-menu")
     }
     private var resultMenuHelp: String {
         let summary = !model.deliverySummary.isEmpty ? model.deliverySummary : model.report?.summary ?? ""
         return (summary.isEmpty ? "" : summary + "\n") + "导出、共享、打开输出、处理报告与最近结果；不重新转换"
     }
-    @ViewBuilder private var primaryAction: some View {
-        if model.isBusy {
-            Button(action:model.stop) { Label(model.phase == .stopping ? "停止中" : "停止",systemImage:"stop.fill") }
-                .disabled(!model.canStop).recordLayout("primary-action").accessibilityIdentifier("stop-button")
-        } else {
-            Button { model.approveMigrationReview() } label: {
-                Text(primaryActionTitle).lineLimit(1).frame(maxWidth:.infinity)
-            }
-                .buttonStyle(.borderedProminent).tint(InterfaceStyle.accent).foregroundColor(InterfaceStyle.accentForeground)
-                .disabled(!model.canApproveMigration).help("直接处理本轮就绪项，包含隐藏选中；未确认手动项与不支持项不阻断无关就绪照片")
-                .recordLayout("primary-action").accessibilityIdentifier("convert-button")
-        }
-    }
-    private var primaryActionTitle: String {
-        if model.hasExplicitSelection && model.selectedIDs.isEmpty { return "已选 0 张" }
-        let ready = model.migrationReadyItems.count
-        if ready > 0 { return "开始处理 \(ready) 张" }
-        if model.unconvertedExport != .none && !model.migrationUnconvertedItems.isEmpty {
-            return "原样导出 \(model.migrationUnconvertedItems.count) 张"
-        }
-        return "开始处理"
-    }
-    private var primaryActionHint: String {
-        if model.isBusy { return model.phase == .stopping ? "等待安全停止" : "任务进行中" }
-        if model.sharing { return "正在交付结果" }
-        if !model.migrationTargetConfirmed { return "请先选择转换方向" }
-        if model.sources.isEmpty { return "请在左侧添加来源" }
-        if model.hasExplicitSelection && model.selectedIDs.isEmpty { return "勾选照片或恢复默认范围" }
-        if !model.outputIsChosen { return "请选择输出位置" }
-        if model.unconvertedExport == .separateLocation && model.unconvertedOutput == nil { return "请选择原样导出目录" }
-        if model.canApproveMigration { return model.hasExplicitSelection ? "处理已勾选范围" : "处理全部待处理照片" }
-        if !model.canReviewMigration { return "请重新检查来源" }
-        return model.migrationScopeItems.isEmpty ? "本轮照片已处理" : "暂无就绪项，可查看计划"
-    }
     private var sourceSidebar: some View {
         ScrollView {
             VStack(alignment:.leading,spacing:10) {
               Group {
                 HStack {
-                    Text("来源").font(.headline)
+                    Text(AppText.text("来源")).font(.headline)
                     Spacer(minLength:0)
                     sourceMenu
                 }
                 addButton
                 if !model.sources.isEmpty {
-                    Text("\(model.sources.count) 个入口 · \(model.items.count) 张").font(.caption).foregroundColor(.secondary)
+                    Button(role:.destructive,action:actions.clearSources) { Label(AppText.text("清空所有来源"),systemImage:"trash") }
+                        .disabled(!model.canAppendSources).help(AppText.text("只清空本轮列表，不删除原片"))
+                }
+                if !model.sources.isEmpty {
+                    Text(AppText.text("\(model.sources.count) 个入口 · \(model.items.count) 张")).font(.caption).foregroundColor(.secondary)
                 }
                 if model.sources.isEmpty {
-                    Text(model.migrationTargetConfirmed ? "添加文件、文件夹或图库照片，也可直接拖进右侧" : "先在顶部选择转换方向")
+                    Text(AppText.text("添加文件、文件夹或图库照片，也可直接拖进左侧照片区"))
                         .font(.caption).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
                 } else {
                     sidebarButton("全部来源",symbol:"square.stack",selected:model.migrationSource == nil) { model.migrationSource = nil }
                 }
                 LazyVStack(alignment:.leading,spacing:4) {
                     ForEach(model.sources,id:\.path) { source in
-                        sidebarButton(source.lastPathComponent,symbol:"folder",selected:model.migrationSource == source.path) { model.migrationSource = source.path }
+                        sidebarButton(source.lastPathComponent,symbol:"folder",selected:model.migrationSource == source.path,verbatim:true) { model.migrationSource = source.path }
                             .help(source.path)
                     }
                 }
@@ -212,8 +443,8 @@ struct WorkspaceView: View {
             if model.libraryMonitoring {
                 VStack(alignment:.leading,spacing:6) {
                     Divider()
-                    Label("正在监测图库",systemImage:"photo.on.rectangle").font(.caption).foregroundColor(.secondary)
-                    Button("停止监测",action:actions.toggleLibraryMonitoring).disabled(model.isBusy).controlSize(.small)
+                    Label(AppText.text("正在监测图库"),systemImage:"photo.on.rectangle").font(.caption).foregroundColor(.secondary)
+                    Button(AppText.text("停止监测"),action:actions.toggleLibraryMonitoring).disabled(model.isBusy).controlSize(.small)
                 }.padding([.horizontal,.bottom],12).background(InterfaceStyle.content)
             }
         }
@@ -221,46 +452,34 @@ struct WorkspaceView: View {
     }
     private var sourceMenu: some View {
         Menu {
-            Button("重新检查来源") { model.rescan() }.disabled(!model.canRescan)
+            Button(AppText.text("重新检查来源")) { model.rescan() }.disabled(!model.canRescan)
             Divider()
-            Button("清空来源与列表",role:.destructive,action:actions.clearSources)
+            Button(AppText.text("清空来源与列表"),role:.destructive,action:actions.clearSources)
                 .disabled(model.sources.isEmpty || model.isBusy || model.sharing)
         } label: { Image(systemName:"ellipsis.circle") }
-            .menuStyle(.borderlessButton).fixedSize().help("重新检查或清空来源")
-            .accessibilityLabel("来源操作").accessibilityIdentifier("source-more-menu")
+            .menuStyle(.borderlessButton).fixedSize().help(AppText.text("重新检查或清空来源"))
+            .accessibilityLabel(AppText.text("来源操作")).accessibilityIdentifier("source-more-menu")
     }
-    private func sidebarButton(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func sidebarButton(_ title: String, symbol: String, selected: Bool, verbatim: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action:action) {
-            Label(title,systemImage:symbol).font(.callout).lineLimit(1).truncationMode(.middle)
+            Label(verbatim ? title : AppText.text(title),systemImage:symbol).font(.callout).lineLimit(1).truncationMode(.middle)
                 .frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,7).padding(.vertical,6)
                 .background(selected ? InterfaceStyle.selection : .clear).cornerRadius(InterfaceStyle.controlRadius)
         }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
     }
-    private var outputHelp: String {
-        "输出：" + outputSummary + "\n" + (model.settings.destination.usesCache ? "使用持久任务缓存；可在结果中再次导出" : model.output?.path ?? "尚未选择文件夹") +
-            (model.unconvertedExport == .none ? "" : "\n" + originalExportHelp)
-    }
-    private var originalExportHelp: String {
-        model.unconvertedExport == .separateLocation
-            ? "未转换照片原样导出到不同位置：" + (model.unconvertedOutput?.path ?? "尚未选择；请在选项中设置")
-            : "未转换照片原样导出到本轮输出位置；另建原文件目录，不覆盖来源"
-    }
-    private var outputSummary: String {
-        if !model.outputIsChosen { return "选择输出位置…" }
-        switch model.settings.destination {
-        case .ask: return "询问位置"
-        case .photos: return "照片图库"
-        case .folderAndPhotos: return (model.output?.lastPathComponent ?? "文件夹") + " ＋ 照片图库"
-        case .share: return "任务缓存 · 共享菜单"
-        case .folderAndShare: return (model.output?.lastPathComponent ?? "文件夹") + " ＋ 共享菜单"
-        case .folder: return model.output?.lastPathComponent ?? "选择文件夹…"
-        }
+}
+
+private struct WorkflowStepButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.75 : 1)
     }
 }
 
 struct UnconvertedExportControl: View {
     @ObservedObject var model: WorkspaceModel
     let actions: WorkspaceActions
+    var showsToggle = true
+    var showsLocation = true
     private var enabled: Binding<Bool> {
         Binding(get:{ model.unconvertedExport != .none },set:{ value in
             model.unconvertedExport = value ? model.unconvertedExportLocation : .none
@@ -274,89 +493,31 @@ struct UnconvertedExportControl: View {
     }
     var body: some View {
         VStack(alignment:.leading,spacing:7) {
-            Toggle("原样导出未转换照片",isOn:enabled).toggleStyle(.checkbox)
-                .accessibilityIdentifier("unconverted-export-toggle")
-                .recordLayout("unconverted-export-toggle")
-            if model.unconvertedExport != .none {
-                HStack(spacing:10) {
-                    Picker("原样导出位置",selection:location) {
-                        Text("导出到相同位置").tag(UnconvertedExportChoice.sameLocation)
-                        Text("导出到不同位置").tag(UnconvertedExportChoice.separateLocation)
-                    }.labelsHidden().frame(maxWidth:220).accessibilityIdentifier("unconverted-export-location")
+            if showsToggle {
+                Toggle(AppText.text("输出未修改的照片"),isOn:enabled).toggleStyle(.checkbox)
+                    .accessibilityIdentifier("unconverted-export-toggle")
+                    .recordLayout("unconverted-export-toggle")
+            }
+            if showsLocation && model.unconvertedExport != .none {
+                VStack(alignment:.leading,spacing:7) {
+                    Picker(AppText.text("原样导出位置"),selection:location) {
+                        Text(AppText.text("导出到相同位置")).tag(UnconvertedExportChoice.sameLocation)
+                        Text(AppText.text("导出到不同位置")).tag(UnconvertedExportChoice.separateLocation)
+                    }.labelsHidden().frame(maxWidth:.infinity,alignment:.leading).accessibilityIdentifier("unconverted-export-location")
                     if model.unconvertedExport == .separateLocation {
-                        Button("选择目录…",action:actions.chooseUnconvertedOutput).accessibilityIdentifier("unconverted-export-folder")
+                        Button(AppText.text("选择目录…"),action:actions.chooseUnconvertedOutput).accessibilityIdentifier("unconverted-export-folder")
                             .recordLayout("unconverted-export-folder")
                     }
-                    Spacer(minLength:0)
                 }
-                Text(model.unconvertedExport == .separateLocation ? model.unconvertedOutput?.path ?? "请选择不同的原文件导出目录" : "使用本次转换输出位置，另建原文件目录，不覆盖来源；原样导出不会计为转换成功。")
+                Text(AppText.text(model.unconvertedExport == .separateLocation ? model.unconvertedOutput?.path ?? "请选择不同的原文件导出目录" : "使用本次转换输出位置，另建原文件目录，不覆盖来源；原样导出不会计为转换成功。"))
                     .font(.caption).foregroundColor(.secondary).lineLimit(2).truncationMode(.middle)
-                    .textSelection(.enabled).help(model.unconvertedOutput?.path ?? "原样导出不会计为转换成功")
+                    .textSelection(.enabled).help(AppText.text(model.unconvertedOutput?.path ?? "原样导出不会计为转换成功"))
             }
         }.font(.callout).disabled(model.isBusy || model.sharing).accessibilityIdentifier("unconverted-export-options")
             .recordLayout("unconverted-export-options")
     }
 }
 
-struct MigrationPlanSheet: View {
-    @ObservedObject var model: WorkspaceModel
-    let actions: WorkspaceActions
-    let availableSize: CGSize
-    var body: some View {
-        VStack(alignment:.leading,spacing:0) {
-            VStack(alignment:.leading,spacing:5) {
-                Text("本轮转换计划").font(.title3.weight(.semibold))
-                Text(model.migrationTarget.title).font(.callout).foregroundColor(.secondary)
-                if model.settings.privateHDRExperimentEnabled {
-                    Text("实验功能已启用；实际处理结果和原因按照片记录。")
-                        .font(.caption).foregroundColor(.secondary)
-                }
-                Text(model.hasExplicitSelection ? "已选 \(model.selectedIDs.count) 张 · 隐藏选中 \(model.hiddenMigrationSelectionCount) 张" : "范围：全部待处理照片")
-                    .font(.caption).foregroundColor(.secondary)
-            }.padding(16)
-            Divider()
-            ScrollView {
-                VStack(alignment:.leading,spacing:16) {
-                    HStack {
-                        Text(model.outputIsChosen ? "输出：" + model.settings.destination.title : "请先选择输出位置").font(.callout)
-                        Spacer()
-                        Button("选择输出位置…",action:actions.chooseOutput)
-                    }
-                    if let output = model.output, !model.settings.destination.usesCache { Text(output.path).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
-                    UnconvertedExportControl(model:model,actions:actions)
-                    HStack {
-                        Text("就绪 \(model.migrationReadyItems.count) 张 · 未转换 \(model.migrationUnconvertedItems.count) 张").font(.headline)
-                        Spacer()
-
-                    }
-                    LazyVStack(alignment:.leading,spacing:10) {
-                        ForEach(model.migrationScopeItems) { item in
-                            VStack(alignment:.leading,spacing:5) {
-                                HStack { Text(item.name).font(.callout.weight(.medium)).lineLimit(2); Spacer(); PhotoStatusLabel(state:model.displayState(item)) }
-                                Text(model.migrationPlanSummary(item)).font(.callout).foregroundColor(.secondary).fixedSize(horizontal:false,vertical:true)
-                                if model.category(item) == .manual {
-                                    Button("前往手动处理") { model.selection = item.id; model.selectQueueScope(.manual); model.migrationReviewPresented = false }
-                                }
-                                Divider()
-                            }
-                        }
-                    }
-                    Text("原片保持不变。静态 HDR 不生成视频或配对；连拍保留现有成员的原序号，缺帧不补、原总数未知。文件生成、原样导出、图库与共享分别记录。")
-                        .font(.caption).foregroundColor(.secondary)
-                }.padding(16)
-            }
-            Divider()
-            HStack {
-                Button("返回编辑") { model.migrationReviewPresented = false }.keyboardShortcut(.cancelAction)
-                Spacer()
-                Button(model.migrationReadyItems.isEmpty ? "导出未转换项" : "处理就绪的 \(model.migrationReadyItems.count) 张") { model.approveMigrationReview() }
-                    .buttonStyle(.borderedProminent).tint(InterfaceStyle.accent).foregroundColor(InterfaceStyle.accentForeground)
-                    .disabled(!model.canApproveMigration).accessibilityIdentifier("migration-plan-start")
-            }.padding(16)
-        }.frame(width:min(700,max(540,availableSize.width - 32)),height:min(680,max(400,availableSize.height - 52)))
-            .background(InterfaceStyle.canvas).tint(InterfaceStyle.accent).accentColor(InterfaceStyle.accent)
-    }
-}
 private struct WorkspaceTaskFeedbackKey: EnvironmentKey {
     static let defaultValue = AnyView(EmptyView())
 }
@@ -420,24 +581,24 @@ private struct WorkspaceTaskFeedback: View {
                 VStack(alignment:.leading,spacing:6) {
                     HStack(spacing:8) {
                         Label {
-                            Text(message).foregroundColor(hasError ? .red : .secondary)
+                            Text(AppText.text(message)).foregroundColor(hasError ? .red : .secondary)
                         } icon: {
                             Image(systemName:statusSymbol)
                                 .foregroundColor(hasError ? .red : model.phase == .completed && !hasFailures ? .green : .secondary)
-                        }.lineLimit(1).help(message)
+                        }.lineLimit(1).help(AppText.text(message))
                             .id(model.phase).transition(.opacity).subtleAnimation(model.phase)
                         Spacer(minLength:8)
                         if busy, let progress = model.progress {
-                            Text("\(Int((min(1,max(0,progress)) * 100).rounded()))%")
+                            Text(AppText.text("\(Int((min(1,max(0,progress)) * 100).rounded()))%"))
                                 .monospacedDigit().foregroundColor(.secondary)
                         }
-                        if hasError { Button("查看原因",action:showError) }
-                        else if hasFailures { Button("查看报告",action:actions.showReport).disabled(model.isBusy) }
+                        if hasError { Button(AppText.text("查看原因"),action:showError) }
+                        else if hasFailures { Button(AppText.text("查看报告"),action:actions.showReport).disabled(model.isBusy) }
                     }.font(.callout)
                     if busy {
                         taskProgress
-                        Text(secondaryMessage).font(.caption).foregroundColor(.secondary)
-                            .lineLimit(1).truncationMode(.middle).help(secondaryMessage)
+                        Text(AppText.text(secondaryMessage)).font(.caption).foregroundColor(.secondary)
+                            .lineLimit(1).truncationMode(.middle).help(AppText.text(secondaryMessage))
                             .transaction { $0.animation = nil }
                     }
                 }
@@ -469,7 +630,7 @@ private struct WorkspaceTaskFeedback: View {
             } else { ProgressView().progressViewStyle(.linear) }
         }
         .frame(height:6).tint(InterfaceStyle.accent)
-        .accessibilityLabel("任务进度")
+        .accessibilityLabel(AppText.text("任务进度"))
         .recordLayout("task-progress")
     }
 }

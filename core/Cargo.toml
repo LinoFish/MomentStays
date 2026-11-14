@@ -23,6 +23,9 @@ name = "momentstays-driver"
 path = "src/bin/momentstays-driver.rs"
 
 [dependencies]
+oxideav-h265 = "=0.0.17"
+jpeg-decoder = { version = "=0.3.2", default-features = false }
+serde = { version = "1", features = ["derive"] }
 md-5 = "0.10"
 serde_json = { version = "1", features = ["preserve_order"] }
 memmap2 = "0.9"

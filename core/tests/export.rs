@@ -369,6 +369,7 @@ fn c_abi_supports_export_plan_export_and_inline_verification() {
             progress: None,
             existing_output: None,
             rows_ready: None,
+            prepare_output_times: None,
         };
         let r = ms_core_engine(&host, data.as_ptr(), data.len(), std::ptr::null());
         let mut n = 0;

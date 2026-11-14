@@ -170,6 +170,7 @@ pub fn convert(
         write_json(&manifest, &stage.path().join(MANIFEST))?;
         timings.measure("validation_and_publish", || {
             publish(
+                native,
                 &stage,
                 target,
                 source,
@@ -430,6 +431,7 @@ pub fn convert(
     write_json(&manifest, &stage.path().join(MANIFEST))?;
     timings.measure("validation_and_publish", || {
         publish(
+            native,
             &stage,
             target,
             source,

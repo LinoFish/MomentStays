@@ -133,8 +133,8 @@ enum OutputDestination: String, SettingsChoice {
         switch self {
         case .ask: return "询问位置"
         case .folder: return "文件夹"
-        case .photos: return "照片图库"
-        case .folderAndPhotos: return "文件夹和照片图库"
+        case .photos: return "相册"
+        case .folderAndPhotos: return "相册和文件夹"
         case .share: return "共享菜单"
         case .folderAndShare: return "文件夹和共享菜单"
         }
@@ -153,7 +153,7 @@ struct ConversionSettings: Equatable, Codable {
     var direction: ConversionDirection = .toApple
     var destination: OutputDestination = .ask
     var outputConfirmed: Bool?
-    var albumTitle = "留刻转换结果"
+    var albumTitle = "MomentStays"
     var albumID: String?
     var libraryVersion: LibraryVersion = .original
     var vendor: AndroidVendor = .google
@@ -161,6 +161,9 @@ struct ConversionSettings: Equatable, Codable {
     var imageQuality = 0.95
     var gainQuality = 0.95
     var preserveJPEG = true
+    var liveConversion: Bool?
+    var burstConversion: Bool?
+    var timeOptionsEnabled: Bool?
     var legacyHDR = false
     // Presentation only: retain the stored preference even when this output cannot use it.
     var privateHDRExperimentAvailable: Bool {
@@ -175,6 +178,10 @@ struct ConversionSettings: Equatable, Codable {
     var repairAuxiliaryDuration = false
     // Optional for compatibility with task histories saved before this switch.
     var exifFileTimes: Bool?
+    var photoTimeRepair: Bool?
+    var photoTimeSynthetic: Bool?
+    var photoTimeZone: String?
+    var photoTimeReference: Double?
     // Optional for compatibility with task histories saved before cover selection.
     var coverSelections: [String:Int]?
     var manualMidpoints: [String:Bool]?
@@ -190,7 +197,7 @@ struct ConversionSettings: Equatable, Codable {
         if direction == .toApple && destination.shares { destination = .folder }
         if exportMode == .auxiliaryOnly && direction == .toApple && destination.importsPhotos { destination = .folder }
         if exportMode == .withCandidates || !(coverSelections ?? [:]).isEmpty { track = .primary }
-        if albumTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { albumTitle = "留刻转换结果" }
+        if albumTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { albumTitle = "MomentStays" }
         if !vendor.supportsHEIC { container = .jpeg }
         imageQuality = min(1, max(0.01, imageQuality.isFinite ? imageQuality : 0.95))
         gainQuality = min(1, max(0.01, gainQuality.isFinite ? gainQuality : 0.95))
@@ -202,6 +209,7 @@ struct ConversionSettings: Equatable, Codable {
             result.direction = direction.rawValue
             result.exportDataFiles = exportDataFiles
             result.exifFileTimes = exifFileTimes ?? false
+            result.photoTime = photoTimeOptions
             return result
         }
         var result = ConversionOptions(legacyHDR: legacyHDR, missingTime: missingTime.rawValue,
@@ -209,6 +217,7 @@ struct ConversionSettings: Equatable, Codable {
             repairAuxiliaryDuration: repairAuxiliaryDuration, exportDataFiles: exportDataFiles,
             exifFileTimes: exifFileTimes ?? false)
         result.direction = direction.rawValue
+        result.photoTime = photoTimeOptions
         result.burstChoices = burstChoices ?? [:]
         result.manualCovers = direction == .toApple ? manualCovers ?? [:] : [:]
         result.coverSelections = exportMode == .auxiliaryOnly ? [:] : coverSelections ?? [:]
@@ -217,6 +226,13 @@ struct ConversionSettings: Equatable, Codable {
             hdr: container == .heic ? "preserve" : "ultra", imageQuality: imageQuality,
             gainQuality: gainQuality, preserveJPEG: preserveJPEG)
         return result
+    }
+
+    private var photoTimeOptions: [String:Any]? {
+        guard photoTimeRepair == true, !(direction == .toApple && exportMode == .auxiliaryOnly) else { return nil }
+        return ["policy":"phototime-1","synthetic":photoTimeSynthetic ?? false,
+                "zone":photoTimeZone ?? TimeZone.current.identifier,"epoch":photoTimeReference ?? 0,
+                "file_times":exifFileTimes ?? false]
     }
 
     var summary: String {
@@ -264,5 +280,91 @@ enum AppIdentityMigration {
         guard current[marker] == nil else { return }
         let previous = defaults.persistentDomain(forName:oldID) ?? [:]
         defaults.setPersistentDomain(merged(previous:previous,current:current,oldID:oldID),forName:newID)
+    }
+}
+
+// Presentation-only localization. Media facts, resource names and persisted option
+// values remain unchanged. Original filenames and paths are never rewritten.
+enum AppText {
+    static let catalog: Catalog = {
+        guard let url = Bundle.main.url(forResource:"Workbench.en",withExtension:"json"),
+              let data = try? Data(contentsOf:url),
+              let json = try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { return Catalog(strings:[:]) }
+        return Catalog(strings:json["strings"] as? [String:String] ?? [:],verbatim:json["verbatimArguments"] as? [String:[Int]] ?? [:])
+    }()
+    static func text(_ value:String) -> String {
+        let language = Bundle.main.preferredLocalizations.first ?? Locale.preferredLanguages.first ?? "en"
+        return language.hasPrefix("zh") ? value : catalog.translate(value)
+    }
+    final class Catalog {
+        struct Template { let regex:NSRegularExpression; let key:String; let value:String; let prefix:String; let slots:[Int] }
+        let strings:[String:String]
+        let templates:[Template]
+        let fragments:[(String,String)]
+        let cache=NSCache<NSString,NSString>()
+        init(strings:[String:String],verbatim:[String:[Int]]=[:]) {
+            self.strings=strings
+            var patterns:[Template]=[]
+            let slot=try! NSRegularExpression(pattern:"\\{([0-9]+)\\}")
+            for (key,value) in strings {
+                let range=NSRange(key.startIndex...,in:key),matches=slot.matches(in:key,range:range)
+                guard !matches.isEmpty else { continue }
+                var pattern="^",cursor=key.startIndex,indices:[Int]=[]
+                for match in matches {
+                    guard let r=Range(match.range,in:key),let number=Range(match.range(at:1),in:key),let index=Int(key[number]) else { continue }
+                    pattern+=NSRegularExpression.escapedPattern(for:String(key[cursor..<r.lowerBound]))+"(.*?)"
+                    cursor=r.upperBound;indices.append(index)
+                }
+                pattern+=NSRegularExpression.escapedPattern(for:String(key[cursor...]))+"$"
+                if let regex=try? NSRegularExpression(pattern:pattern,options:.dotMatchesLineSeparators) {
+                    let prefix=String(key.prefix(while:{$0 != "{"}))
+                    patterns.append(Template(regex:regex,key:key,value:value,prefix:prefix,slots:indices))
+                }
+            }
+            templates=patterns.sorted { $0.key.count > $1.key.count }
+            fragments=strings.filter { !$0.key.contains("{") && $0.key.count>1 && ($0.key.hasSuffix("：") || $0.key.hasSuffix("「") || $0.key.hasPrefix("」")) }.map { ($0.key,$0.value) }.sorted {$0.0.count>$1.0.count}
+            self.verbatim=verbatim;cache.countLimit=2048
+        }
+        private let verbatim:[String:[Int]]
+        func translate(_ value:String) -> String { render(value,depth:0) }
+        private func render(_ value:String,depth:Int) -> String {
+            guard depth<5, !value.hasPrefix("/"),value.unicodeScalars.contains(where:{$0.value>=0x4e00 && $0.value<=0x9fff}) else { return value }
+            if let result=strings[value] { return result }
+            if let result=cache.object(forKey:value as NSString) { return result as String }
+            let full=NSRange(value.startIndex...,in:value)
+            for entry in templates where value.hasPrefix(entry.prefix) {
+                guard let match=entry.regex.firstMatch(in:value,range:full) else { continue }
+                var arguments:[Int:String]=[:]
+                var format=entry.value
+                for (capture,index) in entry.slots.enumerated() {
+                    guard let r=Range(match.range(at:capture+1),in:value) else { continue }
+                    let original=String(value[r])
+                    arguments[index]=verbatim[entry.key]?.contains(index)==true ? original : render(original,depth:depth+1)
+                    if original == "1" {
+                        for (plural,singular) in [("photos","photo"),("Photos","Photo"),("frames","frame"),("sources","source"),("tasks","task"),("items","item"),("burst groups","burst group")] {
+                            format=format.replacingOccurrences(of:"{\(index)} " + plural,with:"{\(index)} " + singular)
+                        }
+                    }
+                }
+                let marker=try! NSRegularExpression(pattern:"\\{([0-9]+)\\}")
+                var result="",cursor=format.startIndex
+                for token in marker.matches(in:format,range:NSRange(format.startIndex...,in:format)) {
+                    guard let r=Range(token.range,in:format),let n=Range(token.range(at:1),in:format),let index=Int(format[n]) else { continue }
+                    result+=String(format[cursor..<r.lowerBound]) + (arguments[index] ?? String(format[r]));cursor=r.upperBound
+                }
+                result+=String(format[cursor...])
+                cache.setObject(result as NSString,forKey:value as NSString);return result
+            }
+            for separator in ["\n","；"," · "] where value.contains(separator) {
+                let parts=value.components(separatedBy:separator),translated=parts.map { render($0,depth:depth+1) }
+                if translated != parts { return translated.joined(separator:separator == "；" ? "; " : separator) }
+            }
+            for (source,target) in fragments {
+                if value.hasPrefix(source) { return target+render(String(value.dropFirst(source.count)),depth:depth+1) }
+                if value.hasSuffix(source) { return render(String(value.dropLast(source.count)),depth:depth+1)+target }
+            }
+            // Preserve an unknown diagnostic verbatim rather than guessing its meaning.
+            return value
+        }
     }
 }
