@@ -158,6 +158,11 @@ fn wall_clock_to_system_time(
     Some(SystemTime::UNIX_EPOCH + Duration::new(secs as u64, nanos))
 }
 
+// Keep Windows CRT compatibility isolated; Unix builds retain their libc calls.
+#[cfg(windows)]
+#[path = "exif_time/windows.rs"]
+mod libc;
+
 #[cfg(test)]
 mod tests {
     use super::*;
