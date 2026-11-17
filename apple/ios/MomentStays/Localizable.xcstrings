@@ -201,12 +201,12 @@
         }
       }
     },
-    "Open source · GPL-3.0": {
+    "Open source · MIT": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开源 · GPL-3.0"
+            "value": "开源 · MIT"
           }
         }
       }

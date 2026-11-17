@@ -2,7 +2,7 @@
 
 第三方分类与致谢：涵盖实际使用的依赖、代码与格式研究、网站字体、构建与验证工具、设计 Skill，以及单独标明的评估参考。中文分类摘要见 [README.zh-CN.md](README.zh-CN.md#致谢)。
 
-MomentStays's original source, documentation and artwork are **GPL-3.0-only**, copyright **2026 Lino**. Third-party materials retain their own copyrights and terms. See [LICENSE](LICENSE) and [COPYRIGHT](COPYRIGHT).
+MomentStays's original source, documentation and artwork are **MIT**, copyright **2026 Lino**. Third-party materials retain their own copyrights and terms. See [LICENSE](LICENSE) and [COPYRIGHT](COPYRIGHT).
 
 ## 1. Application code, system dependencies and shipped assets
 
@@ -132,7 +132,7 @@ Specifications and documentation remain subject to their publishers' terms. Ackn
 
 The build copies `LICENSE`, `COPYRIGHT` and this file into the app's Resources directory. The DMG contains the signed app and an Applications link. Website font copyright and the complete OFL are also retained with the font files in the GitHub Pages branch.
 
-A distributed GPL-covered binary must be accompanied by corresponding-source access as required by GPLv3 section 6. Release tags identify the corresponding project source and build/install scripts. Third-party dependencies and assets keep their own licenses; the project's GPL declaration does not relicense them, system frameworks, Skills or users' input media.
+The MIT License does not require corresponding-source access for distributed binaries. Release tags identify the corresponding project source and build/install scripts. Third-party dependencies and assets keep their own licenses; the project's MIT declaration does not relicense them, system frameworks, Skills or users' input media.
 
 ## 8. Software gain-map codec licence notices
 

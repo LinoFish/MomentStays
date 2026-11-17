@@ -24,7 +24,7 @@ Move your photos between Android and iPhone, intact. MomentStays converts Androi
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-12%2B-black" alt="macOS 12+">
   <img src="https://img.shields.io/badge/SwiftUI-Native-orange" alt="Native SwiftUI">
-  <img src="https://img.shields.io/badge/License-GPL--3.0--only-blue" alt="License GPL-3.0-only">
+  <img src="https://img.shields.io/badge/License-MIT-blue" alt="License MIT">
 </p>
 
 > **Feedback welcome:** Tried it and something failed or looks wrong? [Open an issue](https://github.com/LinoFish/MomentStays/issues) — tell us the source device and format, the conversion direction and the app version, and strip sensitive information from any sample first. See [Feedback](#feedback) below.
@@ -37,7 +37,7 @@ Move photos between Android and Apple while keeping the moment you chose as the 
 
 [Build & run](#build--run) · [Photos integration](#works-with-your-photos-library) · [Preservation details](#what-stays-with-your-photo) · [Burst migration](#burst-migration-experimental) · [Documentation](docs/README.md)
 
-**License: [GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino
+**License: [MIT](LICENSE)** · Copyright © 2026 Lino
 
 ## Feedback
 
@@ -257,7 +257,7 @@ Experimental support covers JPEG bursts from Google, Samsung and known Huawei/Ho
 
 ### Is MomentStays free and private?
 
-Yes. MomentStays is GPL-3.0-only open source, runs entirely on your Mac, and never uploads your photos.
+Yes. MomentStays is MIT-licensed open source, runs entirely on your Mac, and never uploads your photos.
 
 ## Acknowledgements
 
@@ -276,6 +276,6 @@ See the [complete classified third-party notices](THIRD_PARTY_NOTICES.md) for ea
 
 ## License
 
-The original source code, documentation, and artwork are licensed under the **GNU General Public License, version 3 only**. Commercial use is allowed. When distributing covered derivative works, provide their corresponding source under the GPL and meet the license's redistribution requirements.
+The original source code, documentation, and artwork are licensed under the **MIT License**. Commercial use is allowed. Include the copyright and permission notices in all copies or substantial portions of the software.
 
-See [LICENSE](LICENSE), [copyright and version choice](COPYRIGHT), and [third-party/distribution notes](THIRD_PARTY_NOTICES.md). Personal input media and separately licensed system or third-party components retain their own rights and terms.
+See [LICENSE](LICENSE), [copyright](COPYRIGHT), and [third-party/distribution notes](THIRD_PARTY_NOTICES.md). Personal input media and separately licensed system or third-party components retain their own rights and terms.

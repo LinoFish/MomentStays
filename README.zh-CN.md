@@ -24,7 +24,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-12%2B-black" alt="macOS 12+">
   <img src="https://img.shields.io/badge/SwiftUI-原生-orange" alt="原生 SwiftUI">
-  <img src="https://img.shields.io/badge/开源协议-GPL--3.0--only-blue" alt="开源协议 GPL-3.0-only">
+  <img src="https://img.shields.io/badge/开源协议-MIT-blue" alt="开源协议 MIT">
 </p>
 
 > **欢迎反馈：** 试过之后发现失败或结果不对？请[提交 issue](https://github.com/LinoFish/MomentStays/issues)，说明来源设备与格式、转换方向和 App 版本，样片请先抹除敏感信息。详见下文[反馈](#反馈)。
@@ -37,7 +37,7 @@
 
 [构建与运行](#构建与运行) · [与系统图库互通](#与系统图库互通) · [保留哪些信息](#保留哪些信息) · [连拍迁移](#连拍迁移实验性) · [使用手册](docs/USER_GUIDE.zh-CN.md) · [项目文档](docs/README.md)
 
-**开源协议：[GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino
+**开源协议：[MIT](LICENSE)** · Copyright © 2026 Lino
 
 ## 反馈
 
@@ -259,7 +259,7 @@ Google 兼容的动态照片 JPEG、三星（包括 SEF 和已验证的 HEIC 布
 
 ### 这个工具收费吗？照片会上传吗？
 
-免费开源（GPL-3.0-only），所有转换都在你的 Mac 本地完成，不上传照片。
+免费开源（MIT），所有转换都在你的 Mac 本地完成，不上传照片。
 
 ## 致谢
 
@@ -278,6 +278,6 @@ Google 兼容的动态照片 JPEG、三星（包括 SEF 和已验证的 HEIC 布
 
 ## 开源协议
 
-项目原创源代码、文档与视觉素材采用 **GNU General Public License 第 3 版，仅该版本**。允许商业使用；分发受 GPL 覆盖的派生作品时，需要按 GPL 提供对应源码并满足再分发要求。
+项目原创源代码、文档与视觉素材采用 **MIT License**。允许商业使用；在软件的全部或大部分副本中保留版权声明与许可声明即可。
 
-详见 [协议全文](LICENSE)、[版权与版本选择](COPYRIGHT) 和 [第三方及分发说明](THIRD_PARTY_NOTICES.md)。个人输入媒体，以及独立授权的系统或第三方组件，保留各自权利与条款。
+详见 [协议全文](LICENSE)、[版权](COPYRIGHT) 和 [第三方及分发说明](THIRD_PARTY_NOTICES.md)。个人输入媒体，以及独立授权的系统或第三方组件，保留各自权利与条款。

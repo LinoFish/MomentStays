@@ -2,7 +2,7 @@
 name = "momentstays-core"
 version = "0.1.0"
 edition = "2021"
-license = "GPL-3.0-only"
+license = "MIT"
 description = "Cross-platform Motion Photo container parser for MomentStays (byte-level, no pixel decode)"
 publish = false
 
