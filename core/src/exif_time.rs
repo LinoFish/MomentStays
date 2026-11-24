@@ -53,14 +53,20 @@ pub fn capture_time_from_file(path: &Path) -> Option<SystemTime> {
 /// The EXIF TIFF payload of a JPEG (APP1) or HEIC (Exif item) still.
 fn exif_tiff(data: &[u8]) -> Option<Vec<u8>> {
     if heif::matches(data) {
-        let exif = heif::exif(data).ok()?;
+        // A HEIC Motion Photo (mpvd / sefd) is refused by the still-only
+        // layout; its EXIF lives in the still part before the video box.
+        let exif = match heif::exif(data) {
+            Ok(exif) => exif,
+            Err(_) => heif::exif(&crate::format::parse(data).ok()?.still).ok()?,
+        };
         return exif.strip_prefix(jpeg::EXIF).map(|t| t.to_vec());
     }
     let segments = jpeg::segments(data).ok()?;
+    // The first APP1 *with the Exif header*: an XMP APP1 may come first.
     segments
         .iter()
-        .find(|s| s.marker == 0xE1)
-        .and_then(|s| s.payload(data).strip_prefix(jpeg::EXIF).map(|t| t.to_vec()))
+        .filter(|s| s.marker == 0xE1)
+        .find_map(|s| s.payload(data).strip_prefix(jpeg::EXIF).map(|t| t.to_vec()))
 }
 
 /// The ASCII value of `tag` in `fields` (NUL-terminated, as stored).
