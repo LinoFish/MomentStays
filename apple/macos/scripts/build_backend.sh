@@ -21,8 +21,10 @@ Path('.build/backend/NativeDriver.swift').write_text('@testable import MomentSta
 PY
 # Library includes the engine and PhotoKit services, with no SwiftUI views or app host.
 # Testing visibility lets the headless driver exercise the existing internal API.
+# Record the textual bridging header, not a temporary PCH: the driver below
+# imports this module and must be able to re-read the header.
 xcrun swiftc -parse-as-library -D MOTIONLIVE_LIBRARY -enable-testing -O -target x86_64-apple-macosx12.0 \
-  -module-cache-path /private/tmp/motionlive-backend-swift-cache \
+  -disable-bridging-pch -module-cache-path /private/tmp/motionlive-backend-swift-cache \
   -emit-library -emit-module -module-name MomentStaysBackend \
   -emit-module-path "$build_dir/MomentStaysBackend.swiftmodule" \
   -Xlinker -install_name -Xlinker @rpath/libMomentStaysBackend.dylib \
