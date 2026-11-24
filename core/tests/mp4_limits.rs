@@ -13,6 +13,19 @@ fn be(v: &[u32]) -> Vec<u8> {
 /// One video track of `n` samples of `size` bytes each, one chunk, stsz in
 /// the fixed-size form (so a small file can claim many samples).
 fn mp4_with(n: u32, size: u32) -> Vec<u8> {
+    mp4_custom(n, size, be(&[1, 1, n, 1]), 1, None)
+}
+
+/// [`mp4_with`] with explicit stsc rows (`entry_count` + triples, as
+/// bytes), `chunks` stco entries (all pointing at the first sample) and an
+/// optional `edts` box inside the trak.
+fn mp4_custom(
+    n: u32,
+    size: u32,
+    stsc_body: Vec<u8>,
+    chunks: u32,
+    edts: Option<Vec<u8>>,
+) -> Vec<u8> {
     let ftyp = bx("ftyp", b"isom\0\0\0\0isom");
     let trak = |chunk_offset: u32| {
         let tkhd = full("tkhd", 0, &[vec![0u8; 80]].concat());
@@ -21,9 +34,13 @@ fn mp4_with(n: u32, size: u32) -> Vec<u8> {
         let hdlr = full("hdlr", 0, &[&[0u8; 4][..], b"vide", &[0u8; 13]].concat());
         let stsd = full("stsd", 0, &[be(&[1]), bx("avc1", &[0u8; 78])].concat());
         let stts = full("stts", 0, &be(&[1, n, 1]));
-        let stsc = full("stsc", 0, &be(&[1, 1, n, 1]));
+        let stsc = full("stsc", 0, &stsc_body);
         let stsz = full("stsz", 0, &be(&[size, n]));
-        let stco = full("stco", 0, &be(&[1, chunk_offset]));
+        let mut stco_body = be(&[chunks]);
+        for _ in 0..chunks {
+            stco_body.extend(be(&[chunk_offset]));
+        }
+        let stco = full("stco", 0, &stco_body);
         let stbl = bx("stbl", &[stsd, stts, stsc, stsz, stco].concat());
         let dinf = bx(
             "dinf",
@@ -34,6 +51,7 @@ fn mp4_with(n: u32, size: u32) -> Vec<u8> {
             "trak",
             &[
                 tkhd,
+                edts.clone().unwrap_or_default(),
                 bx("mdia", &[full("mdhd", 0, &mdhd), hdlr, minf].concat()),
             ]
             .concat(),
@@ -72,4 +90,59 @@ fn a_tiny_file_cannot_claim_a_huge_fixed_size_table() {
 fn ordinary_clips_are_unaffected() {
     let t = mp4::sample_tables(&mp4_with(300, 1000)).unwrap();
     assert_eq!(t[0].samples.len(), 300);
+}
+
+#[test]
+fn a_huge_later_stsc_row_is_refused_without_expanding_the_earlier_one() {
+    // Two chunks; the second stsc row claims first_chunk 0xFFFFFFF0. The
+    // first row used to expand to ~4 billion chunk entries (tens of GB)
+    // before the second row's bounds check ran.
+    let stsc = be(&[2, 1, 1, 1, 0xFFFF_FFF0, 1, 1]);
+    let started = std::time::Instant::now();
+    let err = mp4::sample_tables(&mp4_custom(2, 1, stsc, 2, None)).unwrap_err();
+    assert!(err.0.contains("块映射越界"), "{}", err.0);
+    assert!(started.elapsed().as_secs() < 2);
+    // The well-formed two-chunk form still reads.
+    let ok = mp4::sample_tables(&mp4_custom(2, 1, be(&[1, 1, 1, 1]), 2, None)).unwrap();
+    assert_eq!(ok[0].chunks.len(), 2);
+}
+
+fn elst(version: u8, rows: &[(u64, i64)]) -> Vec<u8> {
+    let mut body = be(&[rows.len() as u32]);
+    for (dur, media) in rows {
+        if version == 1 {
+            body.extend(dur.to_be_bytes());
+            body.extend(media.to_be_bytes());
+        } else {
+            body.extend((*dur as u32).to_be_bytes());
+            body.extend((*media as i32).to_be_bytes());
+        }
+        body.extend([0, 1, 0, 0]);
+    }
+    bx("edts", &full("elst", version, &body))
+}
+
+#[test]
+fn version_1_edit_lists_accept_empty_edits() {
+    // An empty edit (media_time -1) in a 64-bit elst used to be refused as
+    // an out-of-range offset, so such movies could not be converted.
+    for version in [0u8, 1] {
+        let edts = elst(version, &[(500, -1), (300, 0)]);
+        let d = mp4_custom(300, 1000, be(&[1, 1, 300, 1]), 1, Some(edts));
+        let movie = mp4::Movie::parse(&d).unwrap();
+        let edits = mp4::edit_list(&d, &movie.tracks[0].trak).unwrap();
+        assert_eq!(edits, Some(vec![(500, -1), (300, 0)]), "elst v{version}");
+        momentstays_core::remux::remux_to_mov(&d, 0).unwrap();
+    }
+}
+
+#[test]
+fn unknown_edit_list_versions_are_refused() {
+    let mut edts = elst(0, &[(300, 0)]);
+    edts[16] = 2; // elst version byte (edts header 8 + elst header 8)
+    let d = mp4_custom(300, 1000, be(&[1, 1, 300, 1]), 1, Some(edts));
+    let movie = mp4::Movie::parse(&d).unwrap();
+    let err = mp4::edit_list(&d, &movie.tracks[0].trak).unwrap_err();
+    assert_eq!(err.kind(), momentstays_core::ErrorKind::Unsupported);
+    assert!(momentstays_core::remux::remux_to_mov(&d, 0).is_err());
 }

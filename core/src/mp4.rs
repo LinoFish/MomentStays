@@ -624,7 +624,11 @@ fn tracks_in(d: &[u8], moov: &BoxRef) -> Result<Vec<Track>> {
             for (i, t) in triples.iter().enumerate() {
                 let first = t[0];
                 let last = triples.get(i + 1).map_or(total_chunks + 1, |n| n[0]);
-                if first < 1 || first > total_chunks + 1 || last < first {
+                // `last` is bounded too: a later row claiming chunk 2^32
+                // must not expand this row into billions of entries before
+                // that row itself is rejected.
+                if first < 1 || first > total_chunks + 1 || last < first || last > total_chunks + 1
+                {
                     return fail("MP4 采样表块映射越界");
                 }
                 for _ in first..last {
@@ -771,6 +775,9 @@ pub fn edit_list(d: &[u8], trak: &BoxRef) -> Result<Option<Vec<(i64, i64)>>> {
         return fail("MP4 elst 被截断");
     }
     let version = d[elst.payload];
+    if version > 1 {
+        return fail_as(ErrorKind::Unsupported, "MP4 elst 版本不受支持");
+    }
     let count = crate::binary::be(d, elst.payload + 4, 4)?;
     let (record, at) = if version == 1 {
         (20usize, elst.payload + 8)
@@ -789,7 +796,8 @@ pub fn edit_list(d: &[u8], trak: &BoxRef) -> Result<Option<Vec<(i64, i64)>>> {
                 return fail("MP4 编辑时长超出范围");
             }
             // Media time is signed (empty edits use -1); reinterpret the bits.
-            let media = crate::binary::be(d, p + 8, 8)? as u64 as i64;
+            // (`be` refuses values above i64::MAX, which is every negative.)
+            let media = read(d, p + 8, 8, false)? as i64;
             out.push((dur_u as i64, media));
         } else {
             let dur = crate::binary::be(d, p, 4)? as i64;
