@@ -418,3 +418,39 @@ fn inspect_walks_directories_like_scan() {
     assert_eq!(lines.len(), 1, "{text}");
     assert!(lines[0].contains("\"ok\":true") && lines[0].contains("m.jpg"));
 }
+
+#[test]
+fn extract_refuses_one_path_for_still_and_video() {
+    // `extract --still x --video x` used to write the still, then replace
+    // it with the video and report success.
+    let d = std::env::temp_dir().join(format!("ms-extract-same-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    let input = d.join("m.jpg");
+    std::fs::write(&input, fixture("motion.jpg.b64")).unwrap();
+    let both = d.join("out.bin");
+    let out = Command::new(env!("CARGO_BIN_EXE_momentstays-core"))
+        .args(["extract", input.to_str().unwrap(), "--still"])
+        .arg(&both)
+        .arg("--video")
+        .arg(&both)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(!both.exists());
+    let (still, video) = (d.join("s.jpg"), d.join("v.mp4"));
+    let out = Command::new(env!("CARGO_BIN_EXE_momentstays-core"))
+        .args(["extract", input.to_str().unwrap(), "--still"])
+        .arg(&still)
+        .arg("--video")
+        .arg(&video)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(still.exists() && video.exists());
+    let _ = std::fs::remove_dir_all(&d);
+}

@@ -3,7 +3,13 @@
 //! and prints JSON Lines in input order.
 use momentstays_core::files::{self, Found, Mapped};
 use momentstays_core::output;
-use std::{env, io::Write, path::PathBuf, process::ExitCode, time::Instant};
+use std::{
+    env,
+    io::Write,
+    path::{Path, PathBuf},
+    process::ExitCode,
+    time::Instant,
+};
 
 fn usage() -> ExitCode {
     eprintln!(concat!(
@@ -103,6 +109,11 @@ fn main() -> ExitCode {
             let (Some(still), Some(video)) = (still, video) else {
                 return usage();
             };
+            // One path for both would silently leave only the video there.
+            if let Err(e) = output::ensure_distinct(&[Path::new(still)], Path::new(video)) {
+                eprintln!("{e}");
+                return ExitCode::from(1);
+            }
             let input = match Mapped::open(&PathBuf::from(&args[1])) {
                 Ok(d) => d,
                 Err(e) => {
