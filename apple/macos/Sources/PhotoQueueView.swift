@@ -1237,13 +1237,30 @@ private enum ThumbnailStore {
     }()
     static let queue = DispatchQueue(label: "MomentStays.thumbnails", qos: .utility)
 
+    // A cell scrolled away cancels its task; skip its queued decode so fast
+    // scrolling through a large queue does not build a backlog of stale work.
+    private final class Cancellation {
+        private let lock = NSLock()
+        private var cancelled = false
+        func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+        var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    }
+
     static func load(_ url: URL) async -> CGImage? {
+        let cancellation = Cancellation()
+        return await withTaskCancellationHandler(operation: {
+            await decode(url, cancellation: cancellation)
+        }, onCancel: { cancellation.cancel() })
+    }
+
+    private static func decode(_ url: URL, cancellation: Cancellation) async -> CGImage? {
         await withCheckedContinuation { continuation in
             queue.async {
                 if let cached = cache.object(forKey: url as NSURL) {
                     continuation.resume(returning: cached)
                     return
                 }
+                guard !cancellation.isCancelled else { continuation.resume(returning: nil); return }
                 let options: [CFString: Any] = [
                     kCGImageSourceCreateThumbnailFromImageAlways: true,
                     kCGImageSourceCreateThumbnailWithTransform: true,
