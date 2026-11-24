@@ -969,7 +969,21 @@
     "高清候选 {0} · {1} s": "High-resolution candidate {0} · {1} s",
     "{0} · {1} 张": "{0} · {1} photos",
     "Apple 实况 · JPEG；静态 HDR 仅本地已支持类型；不支持连拍转换。": "Apple Live Photos · JPEG; local static HDR supports verified types only; burst conversion is unsupported.",
-    "Apple 实况 · JPEG / HEIC；静态 HDR 仅本地已支持类型；不支持连拍转换。": "Apple Live Photos · JPEG / HEIC; local static HDR supports verified types only; burst conversion is unsupported."
+    "Apple 实况 · JPEG / HEIC；静态 HDR 仅本地已支持类型；不支持连拍转换。": "Apple Live Photos · JPEG / HEIC; local static HDR supports verified types only; burst conversion is unsupported.",
+    "无法读取实况照片静态图": "Couldn't read the Live Photo still image",
+    "照片缺少 Apple 实况内容标识；请从「照片」导出完整原片与配对视频": "The photo has no Apple Live Photo content identifier; export the unmodified original with its paired video from Photos",
+    "视频缺少唯一实况内容标识": "The video has no unique Live Photo content identifier",
+    "所选视频缺少唯一匹配的静态照片": "The selected video has no unique matching still photo",
+    "未找到完整实况照片": "No complete Live Photo was found",
+    "请选择 Android 动态照片 JPEG/HEIC 或照片文件夹": "Choose an Android Motion Photo JPEG/HEIC or a photo folder",
+    "输入不是可读取的文件或文件夹": "The input isn't a readable file or folder",
+    "部分目录不可读取：{0}": "Some folders can't be read: {0}",
+    "请选择照片或文件夹": "Choose photos or a folder",
+    "输入文件位于所选目录之外：{0} / {1}": "The input file is outside the selected folder: {0} / {1}",
+    "请选择原片文件夹之外的输出位置": "Choose an output location outside the source folder",
+    "所选高清候选不存在；请重新选择封面": "The selected high-resolution candidate no longer exists; choose the cover again",
+    "无法读取候选画面": "Couldn't read the candidate frame",
+    "不是受支持的动态照片": "Not a supported motion photo"
   },
   "verbatimArguments": {
     "照片：{0}\n已有输出：{1}\n\n校验并复用会核对来源、范围、设置和输出文件，匹配时继续且不重新处理。跳过会保留已有文件。覆盖会在新结果完成并通过校验后替换输出文件夹；失败时保留旧结果。": [
@@ -977,6 +991,13 @@
       1
     ],
     "转换输出不完整，未交付：{0}": [
+      0
+    ],
+    "输入文件位于所选目录之外：{0} / {1}": [
+      0,
+      1
+    ],
+    "部分目录不可读取：{0}": [
       0
     ]
   }

@@ -154,7 +154,7 @@ final class MacPlatformServices: NSObject {
     func chooseOutput() {
         if model.settings.direction == .toApple { chooseDestination(.folder); return }
         guard !model.isBusy, !model.sharing, !model.isPreview, let parent = settingsDialogParent else { return }
-        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出位置"); panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出位置"); panel.prompt = AppText.text("选择")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.output?.deletingLastPathComponent()
         panel.beginSheetModal(for: parent) { [weak self] response in
@@ -243,7 +243,7 @@ final class MacPlatformServices: NSObject {
 
     func chooseUnconvertedOutput() {
         guard !model.isBusy, !model.sharing, let parent = settingsDialogParent else { return }
-        let panel = NSOpenPanel(); panel.title = AppText.text("选择未转换照片的导出位置"); panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择未转换照片的导出位置"); panel.prompt = AppText.text("选择")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.unconvertedOutput
         panel.beginSheetModal(for:parent) { [weak self] response in
@@ -339,7 +339,7 @@ final class MacPlatformServices: NSObject {
     func exportResults(_ selected: DeliveryTask? = nil) {
         guard !model.isBusy, !model.sharing, let window = window, window.attachedSheet == nil,
               let task = selected ?? (lastTask?.results.isEmpty == false ? lastTask : deliveryStore.tasks().first { !$0.results.isEmpty }), !task.results.isEmpty else { return }
-        let panel = NSOpenPanel(); panel.title = AppText.text("导出完整转换结果"); panel.prompt = "导出到此位置"
+        let panel = NSOpenPanel(); panel.title = AppText.text("导出完整转换结果"); panel.prompt = AppText.text("导出到此位置")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.beginSheetModal(for:window) { [weak self] response in
             guard let self = self, response == .OK, let output = panel.url else { return }
@@ -442,7 +442,7 @@ final class MacPlatformServices: NSObject {
             self.pickAlbum(parent:parent) { id,title in commit(folder,id,title) }
         }
         if destination == .photos { album(nil); return }
-        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出文件夹"); panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出文件夹"); panel.prompt = AppText.text("选择")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.output
         panel.beginSheetModal(for:parent) { response in
@@ -470,7 +470,7 @@ final class MacPlatformServices: NSObject {
             alert.informativeText = AppText.text("选择已有用户相册，或输入新相册名称。仅在转换成功后创建相册。")
             let popup = NSPopUpButton(frame:NSRect(x:0,y:38,width:300,height:28),pullsDown:false)
             popup.addItem(withTitle:AppText.text("按下方名称创建／查找"))
-            popup.addItems(withTitles:albums.map { $0.localizedTitle ?? "未命名相册" })
+            popup.addItems(withTitles:albums.map { $0.localizedTitle ?? AppText.text("未命名相册") })
             if let index = albums.firstIndex(where:{ $0.localIdentifier == self.model.settings.albumID }) { popup.selectItem(at:index + 1) }
             let name = NSTextField(frame:NSRect(x:0,y:0,width:300,height:26)); name.stringValue = self.model.settings.albumTitle
             let view = NSView(frame:NSRect(x:0,y:0,width:300,height:70)); view.addSubview(popup); view.addSubview(name); alert.accessoryView = view
@@ -478,7 +478,7 @@ final class MacPlatformServices: NSObject {
             alert.beginSheetModal(for:parent) { response in
                 guard response == .alertFirstButtonReturn else { return }
                 let index = popup.indexOfSelectedItem
-                let title = (index > 0 ? albums[index - 1].localizedTitle ?? "未命名相册" : name.stringValue).trimmingCharacters(in:.whitespacesAndNewlines)
+                let title = (index > 0 ? albums[index - 1].localizedTitle ?? AppText.text("未命名相册") : name.stringValue).trimmingCharacters(in:.whitespacesAndNewlines)
                 guard !title.isEmpty else { self.model.errorMessage = "请输入相册名称"; return }
                 completion(index > 0 ? albums[index - 1].localIdentifier : nil,title)
             }
