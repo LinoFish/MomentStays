@@ -764,6 +764,7 @@ struct WorkspaceModelTests {
         check(model.burstGroups.count == 1 && model.items.count == 3,"production Rust scan and cache expose a burst group")
         check(model.items.allSatisfy { !$0.isMotion && $0.isConvertible && model.category($0) == .ready },"burst members do not impersonate motion or skipped SDR")
         let group = model.burstGroups[0]
+        check(group.members.allSatisfy { model.burstGroup(containing:$0.source)?.id == group.id } && model.burstGroup(containing:input.appendingPathComponent("missing.jpg").path) == nil,"burst membership index finds every member and nothing else")
         check(group.members.map(\.index) == [1,2,3] && model.burstChoice(group).representative == group.members[0].source && group.members[0].source_cover,"source frame order and COVER remain facts: indexes=\(group.members.map(\.index)) representative=\(String(describing:model.burstChoice(group).representative)) expected=\(sources[0].path)")
         model.selectBurst(group,selected:true); model.setBurstChoice(group,representative:group.members[2].source)
         model.updateSettings { $0.direction = .androidToAndroid }; pump(until:{ !model.isBusy })
@@ -1108,20 +1109,25 @@ struct WorkspaceModelTests {
         reverse.updateSettings { $0.direction = .toAndroid; $0.exportDataFiles = false }
         reverse.chooseSources([still])
         pump(until: { !reverse.isBusy })
-        check(reverse.canStart, "reverse scan recognizes output pair")
+        // Since the five-step workspace every direction needs an explicitly confirmed output.
+        check(reverse.items.first?.isConvertible == true && !reverse.canStart, "reverse scan recognizes output pair and waits for a confirmed output")
         let reverseOutput = root.appendingPathComponent("reverse")
         try FileManager.default.createDirectory(at: reverseOutput, withIntermediateDirectories: true)
-        reverse.setOutput(reverseOutput); reverse.start()
+        reverse.setOutput(reverseOutput)
+        check(reverse.canStart, "confirmed reverse output enables the run")
+        reverse.start()
         pump(until: { !reverse.isBusy })
         check(reverse.report?.counts["converted"] == 1 && reverse.report?.url == nil, "real reverse conversion retains in-memory report without JSON")
         let transferSource = reverseOutput.appendingPathComponent(still.lastPathComponent + ".motionphoto").appendingPathComponent(still.deletingPathExtension().lastPathComponent + ".MP.jpg")
         let transfer = WorkspaceModel()
         transfer.updateSettings { $0.direction = .androidToAndroid; $0.vendor = .samsung; $0.container = .heic; $0.destination = .folderAndShare }
         transfer.chooseSources([transferSource]); pump(until:{ !transfer.isBusy })
-        check(transfer.items.first?.isMotion == true && transfer.canStart, "real transfer scan accepts standard Google JPEG")
+        check(transfer.items.first?.isMotion == true && transfer.items.first?.isConvertible == true, "real transfer scan accepts standard Google JPEG")
         let transferOutput = root.appendingPathComponent("transfer")
         try FileManager.default.createDirectory(at:transferOutput,withIntermediateDirectories:true)
-        transfer.setOutput(transferOutput); transfer.start(); pump(until:{ !transfer.isBusy })
+        transfer.setOutput(transferOutput)
+        check(transfer.canStart, "confirmed transfer output enables the run")
+        transfer.start(); pump(until:{ !transfer.isBusy })
         check(transfer.report?.counts["converted"] == 1, "model executes third direction without Apple pair")
         let transferFolder = transferOutput.appendingPathComponent(transferSource.lastPathComponent + ".motionphoto")
         let outputPhoto = transferFolder.appendingPathComponent(transferSource.deletingPathExtension().lastPathComponent + ".MP.jpg")
@@ -1164,6 +1170,15 @@ struct WorkspaceModelTests {
         let enumerations = folderCache.enumerationCount
         _ = try folderCache.rows(sources:[folder],direction:.toApple,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
         check(folderCache.enumerationCount == enumerations && folderCache.parseCount == 2, "unchanged folders reuse their inventory without rescanning the directory tree")
+        check(FileManager.default.fileExists(atPath:folderCache.folder.path), "parsed source snapshots are cached in the private temporary folder")
+        folderCache.removeFolder()
+        check(!FileManager.default.fileExists(atPath:folderCache.folder.path), "temporary source snapshots can be purged on termination")
+        let purgeService = ConversionService(); var purgeDone = false
+        purgeService.scan(sources:[folder],direction:.toApple,token:StopToken(),rowsReady:{ _ in },progress:{ _,_ in }) { _ in purgeDone = true }
+        pump(until:{ purgeDone })
+        check(FileManager.default.fileExists(atPath:purgeService.inspections.folder.path), "service scan writes private source snapshots")
+        purgeService.purgeInspections()
+        check(!FileManager.default.fileExists(atPath:purgeService.inspections.folder.path), "service purge removes private source snapshots synchronously")
         _ = try cache.rows(sources:[still],direction:.toAndroid,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
         let pairBefore = cache.pairValidationCount
         let movie = still.deletingPathExtension().appendingPathExtension("mov")

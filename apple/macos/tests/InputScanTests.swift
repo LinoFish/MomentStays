@@ -30,8 +30,8 @@ private final class PendingInspections: ConversionServing {
         try fm.createDirectory(at:root,withIntermediateDirectories:true)
         let a=root.appendingPathComponent("a.jpg"),b=root.appendingPathComponent("b.jpg"),c=root.appendingPathComponent("c.jpg"),d=root.appendingPathComponent("d.jpg")
         for f in [a,b,c,d] { try Data([1,2,3]).write(to:f) }
-        func row(_ f:URL,_ relative:String?=nil)->ScanRow {
-            ScanRow(source:f,relative:relative ?? f.lastPathComponent,isMotion:true,hdr:"HDR",cover:"0.4 秒",detail:"diagnostic",manufacturer:"Google",manufacturerDetail:"source metadata",version:SourceVersion.read(f))
+        func row(_ f:URL,_ relative:String?=nil,hdr:String="HDR")->ScanRow {
+            ScanRow(source:f,relative:relative ?? f.lastPathComponent,isMotion:true,hdr:hdr,cover:"0.4 秒",detail:"diagnostic",manufacturer:"Google",manufacturerDetail:"source metadata",version:SourceVersion.read(f))
         }
         let service=PendingInspections(),model=WorkspaceModel(service:service)
         let ar=row(a),br=row(b),cr=row(c),dr=row(d)
@@ -68,7 +68,9 @@ private final class PendingInspections: ConversionServing {
         delayed.appendSources([f]);delayedService.requests.last!.finish(.success([row(a),row(f)]))
         check(delayed.settings.coverSelections?[a.path]==nil,"rapid direction/addition cannot detach cover validity from its source version")
         let startService=PendingInspections(),startModel=WorkspaceModel(service:startService)
-        startModel.appendSources([a]);startService.requests.last!.finish(.success([row(a)]));startModel.selectCover(1,for:a)
+        // SDR: since 9e88147 a custom cover on an HDR source is blocked unless HDR conversion is selected,
+        // which would stop start() before the source-change check this case exercises.
+        startModel.appendSources([a]);startService.requests.last!.finish(.success([row(a,hdr:"SDR")]));startModel.selectCover(1,for:a)
         let destination=root.deletingLastPathComponent().appendingPathComponent(root.lastPathComponent+"-output")
         try fm.createDirectory(at:destination,withIntermediateDirectories:true);startModel.setOutput(destination)
         try Data([7]).write(to:a);startModel.start()
