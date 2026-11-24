@@ -1,0 +1,67 @@
+# TEMPORARY review workflow for branch review/macos-2026-11-24.
+# Remove before merging to main.
+name: review-macos (temporary)
+on:
+  push:
+    branches: [review/macos-2026-11-24]
+  workflow_dispatch:
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Environment
+        run: |
+          sw_vers; uname -m; xcodebuild -version; swift --version; rustc --version
+          /usr/bin/arch -x86_64 /usr/bin/true && echo "Rosetta OK" || echo "Rosetta missing"
+      - run: cargo fetch --locked --manifest-path core/Cargo.toml
+      - name: build_app.sh (universal release)
+        run: bash apple/macos/scripts/build_app.sh
+      - name: build_app.sh --arm64 --diagnostics
+        if: always()
+        run: bash apple/macos/scripts/build_app.sh --arm64 --diagnostics
+      - name: xcodebuild MomentStays-macOS (Debug)
+        if: always()
+        run: |
+          set -o pipefail
+          xcodebuild -project apple/macos/MomentStays.xcodeproj -scheme MomentStays-macOS -configuration Debug \
+            -destination 'platform=macOS' CODE_SIGN_IDENTITY=- build 2>&1 | tail -n 200
+      - name: build_backend.sh
+        if: always()
+        run: bash apple/macos/scripts/build_backend.sh
+      - name: build_gui_tests.sh
+        if: always()
+        run: bash apple/macos/scripts/build_gui_tests.sh
+      - name: Swift tests - PhotoTimeRepair
+        if: always()
+        run: bash apple/macos/scripts/check_photo_time_repair.sh
+      - name: Swift tests - MotionPreview
+        if: always()
+        run: bash apple/macos/scripts/check_motion_preview.sh
+      - name: Swift tests - InputScan
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p .build/ci-fixture
+          printf '%s' '{"mode":"fixture","folder":"'"$PWD"'/.build/ci-fixture"}' | .build/gui/native-tests > .build/ci-fixture/fixture.json
+          cd apple/macos/scripts
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from testkit.fixtures import motion
+          root = Path('../../../.build/ci-fixture')
+          stamp = json.loads((root/'fixture.json').read_text())['cover_us']
+          (root/'google-motion.jpg').write_bytes(motion((root/'still.jpg').read_bytes(), str(stamp), movie=(root/'clip.mp4').read_bytes()))
+          PY
+          cd ../../..
+          bash apple/macos/scripts/check_input_scan.sh .build/ci-fixture/google-motion.jpg
+      - name: Python checks (run_checks_with_rust.sh, includes WorkspaceModelTests)
+        if: always()
+        run: bash apple/macos/scripts/run_checks_with_rust.sh
+      - name: Rust core check (check_rust_core.py)
+        if: always()
+        run: python3 apple/macos/scripts/check_rust_core.py
