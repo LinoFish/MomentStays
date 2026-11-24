@@ -151,6 +151,9 @@ fn maybe_edts(d: &[u8], trak: &BoxRef, movie_ts: usize) -> Result<Option<Vec<u8>
         return fail("重封装 elst 被截断");
     }
     let version = d[elst.payload];
+    if version > 1 {
+        return fail_as(ErrorKind::Unsupported, "重封装 elst 版本不受支持");
+    }
     let flags = ((d[elst.payload + 1] as u32) << 16)
         | ((d[elst.payload + 2] as u32) << 8)
         | d[elst.payload + 3] as u32;
@@ -885,8 +888,12 @@ fn remux_mov_policy(
     }
     let meta = identifier.map(content_identifier_meta);
     if let Some(cover) = mett_cover_us {
-        tracks.push(mett_track_parts(max_track_id + 1, cover)?);
-        max_track_id += 1;
+        // Track ID 0 is invalid; a source already using 0xFFFFFFFF leaves
+        // no ID for the marker track (wrapping would write ID 0).
+        max_track_id = max_track_id.checked_add(1).ok_or_else(|| {
+            crate::Error::with_kind(ErrorKind::Unsupported, "重封装轨道编号超出范围")
+        })?;
+        tracks.push(mett_track_parts(max_track_id, cover)?);
     }
     let mut ftyp_payload = b"qt  ".to_vec();
     ftyp_payload.extend(u32b(0));
@@ -1074,7 +1081,7 @@ fn assemble(
         tracks,
         &zero,
         movie_duration,
-        max_track_id + 1,
+        max_track_id.saturating_add(1),
         meta.as_deref(),
     )?
     .len();
@@ -1100,7 +1107,7 @@ fn assemble(
         tracks,
         &chunk_offsets,
         movie_duration,
-        max_track_id + 1,
+        max_track_id.saturating_add(1),
         meta.as_deref(),
     )?;
     debug_assert_eq!(moov.len(), moov_len);

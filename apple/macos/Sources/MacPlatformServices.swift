@@ -154,7 +154,7 @@ final class MacPlatformServices: NSObject {
     func chooseOutput() {
         if model.settings.direction == .toApple { chooseDestination(.folder); return }
         guard !model.isBusy, !model.sharing, !model.isPreview, let parent = settingsDialogParent else { return }
-        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出位置"); panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出位置"); panel.prompt = AppText.text("选择")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.output?.deletingLastPathComponent()
         panel.beginSheetModal(for: parent) { [weak self] response in
@@ -172,7 +172,10 @@ final class MacPlatformServices: NSObject {
             guard let self = self else { return }
             let picker = self.libraryPicker
             self.libraryPicker = nil
-            if picker?.wasCancelled == false, error == nil, !urls.isEmpty { self.origins.merge(picker?.origins ?? [:],uniquingKeysWith:{ _,new in new }) }
+            // Stopping the picker mid-read still hands the already read originals to the
+            // model with their library origins; keep this map in step with the queue so
+            // delivery keys, original-export source kinds and Photos metadata agree.
+            if error == nil, !urls.isEmpty { self.origins.merge(picker?.origins ?? [:],uniquingKeysWith:{ _,new in new }) }
             self.lastScope = picker?.selectedScope
             self.model.librarySummary = picker?.summary ?? ""
             if let first = urls.first { self.ownedPhotoCopies.append(first.deletingLastPathComponent().deletingLastPathComponent()) }
@@ -194,6 +197,15 @@ final class MacPlatformServices: NSObject {
         }
         model.approveMigrationReview()
         if model.reviewedMigration != nil { model.workspaceStep = .results }
+    }
+
+    // Library monitoring promises automatic conversion. The five-step start()
+    // only advances one step outside the preview, so enter the preview and approve
+    // it here; an unconfirmed output location still stops at the preview step.
+    private func startMonitoredConversion() {
+        guard window?.attachedSheet == nil, !model.sharing, model.canReviewMigration else { return }
+        model.workspaceStep = .preview
+        start()
     }
 
     private func consumeMigration() {
@@ -231,7 +243,7 @@ final class MacPlatformServices: NSObject {
 
     func chooseUnconvertedOutput() {
         guard !model.isBusy, !model.sharing, let parent = settingsDialogParent else { return }
-        let panel = NSOpenPanel(); panel.title = AppText.text("选择未转换照片的导出位置"); panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择未转换照片的导出位置"); panel.prompt = AppText.text("选择")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.unconvertedOutput
         panel.beginSheetModal(for:parent) { [weak self] response in
@@ -327,7 +339,7 @@ final class MacPlatformServices: NSObject {
     func exportResults(_ selected: DeliveryTask? = nil) {
         guard !model.isBusy, !model.sharing, let window = window, window.attachedSheet == nil,
               let task = selected ?? (lastTask?.results.isEmpty == false ? lastTask : deliveryStore.tasks().first { !$0.results.isEmpty }), !task.results.isEmpty else { return }
-        let panel = NSOpenPanel(); panel.title = AppText.text("导出完整转换结果"); panel.prompt = "导出到此位置"
+        let panel = NSOpenPanel(); panel.title = AppText.text("导出完整转换结果"); panel.prompt = AppText.text("导出到此位置")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.beginSheetModal(for:window) { [weak self] response in
             guard let self = self, response == .OK, let output = panel.url else { return }
@@ -430,7 +442,7 @@ final class MacPlatformServices: NSObject {
             self.pickAlbum(parent:parent) { id,title in commit(folder,id,title) }
         }
         if destination == .photos { album(nil); return }
-        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出文件夹"); panel.prompt = "选择"
+        let panel = NSOpenPanel(); panel.title = AppText.text("选择输出文件夹"); panel.prompt = AppText.text("选择")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = model.output
         panel.beginSheetModal(for:parent) { response in
@@ -458,7 +470,7 @@ final class MacPlatformServices: NSObject {
             alert.informativeText = AppText.text("选择已有用户相册，或输入新相册名称。仅在转换成功后创建相册。")
             let popup = NSPopUpButton(frame:NSRect(x:0,y:38,width:300,height:28),pullsDown:false)
             popup.addItem(withTitle:AppText.text("按下方名称创建／查找"))
-            popup.addItems(withTitles:albums.map { $0.localizedTitle ?? "未命名相册" })
+            popup.addItems(withTitles:albums.map { $0.localizedTitle ?? AppText.text("未命名相册") })
             if let index = albums.firstIndex(where:{ $0.localIdentifier == self.model.settings.albumID }) { popup.selectItem(at:index + 1) }
             let name = NSTextField(frame:NSRect(x:0,y:0,width:300,height:26)); name.stringValue = self.model.settings.albumTitle
             let view = NSView(frame:NSRect(x:0,y:0,width:300,height:70)); view.addSubview(popup); view.addSubview(name); alert.accessoryView = view
@@ -466,7 +478,7 @@ final class MacPlatformServices: NSObject {
             alert.beginSheetModal(for:parent) { response in
                 guard response == .alertFirstButtonReturn else { return }
                 let index = popup.indexOfSelectedItem
-                let title = (index > 0 ? albums[index - 1].localizedTitle ?? "未命名相册" : name.stringValue).trimmingCharacters(in:.whitespacesAndNewlines)
+                let title = (index > 0 ? albums[index - 1].localizedTitle ?? AppText.text("未命名相册") : name.stringValue).trimmingCharacters(in:.whitespacesAndNewlines)
                 guard !title.isEmpty else { self.model.errorMessage = "请输入相册名称"; return }
                 completion(index > 0 ? albums[index - 1].localIdentifier : nil,title)
             }
@@ -519,9 +531,13 @@ final class MacPlatformServices: NSObject {
                     if !token.isCancelled, !read.urls.isEmpty {
                         // The worker starts only after the queued scan reaches ready.
                         var subscription: AnyCancellable?
+                        func finish() {
+                            if let value = subscription { value.cancel(); self.subscriptions.remove(value) }
+                            subscription = nil; self.autoStartPending = false
+                        }
                         subscription = self.model.$phase.receive(on: DispatchQueue.main).sink { phase in
-                            if phase == .ready { subscription?.cancel(); self.autoStartPending = false; self.start() }
-                            else if phase == .failed || phase == .stopped { subscription?.cancel(); self.autoStartPending = false; self.drainLibraryUpdates() }
+                            if phase == .ready { finish(); self.startMonitoredConversion() }
+                            else if phase == .failed || phase == .stopped { finish(); self.drainLibraryUpdates() }
                         }
                         if let subscription = subscription { self.subscriptions.insert(subscription) }
                     }
@@ -660,6 +676,9 @@ final class MacPlatformServices: NSObject {
 
     func cleanup() {
         stopMonitoring(); readerToken?.cancel(); libraryReader?.cancel()
+        // Parsed still/video snapshots of the user's photos live in a private temp
+        // folder; the app-lifetime service never deinitializes, so purge it on quit.
+        model.purgeTemporaryFiles()
         for root in ownedPhotoCopies { try? FileManager.default.removeItem(at: root) }
         ownedPhotoCopies.removeAll()
     }

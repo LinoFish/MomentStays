@@ -248,8 +248,8 @@ final class PhotosLibraryPicker: NSObject, NSTableViewDataSource, NSTableViewDel
             return view
         }
         let resources = PHAssetResource.assetResources(for: asset)
-        let name = resources.first(where: { $0.type == .photo })?.originalFilename ?? "照片"
-        let date = asset.creationDate.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short) } ?? "未知时间"
+        let name = resources.first(where: { $0.type == .photo })?.originalFilename ?? AppText.text("照片")
+        let date = asset.creationDate.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short) } ?? AppText.text("未知时间")
         let field = NSTextField(labelWithString: name + "\n" + date + " · \(asset.pixelWidth) × \(asset.pixelHeight)")
         field.maximumNumberOfLines = 2; field.font = .systemFont(ofSize: 12); field.lineBreakMode = .byTruncatingMiddle; field.toolTip = field.stringValue
         return field
@@ -372,7 +372,7 @@ private final class LibraryThumbnailItem: NSCollectionViewItem {
         photo.imageScaling = .scaleProportionallyUpOrDown
         caption.font = .systemFont(ofSize:12); caption.lineBreakMode = .byTruncatingMiddle
         caption.maximumNumberOfLines = 1
-        check.image = NSImage(systemSymbolName:"checkmark.circle.fill",accessibilityDescription:"已选择")
+        check.image = NSImage(systemSymbolName:"checkmark.circle.fill",accessibilityDescription:AppText.text("已选择"))
         check.contentTintColor = InterfaceStyle.nativeAccent
         for child in [photo,caption,check] { child.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(child) }
         NSLayoutConstraint.activate([
@@ -403,7 +403,7 @@ private final class LibraryThumbnailItem: NSCollectionViewItem {
     }
     func configure(_ asset: PHAsset, manager: PHImageManager) {
         reset(); self.manager = manager; assetID = asset.localIdentifier
-        caption.stringValue = PHAssetResource.assetResources(for:asset).first(where: { $0.type == .photo })?.originalFilename ?? "照片"
+        caption.stringValue = PHAssetResource.assetResources(for:asset).first(where: { $0.type == .photo })?.originalFilename ?? AppText.text("照片")
         view.toolTip = caption.stringValue
         photo.setAccessibilityLabel(caption.stringValue)
         let options = PHImageRequestOptions(); options.isNetworkAccessAllowed = false

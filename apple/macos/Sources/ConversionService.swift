@@ -17,6 +17,8 @@ protocol ConversionServing {
               progress: @escaping (Int, Int) -> Void, completion: @escaping (Result<[ScanRow], Error>) -> Void)
     func project(sources: [URL], direction: ConversionDirection, token: StopToken, rowsReady: @escaping ([ScanRow]) -> Void, progress: @escaping (Int,Int) -> Void, completion: @escaping (Result<[ScanRow],Error>) -> Void)
     func clearInspections()
+    // Synchronous best-effort removal of private temporary copies, for app termination.
+    func purgeInspections()
     func run(job: ConversionJob, token: StopToken, existingOutput: @escaping ExistingOutputPresenter,
              progress: @escaping (BatchProgress) -> Void, completion: @escaping (Result<BatchOutcome, Error>) -> Void)
 }
@@ -26,6 +28,7 @@ extension ConversionServing {
         scan(sources:sources,direction:direction,token:token,rowsReady:rowsReady,progress:progress,completion:completion)
     }
     func clearInspections() {}
+    func purgeInspections() {}
 }
 
 // Safe even if the user cancels while the platform sheet is still being presented.
@@ -82,6 +85,12 @@ final class ConversionService: ConversionServing {
         inspectSources(sources:sources,direction:direction,token:token,rowsReady:rowsReady,progress:progress,completion:completion)
     }
     func clearInspections() { worker.async { self.inspections.clear() } }
+    func purgeInspections() {
+        let done = DispatchSemaphore(value:0)
+        worker.async { self.inspections.clear(); done.signal() }
+        // A cancelled scan stops between files; never hold termination for long.
+        if done.wait(timeout:.now() + 2) == .timedOut { inspections.removeFolder() }
+    }
 
     func run(job: ConversionJob, token: StopToken, existingOutput: @escaping ExistingOutputPresenter,
              progress: @escaping (BatchProgress) -> Void, completion: @escaping (Result<BatchOutcome, Error>) -> Void) {
@@ -134,7 +143,7 @@ final class SourceInspectionCache {
         var pairVersions: [Stamp]?
         init(_ version:SourceVersion) { self.version = version }
     }
-    private let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MomentStays-inspections-" + UUID().uuidString)
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MomentStays-inspections-" + UUID().uuidString)
     private var entries: [URL:Entry] = [:]
     private struct Inventory { let directories:[Stamp]; let files:[URL] }
     private var inventories: [URL:Inventory] = [:]
@@ -146,7 +155,9 @@ final class SourceInspectionCache {
     private(set) var transferValidationCount = 0
     private(set) var sourceReadCount = 0
     private(set) var projectionHitCount = 0
-    deinit { try? FileManager.default.removeItem(at:folder) }
+    deinit { removeFolder() }
+    // Only touches the immutable folder path, so it is safe from any thread.
+    func removeFolder() { try? FileManager.default.removeItem(at:folder) }
     func clear() {
         entries.removeAll(); movieSelections.removeAll(); inventories.removeAll(); directoryListings.removeAll()
         try? FileManager.default.removeItem(at:folder)

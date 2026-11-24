@@ -66,6 +66,23 @@ pub fn perform<T: Send>(
         peak_bytes: 0,
     });
     let changed = Condvar::new();
+    // Releases an admitted item's budget even when `work` or `receive`
+    // panics: otherwise the leaked reservation keeps every other worker
+    // waiting for budget forever and the scope never joins (the panic is
+    // re-raised by the scope and reported once all workers finish).
+    struct Admitted<'a> {
+        state: &'a Mutex<State>,
+        changed: &'a Condvar,
+        cost: u64,
+    }
+    impl Drop for Admitted<'_> {
+        fn drop(&mut self) {
+            let mut st = self.state.lock().unwrap_or_else(|p| p.into_inner());
+            st.used -= self.cost;
+            st.running -= 1;
+            self.changed.notify_all();
+        }
+    }
     let receive = Mutex::new(receive);
     let workers = limit.min(files.len()).max(1);
     std::thread::scope(|scope| {
@@ -94,12 +111,13 @@ pub fn perform<T: Send>(
                     st.peak_bytes = st.peak_bytes.max(st.used);
                     (index, costs[index])
                 };
+                let _admitted = Admitted {
+                    state: &state,
+                    changed: &changed,
+                    cost,
+                };
                 let value = work(index);
                 (receive.lock().unwrap_or_else(|p| p.into_inner()))(index, value);
-                let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-                st.used -= cost;
-                st.running -= 1;
-                changed.notify_all();
             });
         }
     });
