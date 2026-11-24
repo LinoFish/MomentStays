@@ -290,9 +290,6 @@ pub fn resolve_cover_in(
                             if cursor > i64::MAX as i128 {
                                 return fail("视频编辑列表时长超出范围");
                             }
-                            if cursor > i64::MAX as i128 {
-                                return fail("视频编辑列表时长超出范围");
-                            }
                         }
                     }
                 }
