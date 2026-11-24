@@ -172,7 +172,10 @@ final class MacPlatformServices: NSObject {
             guard let self = self else { return }
             let picker = self.libraryPicker
             self.libraryPicker = nil
-            if picker?.wasCancelled == false, error == nil, !urls.isEmpty { self.origins.merge(picker?.origins ?? [:],uniquingKeysWith:{ _,new in new }) }
+            // Stopping the picker mid-read still hands the already read originals to the
+            // model with their library origins; keep this map in step with the queue so
+            // delivery keys, original-export source kinds and Photos metadata agree.
+            if error == nil, !urls.isEmpty { self.origins.merge(picker?.origins ?? [:],uniquingKeysWith:{ _,new in new }) }
             self.lastScope = picker?.selectedScope
             self.model.librarySummary = picker?.summary ?? ""
             if let first = urls.first { self.ownedPhotoCopies.append(first.deletingLastPathComponent().deletingLastPathComponent()) }
@@ -194,6 +197,15 @@ final class MacPlatformServices: NSObject {
         }
         model.approveMigrationReview()
         if model.reviewedMigration != nil { model.workspaceStep = .results }
+    }
+
+    // Library monitoring promises automatic conversion. The five-step start()
+    // only advances one step outside the preview, so enter the preview and approve
+    // it here; an unconfirmed output location still stops at the preview step.
+    private func startMonitoredConversion() {
+        guard window?.attachedSheet == nil, !model.sharing, model.canReviewMigration else { return }
+        model.workspaceStep = .preview
+        start()
     }
 
     private func consumeMigration() {
@@ -519,9 +531,13 @@ final class MacPlatformServices: NSObject {
                     if !token.isCancelled, !read.urls.isEmpty {
                         // The worker starts only after the queued scan reaches ready.
                         var subscription: AnyCancellable?
+                        func finish() {
+                            if let value = subscription { value.cancel(); self.subscriptions.remove(value) }
+                            subscription = nil; self.autoStartPending = false
+                        }
                         subscription = self.model.$phase.receive(on: DispatchQueue.main).sink { phase in
-                            if phase == .ready { subscription?.cancel(); self.autoStartPending = false; self.start() }
-                            else if phase == .failed || phase == .stopped { subscription?.cancel(); self.autoStartPending = false; self.drainLibraryUpdates() }
+                            if phase == .ready { finish(); self.startMonitoredConversion() }
+                            else if phase == .failed || phase == .stopped { finish(); self.drainLibraryUpdates() }
                         }
                         if let subscription = subscription { self.subscriptions.insert(subscription) }
                     }
