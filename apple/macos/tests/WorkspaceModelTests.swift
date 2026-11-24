@@ -764,6 +764,7 @@ struct WorkspaceModelTests {
         check(model.burstGroups.count == 1 && model.items.count == 3,"production Rust scan and cache expose a burst group")
         check(model.items.allSatisfy { !$0.isMotion && $0.isConvertible && model.category($0) == .ready },"burst members do not impersonate motion or skipped SDR")
         let group = model.burstGroups[0]
+        check(group.members.allSatisfy { model.burstGroup(containing:$0.source)?.id == group.id } && model.burstGroup(containing:input.appendingPathComponent("missing.jpg").path) == nil,"burst membership index finds every member and nothing else")
         check(group.members.map(\.index) == [1,2,3] && model.burstChoice(group).representative == group.members[0].source && group.members[0].source_cover,"source frame order and COVER remain facts: indexes=\(group.members.map(\.index)) representative=\(String(describing:model.burstChoice(group).representative)) expected=\(sources[0].path)")
         model.selectBurst(group,selected:true); model.setBurstChoice(group,representative:group.members[2].source)
         model.updateSettings { $0.direction = .androidToAndroid }; pump(until:{ !model.isBusy })

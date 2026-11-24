@@ -228,7 +228,21 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var sourceLabel = "尚未选择原片"
     @Published private(set) var output: URL?
     @Published private(set) var items: [PhotoQueueItem] = []
-    @Published private(set) var burstGroups: [BurstGroup] = []
+    @Published private(set) var burstGroups: [BurstGroup] = [] {
+        didSet { burstMembership = Self.membership(burstGroups) }
+    }
+    // Member path -> group index. Views and readiness checks ask this per photo;
+    // a linear scan of every group's members made large burst queues quadratic.
+    private var burstMembership: [String:Int] = [:]
+    private static func membership(_ groups: [BurstGroup]) -> [String:Int] {
+        var result: [String:Int] = [:]
+        for (index,group) in groups.enumerated() { for member in group.members where result[member.source] == nil { result[member.source] = index } }
+        return result
+    }
+    func burstGroup(containing id: String) -> BurstGroup? {
+        guard let index = burstMembership[id], burstGroups.indices.contains(index) else { return nil }
+        return burstGroups[index]
+    }
     @Published var burstReviewPresented = false
     private var burstApproved = false
     private var burstOutput: URL?
@@ -780,9 +794,12 @@ final class WorkspaceModel: ObservableObject {
         // Only confirmed unknown-cover sources enter this job. Known timestamps
         // still take precedence in the engine; unconfirmed items never enter it.
         if targets.contains(where:{ settings.manualMidpoints?[$0.id] == true }) { capturedSettings.missingTime = .midpoint }
+        // Index once: per-target linear searches made starting a large batch quadratic on the main thread.
+        let itemIndices = Dictionary(items.enumerated().map { ($0.element.id,$0.offset) },uniquingKeysWith:{ first,_ in first })
+        let targetSet = Set(targets.map(\.id))
         if let base = try? NativeBatch.selection(targets.map(\.source)).base {
             rowIndices = Dictionary(targets.compactMap { item in
-                guard let index = items.firstIndex(where:{ $0.id == item.id }), let relative = try? NativeBatch.relative(item.source,root:base) else { return nil }
+                guard let index = itemIndices[item.id], let relative = try? NativeBatch.relative(item.source,root:base) else { return nil }
                 return (relative,index)
             },uniquingKeysWith:{ first,_ in first })
         }
@@ -797,7 +814,7 @@ final class WorkspaceModel: ObservableObject {
         if resultScopeIDs == nil { resultScopeIDs = Set(targets.map(\.id)) }
         let id = begin(.converting, message: "正在准备转换…"), currentToken = token
         report = nil; progress = 0
-        for index in items.indices where targets.contains(where:{ $0.id == items[index].id }) { items[index].resultState = nil; items[index].resultDetail = nil }
+        for index in items.indices where targetSet.contains(items[index].id) { items[index].resultState = nil; items[index].resultDetail = nil }
         service.run(job: job, token: currentToken, existingOutput: { [weak self] source, target, reply in
             guard let self = self, self.operation == id, !currentToken.isCancelled else { reply(.cancel); return }
             self.phase = .awaitingDecision; self.status = "等待处理已有输出"
@@ -825,9 +842,8 @@ final class WorkspaceModel: ObservableObject {
             switch result {
             case .success(let outcome):
                 let report = ConversionReport(outcome); self.report = report
-                for entry in report.entries where entry.state == .copied {
-                    if let index = self.items.firstIndex(where:{ $0.id == entry.source }) { self.items[index].resultState = .copied }
-                }
+                let copied = Set(report.entries.filter { $0.state == .copied }.map(\.source))
+                for index in self.items.indices where copied.contains(self.items[index].id) { self.items[index].resultState = .copied }
                 self.phase = outcome.cancelled ? .stopped : .completed
                 self.status = outcome.cancelled ? "任务已停止" : report.counts["failed", default: 0] > 0 ? "已完成，部分文件需要检查" : "处理完成"
                 if !outcome.cancelled && !currentToken.isCancelled && self.followsConversionResults { self.queueScope = .completed }
@@ -992,7 +1008,7 @@ extension WorkspaceModel {
             if actionBlockingReason(item) != nil { return false }
             if settings.photoTimeRepair == true && settings.direction != .toApple && item.isMotion && item.row.captureTimeMissing == true { return false }
             guard isTimeRepairCandidate(item) || item.isConvertible && category(item) == .ready else { return false }
-            if let group = burstGroups.first(where:{ $0.members.contains(where:{ $0.source == item.id }) }) {
+            if let group = burstGroup(containing:item.id) {
                 return burstBlockingReason(group) == nil
             }
             return true
@@ -1083,7 +1099,7 @@ extension WorkspaceModel {
         }
         if let frame = item.row.burst {
             if !frame.supported { return frame.reason }
-            if let group = burstGroups.first(where:{ $0.members.contains(where:{ $0.source == item.id }) }) {
+            if let group = burstGroup(containing:item.id) {
                 if let reason = burstBlockingReason(group) { return reason }
                 return burstChoice(group).independent ? "原样输出所选独立照片，不写连拍标记" : "连拍标记转换 · 保留现有原序号与全部所选帧；允许缺帧，不猜原总数"
             }

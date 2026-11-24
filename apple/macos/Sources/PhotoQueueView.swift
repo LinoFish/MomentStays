@@ -160,7 +160,7 @@ struct PhotoQueueView: View {
             ZStack {
                 if prefersGrid { gridBrowser(items,marqueeLayout:marqueeLayout) }
                 else { listBrowser(browserLayout,items:items,marqueeLayout:marqueeLayout) }
-                if visibleItems.isEmpty { emptyState }
+                if items.isEmpty { emptyState }
             }
             .frame(maxWidth:.infinity,maxHeight:.infinity)
             .coordinateSpace(name:QueueMarqueeMath.space)
@@ -236,10 +236,11 @@ struct PhotoQueueView: View {
         }.background(QueueMarqueeFrameReader(id:item.id,layout:layout))
     }
     @ViewBuilder private func burstFilmstrip(_ item: PhotoQueueItem) -> some View {
-        if let group = model.burstGroups.first(where:{$0.members.contains(where:{$0.source == item.id})}) {
+        if let group = model.burstGroup(containing:item.id) {
+            let visible = Set(visibleItems.map(\.id))
             ScrollView(.horizontal,showsIndicators:true) {
                 HStack(spacing:5) {
-                    ForEach(group.members.filter { member in visibleItems.contains(where:{$0.id == member.source}) },id:\.source) { member in
+                    ForEach(group.members.filter { visible.contains($0.source) },id:\.source) { member in
                         Button { model.selection = member.source } label: {
                         PhotoThumbnail(source:URL(fileURLWithPath:member.source),isPreview:model.isPreview)
                             .frame(width:56,height:44).clipped().cornerRadius(4)
@@ -1016,7 +1017,7 @@ struct PhotoQueueView: View {
 private extension PhotoQueueView {
     func resultEntry(_ item: PhotoQueueItem) -> ReportEntry? {
         if let entry = resultEntries[item.id] { return entry }
-        guard let group = model.burstGroups.first(where:{ $0.members.contains(where:{$0.source == item.id}) }) else { return nil }
+        guard let group = model.burstGroup(containing:item.id) else { return nil }
         return group.members.compactMap { resultEntries[$0.source] }.first
     }
     func resultState(_ item: PhotoQueueItem) -> PhotoState? { resultEntry(item)?.state ?? item.resultState ?? item.originalExportState }
