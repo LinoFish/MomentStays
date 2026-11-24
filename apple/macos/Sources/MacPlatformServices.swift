@@ -660,6 +660,9 @@ final class MacPlatformServices: NSObject {
 
     func cleanup() {
         stopMonitoring(); readerToken?.cancel(); libraryReader?.cancel()
+        // Parsed still/video snapshots of the user's photos live in a private temp
+        // folder; the app-lifetime service never deinitializes, so purge it on quit.
+        model.purgeTemporaryFiles()
         for root in ownedPhotoCopies { try? FileManager.default.removeItem(at: root) }
         ownedPhotoCopies.removeAll()
     }

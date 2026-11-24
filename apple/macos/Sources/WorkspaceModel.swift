@@ -854,6 +854,8 @@ final class WorkspaceModel: ObservableObject {
         })
     }
 
+    func purgeTemporaryFiles() { service.purgeInspections() }
+
     func stop() {
         guard canStop else { return }
         token.cancel(); phase = .stopping

@@ -1165,6 +1165,15 @@ struct WorkspaceModelTests {
         let enumerations = folderCache.enumerationCount
         _ = try folderCache.rows(sources:[folder],direction:.toApple,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
         check(folderCache.enumerationCount == enumerations && folderCache.parseCount == 2, "unchanged folders reuse their inventory without rescanning the directory tree")
+        check(FileManager.default.fileExists(atPath:folderCache.folder.path), "parsed source snapshots are cached in the private temporary folder")
+        folderCache.removeFolder()
+        check(!FileManager.default.fileExists(atPath:folderCache.folder.path), "temporary source snapshots can be purged on termination")
+        let purgeService = ConversionService(); var purgeDone = false
+        purgeService.scan(sources:[folder],direction:.toApple,token:StopToken(),rowsReady:{ _ in },progress:{ _,_ in }) { _ in purgeDone = true }
+        pump(until:{ purgeDone })
+        check(FileManager.default.fileExists(atPath:purgeService.inspections.folder.path), "service scan writes private source snapshots")
+        purgeService.purgeInspections()
+        check(!FileManager.default.fileExists(atPath:purgeService.inspections.folder.path), "service purge removes private source snapshots synchronously")
         _ = try cache.rows(sources:[still],direction:.toAndroid,token:StopToken(),rowsReady:{_ in},progress:{_,_ in})
         let pairBefore = cache.pairValidationCount
         let movie = still.deletingPathExtension().appendingPathExtension("mov")
