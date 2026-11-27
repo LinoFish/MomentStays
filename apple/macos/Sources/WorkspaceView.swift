@@ -307,7 +307,7 @@ struct WorkspaceView: View {
         } else {
             Button(action:advance) {
                 // The narrow sidebar (264 pt) truncated longer localized titles.
-                Text(AppText.text(primaryActionTitle)).lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth:.infinity)
+                Text(AppText.text(primaryActionTitle)).lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth:.infinity)
             }.buttonStyle(.borderedProminent).tint(InterfaceStyle.accent)
                 .foregroundColor(InterfaceStyle.accentForeground)
                 .disabled(!canAdvance).recordLayout("primary-action")
