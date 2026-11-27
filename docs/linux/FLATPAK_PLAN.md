@@ -11,8 +11,9 @@
 
 ## 2. 应用 ID
 
-沿用 macOS 包标识 `com.linofish.momentstays` 的反向域名：**`com.linofish.MomentStays`**。
-Flathub 要求能验证 `linofish.com` 域名所有权；若不能，改用 `io.github.LinoFish.MomentStays`（仓库托管于 GitHub，Flathub 自动认可）。
+**已定：`com.linofish.MomentStays`**（2026-11-28 由版权人决定），沿用 macOS 包标识 `com.linofish.momentstays` 的反向域名。不采用 `io.github.LinoFish.MomentStays`。
+
+Flathub 验证该 ID 需要掌控 `linofish.com` 域名（Flathub 会要求在 `https://linofish.com/.well-known/org.flathub.VerifiedApps.txt` 放置验证令牌），首次提交前须确认能修改该域名的网站内容。应用 ID 上架后不可再改。
 
 ## 3. Manifest 概要（`com.linofish.MomentStays.json`）
 
@@ -80,7 +81,7 @@ modules:
 
 ## 8. Flathub 提交清单
 
-1. 应用 ID 域名验证（或改 `io.github.*`）。
+1. 应用 ID `com.linofish.MomentStays` 的域名验证：需掌控 `linofish.com`（放置 Flathub 验证令牌）。
 2. Manifest 在 `flathub/flathub` 新建 PR（`new-pr` 分支），离线 vendored cargo 源。
 3. finish-args 最小化并在 PR 说明每项理由；无 `--filesystem`。
 4. metainfo / desktop / 图标通过 `flatpak-builder-lint`（manifest、builddir、repo 三项）。
@@ -110,4 +111,4 @@ modules:
 - **与 Apple 后端的像素差异**：JPEG 质量映射、IDCT 舍入、ICC 字节、EXIF 改写方式不同（见 `core/LINUX_NATIVE.md`）；HDR 视频帧不做色调映射。输出可用但非逐字节一致。
 - **Portal 文件访问**：只能访问用户选过的文件/文件夹；Documents portal 的 FUSE 路径上 `GFileMonitor` 可能收不到事件、`inode`/`ctime` 版本信息可能不稳定（影响“来源已变化”检测与复用），需实测并准备手动刷新。
 - **内存预算**：`/proc/meminfo` 是宿主总内存，不反映 cgroup 限制。
-- **域名/应用 ID**：若无法验证 `linofish.com`，需在首发前改用 `io.github.LinoFish.MomentStays`，之后不可再改。
+- **域名验证**：应用 ID 已定为 `com.linofish.MomentStays`，Flathub 验证依赖对 `linofish.com` 的控制；若届时无法在该域名放置验证令牌，Flathub 上的验证会受阻，需先解决域名控制问题。
