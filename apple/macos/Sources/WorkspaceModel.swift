@@ -93,7 +93,10 @@ struct PhotoQueueItem: Identifiable {
     let cover: String
     let scanDetail: String
     let row: ScanRow
+    // From the shared core (`queue-state`): fixed by the scan row and allowsStaticHDR.
     let initialState: PhotoState
+    let isConvertible: Bool
+    let isStaticHDR: Bool
     var resultState: PhotoState?
     var resultDetail: String?
     var originalDelivery: String? = nil
@@ -101,30 +104,38 @@ struct PhotoQueueItem: Identifiable {
     var originalExportOutput: String? = nil
     var id: String { source.path }
     var name: String { source.lastPathComponent }
-    private let allowsStaticHDR: Bool
-    var isConvertible: Bool { row.burst.map { allowsStaticHDR && $0.supported } ?? (isMotion || (allowsStaticHDR && row.isStaticHDR)) }
+    let allowsStaticHDR: Bool
     var requiresManualFrame: Bool { cover == "未确定（需选帧）" }
     var state: PhotoState { resultState ?? initialState }
     var detail: String { resultDetail?.isEmpty == false ? resultDetail! : scanDetail }
 
-    func category(settings: ConversionSettings) -> PhotoState {
-        if row.burst != nil && settings.direction != .toApple { return .inspect }
-        if [.converted,.resumed,.copied].contains(state) { return .converted }
-        if state == .static { return .static }
-        if [.inspect,.failed].contains(state) { return .inspect }
-        if requiresManualFrame && settings.direction == .toApple && settings.manualCovers?[id] == nil { return .manual }
-        if isMotion && cover == "未记录" && settings.direction == .toApple && settings.missingTime == .error &&
-            settings.exportMode != .auxiliaryOnly && settings.coverIndex(for:source) == nil && settings.manualMidpoints?[id] != true { return .manual }
-        return .ready
+    /// The queue scope this item is listed under (one core call; WorkspaceModel.category
+    /// answers from one call for the whole queue).
+    func category(settings: ConversionSettings) -> PhotoState { Self.categories([self], settings: settings)[0] }
+    static func categories(_ items: [PhotoQueueItem], settings: ConversionSettings) -> [PhotoState] {
+        coreQueueStates(items.map { (row: $0.row, allowsStaticHDR: $0.allowsStaticHDR, resultState: $0.resultState) }, settings: settings).map(\.category)
     }
 
     init(_ row: ScanRow, allowsStaticHDR: Bool = true) {
+        self.init(row, allowsStaticHDR: allowsStaticHDR, state: Self.coreQueueStates([(row: row, allowsStaticHDR: allowsStaticHDR, resultState: nil)], settings: ConversionSettings())[0])
+    }
+    private init(_ row: ScanRow, allowsStaticHDR: Bool, state: CoreQueueState) {
         self.allowsStaticHDR = allowsStaticHDR
         self.row = row
         source = row.source; relative = row.relative; isMotion = row.isMotion
         manufacturer = row.manufacturer; manufacturerDetail = row.manufacturerDetail
         hdr = row.hdr; cover = row.cover; scanDetail = row.detail
-        initialState = row.burst.map { allowsStaticHDR && $0.supported ? .ready : .inspect } ?? ((row.isMotion || (allowsStaticHDR && row.isStaticHDR)) ? .ready : row.needsInspection ? .inspect : .static)
+        initialState = state.initialState; isConvertible = state.isConvertible; isStaticHDR = state.isStaticHDR
+    }
+    /// Everything `category(settings:)` reads from the item itself.
+    func sameQueueFacts(_ other: PhotoQueueItem) -> Bool {
+        resultState == other.resultState && initialState == other.initialState && allowsStaticHDR == other.allowsStaticHDR &&
+            isMotion == other.isMotion && cover == other.cover && (row.burst == nil) == (other.row.burst == nil) && source == other.source
+    }
+    /// Queue items for many rows from one core call.
+    static func make(_ rows: [(row: ScanRow, allowsStaticHDR: Bool)]) -> [PhotoQueueItem] {
+        let states = coreQueueStates(rows.map { (row: $0.row, allowsStaticHDR: $0.allowsStaticHDR, resultState: nil) }, settings: ConversionSettings())
+        return zip(rows, states).map { PhotoQueueItem($0.0.row, allowsStaticHDR: $0.0.allowsStaticHDR, state: $0.1) }
     }
 }
 
@@ -255,8 +266,7 @@ enum PhotoQueueScope: String, CaseIterable, Identifiable {
         case .attention: return "没有需要检查的照片"
         }
     }
-    func includes(_ item: PhotoQueueItem, settings: ConversionSettings = ConversionSettings()) -> Bool {
-        let category = item.category(settings:settings)
+    func includes(category: PhotoState) -> Bool {
         switch self {
         case .all: return true
         case .manual: return category == .manual
@@ -291,6 +301,8 @@ final class WorkspaceModel: ObservableObject {
         var availableLive: Bool?
         // actionBlockingReason for every queue item, from one core call.
         var blocking: [String:String?]?
+        // category for every queue item, from one core call.
+        var categories: [String:(item: PhotoQueueItem, category: PhotoState)]?
         var visible: [PhotoQueueScope:[PhotoQueueItem]] = [:]
         var sourceSignature: Int?
     }
@@ -299,7 +311,7 @@ final class WorkspaceModel: ObservableObject {
         if derivedPlan.revision != derivedRevision {
             derivedPlan.revision = derivedRevision
             derivedPlan.scope = nil; derivedPlan.ready = nil; derivedPlan.readiness = [:]; derivedPlan.timeCandidates = [:]
-            derivedPlan.availableLive = nil; derivedPlan.blocking = nil; derivedPlan.visible = [:]; derivedPlan.sourceSignature = nil
+            derivedPlan.availableLive = nil; derivedPlan.blocking = nil; derivedPlan.categories = nil; derivedPlan.visible = [:]; derivedPlan.sourceSignature = nil
         }
         return derivedPlan
     }
@@ -643,7 +655,16 @@ final class WorkspaceModel: ObservableObject {
     var canStop: Bool { isBusy && phase != .stopping && !isPreview }
     var selectedItem: PhotoQueueItem? { items.first { $0.id == selection } }
     var motionCount: Int { items.filter { $0.isConvertible }.count }
-    func category(_ item: PhotoQueueItem) -> PhotoState { item.category(settings:settings) }
+    func category(_ item: PhotoQueueItem) -> PhotoState {
+        if plan.categories == nil {
+            let value = PhotoQueueItem.categories(items, settings: settings)
+            plan.categories = Dictionary(zip(items.map(\.id), zip(items, value).map { (item: $0.0, category: $0.1) }),
+                                         uniquingKeysWith: { first, _ in first })
+        }
+        // A copy that differs from the queue's own item is answered on its own.
+        if let cached = plan.categories?[item.id], cached.item.sameQueueFacts(item) { return cached.category }
+        return item.category(settings:settings)
+    }
     func displayState(_ item: PhotoQueueItem) -> PhotoState {
         let category = category(item)
         return category == .converted && item.state == .copied ? .copied : category
@@ -833,14 +854,16 @@ final class WorkspaceModel: ObservableObject {
             })
         }
         let retained = preservingResults ? Dictionary(items.map { ($0.id,$0) },uniquingKeysWith:{ first,_ in first }) : [:]
-        func queueItem(_ row: ScanRow) -> PhotoQueueItem {
-            var item = PhotoQueueItem(row,allowsStaticHDR:sourceOrigins[row.source.path] == nil && (row.hdr != "OPPO UHDR（实验）" || settings.direction == .toApple))
-            if let old = retained[item.id], old.row.version != nil, old.row.version == row.version {
-                item.resultState = old.resultState; item.resultDetail = old.resultDetail
-                item.originalDelivery = old.originalDelivery; item.originalExportState = old.originalExportState
-                item.originalExportOutput = old.originalExportOutput
+        func queueItems(_ rows: [ScanRow]) -> [PhotoQueueItem] {
+            PhotoQueueItem.make(rows.map { (row: $0, allowsStaticHDR: sourceOrigins[$0.source.path] == nil && ($0.hdr != "OPPO UHDR（实验）" || settings.direction == .toApple)) }).map { made in
+                var item = made
+                if let old = retained[item.id], old.row.version != nil, old.row.version == item.row.version {
+                    item.resultState = old.resultState; item.resultDetail = old.resultDetail
+                    item.originalDelivery = old.originalDelivery; item.originalExportState = old.originalExportState
+                    item.originalExportOutput = old.originalExportOutput
+                }
+                return item
             }
-            return item
         }
         let phase: TaskPhase = projection ? .projecting : .scanning
         let id = begin(phase, message: projection ? "正在切换转换方向…" : "正在检查照片…"), currentToken = token
@@ -849,7 +872,7 @@ final class WorkspaceModel: ObservableObject {
         else { items.removeAll { changed.contains($0.id) } }
         var streamed = Dictionary(items.map { ($0.id,$0) },uniquingKeysWith:{ first,_ in first })
         func merge(_ rows:[ScanRow]) -> [PhotoQueueItem] {
-            for row in rows { streamed[row.source.path] = queueItem(row) }
+            for item in queueItems(rows) { streamed[item.id] = item }
             return streamed.values.sorted { $0.relative.localizedStandardCompare($1.relative) == .orderedAscending }
         }
         let inspect = projection ? service.project : service.scan
@@ -869,7 +892,7 @@ final class WorkspaceModel: ObservableObject {
                 self.invalidateCoverSelections(changedSources(rows))
                 if !currentToken.isCancelled { self.invalidateCoverSelections(Set(versions.keys).subtracting(rows.map { $0.source.path })) }
                 self.scanComplete = !currentToken.isCancelled
-                self.items = currentToken.isCancelled ? merge(rows).filter { $0.row.version == nil || SourceVersion.read($0.source) == $0.row.version } : rows.map(queueItem)
+                self.items = currentToken.isCancelled ? merge(rows).filter { $0.row.version == nil || SourceVersion.read($0.source) == $0.row.version } : queueItems(rows)
                 self.rebuildBurstGroups()
                 let valid = Set(self.items.map(\.id))
                 self.selectedIDs.formIntersection(valid)
@@ -1142,7 +1165,7 @@ extension WorkspaceModel {
         guard settings.photoTimeRepair == true, settings.direction == .toApple,
               (settings.liveConversion == false || !availableLive || settings.exportMode != .auxiliaryOnly), !migrationScopeItems.isEmpty else { return false }
         return migrationScopeItems.allSatisfy {
-            sourceOrigins[$0.id] == nil && $0.row.confirmedStatic && !$0.row.isStaticHDR && !$0.isMotion && $0.row.burst == nil
+            sourceOrigins[$0.id] == nil && $0.row.confirmedStatic && !$0.isStaticHDR && !$0.isMotion && $0.row.burst == nil
         }
     }
     var canReviewMigration: Bool {
@@ -1195,8 +1218,8 @@ extension WorkspaceModel {
         return value
     }
     var availableBurst: Bool { settings.direction == .toApple && migrationScopeItems.contains { $0.row.burst?.supported == true } }
-    var availableHDR: Bool { settings.privateHDRExperimentAvailable && migrationScopeItems.contains { $0.isConvertible && ($0.row.isStaticHDR || $0.hdr.contains("HDR")) && ($0.hdr != "荣耀私有 HDR" || $0.row.privateHDRSupported == true) } }
-    var availableTime: Bool { migrationScopeItems.contains { ($0.row.confirmedStatic && !$0.row.isStaticHDR && !$0.isMotion && $0.row.burst == nil) || isMigrationReady($0) } }
+    var availableHDR: Bool { settings.privateHDRExperimentAvailable && migrationScopeItems.contains { $0.isConvertible && ($0.isStaticHDR || $0.hdr.contains("HDR")) && ($0.hdr != "荣耀私有 HDR" || $0.row.privateHDRSupported == true) } }
+    var availableTime: Bool { migrationScopeItems.contains { ($0.row.confirmedStatic && !$0.isStaticHDR && !$0.isMotion && $0.row.burst == nil) || isMigrationReady($0) } }
     var availableMetadataTime: Bool { settings.direction == .toApple || migrationScopeItems.contains { !$0.isMotion && $0.row.burst == nil } }
     func actionBlockingReason(_ item: PhotoQueueItem) -> String? {
         if plan.blocking == nil {
@@ -1271,7 +1294,7 @@ extension WorkspaceModel {
     func visibleMigrationItems(in scope: PhotoQueueScope) -> [PhotoQueueItem] {
         if let cached = plan.visible[scope] { return cached }
         let value = items.filter { item in
-            scope.includes(item,settings:settings) && migrationFeatureFilters.allSatisfy { $0.includes(item) } &&
+            scope.includes(category:category(item)) && migrationFeatureFilters.allSatisfy { $0.includes(item) } &&
             (migrationSearch.isEmpty || (item.name + " " + item.relative + " " + item.manufacturer).localizedCaseInsensitiveContains(migrationSearch)) &&
             (migrationSource.map { path in item.id == path || item.id.hasPrefix(path.hasSuffix("/") ? path : path + "/") } ?? true)
         }

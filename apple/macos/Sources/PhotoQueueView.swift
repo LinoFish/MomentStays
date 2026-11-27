@@ -103,7 +103,7 @@ struct PhotoQueueView: View {
                     guard editsSelection, model.canImportSources else { return false }
                     return actions.acceptDrop(providers, false)
                 }
-                if !inspectorIsShown(layout), let item = model.selectedItem, scope.includes(item,settings:model.settings) { detail(item) }
+                if !inspectorIsShown(layout), let item = model.selectedItem, scope.includes(category:model.category(item)) { detail(item) }
                 queueStatusBar(layout)
             }
             .background(InterfaceStyle.gallery)
@@ -695,7 +695,7 @@ struct PhotoQueueView: View {
     }
 
     @ViewBuilder private func scopeButton(_ value: PhotoQueueScope) -> some View {
-        let count = model.items.filter { value.includes($0,settings:model.settings) }.count
+        let count = model.items.filter { value.includes(category:model.category($0)) }.count
         Button { scope = value } label: {
             HStack(spacing:6) {
                 Text(AppText.text(value.title)).fontWeight(scope == value ? .semibold : .regular)

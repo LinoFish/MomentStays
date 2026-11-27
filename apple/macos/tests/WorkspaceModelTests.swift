@@ -170,7 +170,7 @@ struct WorkspaceModelTests {
         let unknown = folder.appendingPathComponent("unknown.jpg")
         try Data(plainStill + [1,2,3]).write(to:unknown)
         let unknownRow = NativeBatch.scanFile(unknown,relative:"unknown.jpg")
-        check(unknownRow.needsInspection && !unknownRow.confirmedStatic,"unknown trailing payload is not called a static photo")
+        check(PhotoQueueItem(unknownRow).initialState == .inspect && !unknownRow.confirmedStatic,"unknown trailing payload is not called a static photo")
         do {
             _ = try NativeBatch.run(sources:[folder],output:destination,options:ConversionOptions(),token:StopToken(),scanRows:rows) { _ in }
             check(false,"new source must invalidate the batch snapshot")
@@ -743,7 +743,7 @@ struct WorkspaceModelTests {
         for direction:ConversionDirection in [.toApple,.toAndroid,.androidToAndroid] {
             let model=WorkspaceModel(); model.updateSettings { $0.direction=direction; $0.exportDataFiles=false }
             model.chooseSources([source]); pump(until:{ !model.isBusy })
-            check(model.items.first?.row.isStaticHDR == true && model.items.first?.isMotion == false,"production static HDR scan stays static in every direction")
+            check(model.items.first?.isStaticHDR == true && model.items.first?.isMotion == false,"production static HDR scan stays static in every direction")
             model.toggleSelection(model.items[0]); let out=root.appendingPathComponent("hdr-" + direction.rawValue)
             try FileManager.default.createDirectory(at:out,withIntermediateDirectories:true)
             model.setOutput(out); model.start(); pump(until:{ !model.isBusy })

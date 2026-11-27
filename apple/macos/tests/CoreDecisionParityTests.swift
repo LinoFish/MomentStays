@@ -3,19 +3,22 @@ import AVFoundation
 import CryptoKit
 
 // Parity of the Swift decisions with the shared Rust core (core/src/engine/decisions):
-// filename capture time, action blocking reason, Live Photo still selection and
-// per-track sample facts. Every corpus is deterministic, and each decision prints a
+// filename capture time, action blocking reason, queue state, Live Photo still
+// selection and per-track sample facts. Every corpus is deterministic, and each decision prints a
 // SHA-256 digest of its results. A decision whose Swift implementation was removed
 // is checked against the digest the removed Swift code produced on the same corpus
 // (recorded by this test in CI before the switch).
 //   action-blocking-reason, live-selection, filename-time: legacy Swift digests from
 //   run 46057504970 (filename-time legacy == core per case in run 46059778452).
+//   queue-state: legacy Swift digest from run 46066645615 (legacy == core on all
+//   4,324,320 cases there, 0 mismatches).
 @main
 struct CoreDecisionParityTests {
     static let legacySwiftDigests = [
         "action-blocking-reason": "75e5b2de2635069980c680baf3df66ca33acb89355016ac0d460d15af7f9b0c7",
         "live-selection": "4859f98b15ef2ba1784bd0928c4f17d00e7fb5d7257c105b600c658d62dd7eea",
         "filename-time": "f74b464e2a909efa69bf714106935f1697adccfc6535120ee0380b1d98d7e21b",
+        "queue-state": "d25639bae39519462904fcc61f63b0860333e96d891587d639518125e35b94aa",
     ]
     static func golden(_ area: String, _ digest: String) {
         guard let expected = legacySwiftDigests[area] else { return }
@@ -260,36 +263,32 @@ struct CoreDecisionParityTests {
 
     static func queueState() throws -> String {
         let (entries, settingsList) = try queueCorpus()
-        let legacyDigest = Digest(), coreDigest = Digest()
-        var compared = 0
+        var items = PhotoQueueItem.make(entries.map { (row: $0.row, allowsStaticHDR: $0.allowsStaticHDR) })
+        for index in items.indices { items[index].resultState = entries[index].resultState }
+        if items.count != entries.count { mismatch("queue-state", "\(items.count) items for \(entries.count) rows") }
+        // The single-row initializer answers like the batch one.
+        for index in stride(from: 0, to: items.count, by: 97) {
+            let one = PhotoQueueItem(entries[index].row, allowsStaticHDR: entries[index].allowsStaticHDR)
+            if (one.initialState, one.isConvertible, one.isStaticHDR) != (items[index].initialState, items[index].isConvertible, items[index].isStaticHDR) {
+                mismatch("queue-state", "\(items[index].name): single and batch initializers differ")
+            }
+        }
+        let digest = Digest()
         for (index, settings) in settingsList.enumerated() {
-            let core = PhotoQueueItem.coreQueueStates(entries, settings: settings)
-            if core.count != entries.count { mismatch("queue-state", "settings#\(index): \(core.count) answers for \(entries.count) items"); continue }
-            for (offset, (entry, coreValue)) in zip(entries, core).enumerated() {
-                compared += 1
-                var item = PhotoQueueItem(entry.row, allowsStaticHDR: entry.allowsStaticHDR)
-                item.resultState = entry.resultState
-                let legacy = CoreQueueState(isStaticHDR: item.row.isStaticHDR, isConvertible: item.isConvertible,
-                                            initialState: item.initialState, category: item.category(settings: settings))
-                legacyDigest.add(queueLine(index, item.name, legacy))
-                coreDigest.add(queueLine(index, item.name, coreValue))
-                if legacy != coreValue {
-                    mismatch("queue-state", "settings#\(index) \(settings.direction.rawValue)/\(settings.missingTime.rawValue)/\(settings.exportMode.rawValue) " +
-                             "\(item.name) motion=\(entry.row.isMotion) burst=\(entry.row.burst.map { "\($0.supported)" } ?? "nil") " +
-                             "static=\(entry.row.confirmedStatic) allows=\(entry.allowsStaticHDR) hdr=\(entry.row.hdr.debugDescription)/\(entry.row.hdrKind ?? "nil") " +
-                             "cover=\(entry.row.cover.debugDescription) result=\(entry.resultState?.rawValue ?? "nil"): swift \(legacy) core \(coreValue)")
-                }
+            let categories = PhotoQueueItem.categories(items, settings: settings)
+            if categories.count != items.count { mismatch("queue-state", "settings#\(index): \(categories.count) answers for \(items.count) items"); continue }
+            for (offset, (item, category)) in zip(items, categories).enumerated() {
+                digest.add(queueLine(index, item.name, CoreQueueState(isStaticHDR: item.isStaticHDR, isConvertible: item.isConvertible,
+                                                                      initialState: item.initialState, category: category)))
                 // The single-item call answers like the batch one.
-                if offset % 997 == 0, PhotoQueueItem.coreQueueStates([entry], settings: settings).first != coreValue {
+                if offset % 997 == 0, item.category(settings: settings) != category {
                     mismatch("queue-state", "settings#\(index) \(item.name): single and batch answers differ")
                 }
             }
         }
-        print("queue-state: \(compared) item×settings cases (\(entries.count) items, \(settingsList.count) settings), " +
-              "legacy Swift digest \(legacyDigest.value), core digest \(coreDigest.value)")
-        let value = coreDigest.value
-        golden("queue-state", value)
-        return value
+        print("queue-state: \(digest.count) item×settings cases (\(items.count) items, \(settingsList.count) settings), digest \(digest.value)")
+        golden("queue-state", digest.value)
+        return digest.value
     }
 
     // MARK: live-selection

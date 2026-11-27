@@ -39,9 +39,14 @@ Shared UI decisions (`engine::decisions`, for macOS and the GNOME app):
 `hdr-kinds` (stable `hdr_kind` codes, also in every scan row), `filename-time`
 (capture time from an original filename), `track-info` (per-track sample
 facts from MP4/MOV bytes), `action-blocking-reason` (per-item conversion
-blocker) and `live-selection` (still paired with a selected Live movie).
-The Apple app calls three of them: `WorkspaceModel.actionBlockingReason`
+blocker), `queue-state` (a queue item's static HDR flag, convertibility,
+initial state and queue category) and `live-selection` (still paired with a
+selected Live movie).
+The Apple app calls four of them: `WorkspaceModel.actionBlockingReason`
 (one `action-blocking-reason` call per plan revision for the whole queue),
+`PhotoQueueItem` (`queue-state`: one call per scan batch for `initialState`,
+`isConvertible` and `isStaticHDR`, and one per plan revision for
+`WorkspaceModel.category`),
 `PhotoTimeRepair.inferredTime` (`filename-time` with Foundation's own stems,
 `"stems": true`; wall-clock tokens are still resolved in the chosen time zone
 by Foundation) and `AndroidExport.selection` (`live-selection` for a selected
