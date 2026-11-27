@@ -306,7 +306,8 @@ struct WorkspaceView: View {
             }.disabled(!model.canStop).recordLayout("primary-action").accessibilityIdentifier("stop-button")
         } else {
             Button(action:advance) {
-                Text(AppText.text(primaryActionTitle)).lineLimit(1).frame(maxWidth:.infinity)
+                // The narrow sidebar (264 pt) truncated longer localized titles.
+                Text(AppText.text(primaryActionTitle)).lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth:.infinity)
             }.buttonStyle(.borderedProminent).tint(InterfaceStyle.accent)
                 .foregroundColor(InterfaceStyle.accentForeground)
                 .disabled(!canAdvance).recordLayout("primary-action")
