@@ -4,7 +4,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/main.rs:15 src/ui/window.rs:43 src/ui/window.rs:607
+#: src/main.rs:20 src/ui/window.rs:43 src/ui/window.rs:615
 msgid "MomentStays"
 msgstr ""
 
@@ -276,7 +276,7 @@ msgstr ""
 msgid "Experimental"
 msgstr ""
 
-#: src/ui/prefs.rs:141 src/ui/window.rs:148 src/ui/window.rs:581
+#: src/ui/prefs.rs:141 src/ui/window.rs:148 src/ui/window.rs:589
 msgid "Export Settings"
 msgstr ""
 
@@ -347,7 +347,7 @@ msgstr ""
 msgid "Results are in “{folder}”."
 msgstr ""
 
-#: src/ui/sidebar.rs:17 src/ui/window.rs:51 src/ui/window.rs:578
+#: src/ui/sidebar.rs:17 src/ui/window.rs:51 src/ui/window.rs:586
 msgid "Add Source Folder"
 msgstr ""
 
@@ -437,7 +437,7 @@ msgstr ""
 msgid "Toggle Sources"
 msgstr ""
 
-#: src/ui/window.rs:129 src/ui/window.rs:579
+#: src/ui/window.rs:129 src/ui/window.rs:587
 msgid "Search Photos"
 msgstr ""
 
@@ -457,73 +457,73 @@ msgstr ""
 msgid "Toggle Details"
 msgstr ""
 
-#: src/ui/window.rs:164
+#: src/ui/window.rs:165
 msgid "Search file names, folders or devices"
 msgstr ""
 
-#: src/ui/window.rs:207
+#: src/ui/window.rs:208
 msgid "Include All Shown"
 msgstr ""
 
-#: src/ui/window.rs:211
+#: src/ui/window.rs:212
 msgid "Exclude All Shown"
 msgstr ""
 
-#: src/ui/window.rs:217
+#: src/ui/window.rs:218
 msgid "Include or Exclude"
 msgstr ""
 
-#: src/ui/window.rs:233
+#: src/ui/window.rs:234
 msgid "Add Photos to Convert"
 msgstr ""
 
-#: src/ui/window.rs:237
+#: src/ui/window.rs:238
 msgid "Scanning Photos…"
 msgstr ""
 
-#: src/ui/window.rs:242
+#: src/ui/window.rs:243
 msgid "No Matching Photos"
 msgstr ""
 
-#: src/ui/window.rs:243
+#: src/ui/window.rs:244
 msgid "Try another filter or search."
 msgstr ""
 
-#: src/ui/window.rs:277
+#: src/ui/window.rs:278
 msgid "Sto_p"
 msgstr ""
 
-#: src/ui/window.rs:304
+#: src/ui/window.rs:305
 msgid "Details"
 msgstr ""
 
-#: src/ui/window.rs:538
+#: src/ui/window.rs:546
 #, python-brace-format
 msgid "{included} of {all} photo included"
 msgid_plural "{included} of {all} photos included"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/window.rs:575
+#: src/ui/window.rs:583
 msgid "General"
 msgstr ""
 
-#: src/ui/window.rs:580
+#: src/ui/window.rs:588
 msgid "Start Conversion"
 msgstr ""
 
-#: src/ui/window.rs:582
+#: src/ui/window.rs:590
 msgid "Keyboard Shortcuts"
 msgstr ""
 
-#: src/ui/window.rs:583
+#: src/ui/window.rs:591
 msgid "Quit"
 msgstr ""
 
-#: src/ui/window.rs:615
+#: src/ui/window.rs:623
 msgid "Convert Android Motion Photos and Apple Live Photos, keeping the moment."
 msgstr ""
 
-#: src/ui/window.rs:618
+#: src/ui/window.rs:626
 msgid "translator-credits"
 msgstr ""

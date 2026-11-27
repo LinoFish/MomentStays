@@ -32,7 +32,9 @@ is untranslated).
 
 ## Linux codec backend
 
-`--features linux-native` is a placeholder until PR #15 (feat/linux-core)
-adds the core feature; see the TODO in `Cargo.toml`. Without it the app
-shows a banner, and the core refuses codec steps (pixel checks,
-re-encoding, video frames) while byte-level conversion still runs.
+The default feature `linux-native` enables the core's Linux backend
+(libjpeg-turbo, lcms2, libheif, GStreamer from the GNOME runtime; see
+`core/LINUX_NATIVE.md`). Building outside the SDK needs their development
+packages. `--no-default-features` builds without it; the app then shows a
+banner, and the core refuses codec steps (pixel checks, re-encoding, video
+frames) while byte-level conversion still runs.

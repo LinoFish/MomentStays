@@ -24,13 +24,12 @@ serde_json = { version = "1", features = ["preserve_order"] }
 glib-build-tools = "0.22"
 
 [features]
-default = []
-# Linux system codec backend (libjpeg-turbo, lcms2, libheif, GStreamer from the
-# GNOME runtime). TODO(PR #15): `momentstays-core` on main has no
-# `linux-native` feature yet. Once feat/linux-core is merged, change this line to
-#     linux-native = ["momentstays-core/linux-native"]
-# and add "linux-native" to `default` (and to the Flatpak build command).
-linux-native = []
+default = ["linux-native"]
+# Linux system codec backend of the core (libjpeg-turbo, lcms2, libheif and
+# GStreamer from the GNOME runtime, linked dynamically). On by default: the
+# app ships only as a Flatpak on org.gnome.Platform//50, which has them all.
+# `--no-default-features` builds the app without system codecs.
+linux-native = ["momentstays-core/linux-native"]
 
 [profile.release]
 lto = "thin"

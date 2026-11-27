@@ -2,21 +2,10 @@
 //! with the user's include choices, a category filter and search.
 
 use super::settings::Direction;
+use momentstays_core::engine::decisions::hdr_kind::HdrKind;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-
-/// Static HDR labels the core treats as convertible stills
-/// (`ScanRow::is_static_hdr`). TODO(PR #15): prefer the stable
-/// `hdr_kind` code once it is in every scan row on main.
-const STATIC_HDR_LABELS: [&str; 6] = [
-    "Ultra HDR",
-    "ISO HDR",
-    "旧 Apple HDR",
-    "荣耀私有 HDR",
-    "HEIC HDR",
-    "OPPO UHDR（实验）",
-];
 
 /// What the grid shows a photo as, from the core's scan facts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -101,8 +90,13 @@ pub fn classify(row: &Value, direction: Direction) -> Category {
     if row["motion"] == true {
         return Category::Live;
     }
-    let hdr = row["hdr"].as_str().unwrap_or("");
-    if row["static"] == true && STATIC_HDR_LABELS.contains(&hdr) {
+    // The stable `hdr_kind` code; rows without it (older callers) fall
+    // back to the label, as the core itself does.
+    let kind = row["hdr_kind"]
+        .as_str()
+        .and_then(HdrKind::from_code)
+        .unwrap_or_else(|| HdrKind::from_label(row["hdr"].as_str().unwrap_or("")));
+    if row["static"] == true && kind.is_static_hdr() {
         return Category::Hdr;
     }
     Category::Attention
@@ -314,7 +308,7 @@ mod tests {
     fn rows() -> Vec<Value> {
         vec![
             json!({"source":"/p/IMG_1.jpg","relative":"IMG_1.jpg","motion":true,"hdr":"SDR","manufacturer":"Google","detail":"ok","static":false,"burst":null}),
-            json!({"source":"/p/HDR_2.jpg","relative":"HDR_2.jpg","motion":false,"hdr":"Ultra HDR","manufacturer":"Google","static":true,"burst":null}),
+            json!({"source":"/p/HDR_2.jpg","relative":"HDR_2.jpg","motion":false,"hdr":"Ultra HDR","hdr_kind":"ultra_hdr","manufacturer":"Google","static":true,"burst":null}),
             json!({"source":"/p/BURST001.jpg","relative":"b/BURST001.jpg","motion":false,"hdr":"SDR","manufacturer":"三星","static":true,
                    "burst":{"supported":true,"source_format":"samsung-burst","group_id":"g1","index":1,"source_cover":true}}),
             json!({"source":"/p/BURST002.jpg","relative":"b/BURST002.jpg","motion":false,"hdr":"SDR","manufacturer":"荣耀","static":true,
@@ -350,6 +344,20 @@ mod tests {
         assert_eq!(
             q.get(3).and_then(|i| i.burst.as_ref()).map(|b| b.format),
             Some(BurstFormat::Honor)
+        );
+    }
+
+    #[test]
+    fn hdr_kind_code_wins_over_label() {
+        let coded =
+            json!({"source":"/a.jpg","static":true,"hdr":"renamed label","hdr_kind":"iso_hdr"});
+        assert_eq!(classify(&coded, Direction::ToApple), Category::Hdr);
+        let label_only = json!({"source":"/a.jpg","static":true,"hdr":"荣耀私有 HDR"});
+        assert_eq!(classify(&label_only, Direction::ToApple), Category::Hdr);
+        let preserved = json!({"source":"/a.jpg","static":true,"hdr_kind":"ultra_hdr_preserved"});
+        assert_eq!(
+            classify(&preserved, Direction::ToApple),
+            Category::Attention
         );
     }
 

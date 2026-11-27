@@ -7,7 +7,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: src/main.rs:15 src/ui/window.rs:43 src/ui/window.rs:607
+#: src/main.rs:20 src/ui/window.rs:43 src/ui/window.rs:615
 msgid "MomentStays"
 msgstr "留刻"
 
@@ -279,7 +279,7 @@ msgstr "连拍"
 msgid "Experimental"
 msgstr "实验性功能"
 
-#: src/ui/prefs.rs:141 src/ui/window.rs:148 src/ui/window.rs:581
+#: src/ui/prefs.rs:141 src/ui/window.rs:148 src/ui/window.rs:589
 msgid "Export Settings"
 msgstr "导出设置"
 
@@ -350,7 +350,7 @@ msgstr "打开输出文件夹(_O)"
 msgid "Results are in “{folder}”."
 msgstr "结果位于“{folder}”。"
 
-#: src/ui/sidebar.rs:17 src/ui/window.rs:51 src/ui/window.rs:578
+#: src/ui/sidebar.rs:17 src/ui/window.rs:51 src/ui/window.rs:586
 msgid "Add Source Folder"
 msgstr "添加来源文件夹"
 
@@ -440,7 +440,7 @@ msgstr "将苹果实况照片转换为安卓动态照片"
 msgid "Toggle Sources"
 msgstr "显示或隐藏来源"
 
-#: src/ui/window.rs:129 src/ui/window.rs:579
+#: src/ui/window.rs:129 src/ui/window.rs:587
 msgid "Search Photos"
 msgstr "搜索照片"
 
@@ -460,72 +460,72 @@ msgstr "输出文件夹…"
 msgid "Toggle Details"
 msgstr "显示或隐藏详情"
 
-#: src/ui/window.rs:164
+#: src/ui/window.rs:165
 msgid "Search file names, folders or devices"
 msgstr "搜索文件名、文件夹或设备"
 
-#: src/ui/window.rs:207
+#: src/ui/window.rs:208
 msgid "Include All Shown"
 msgstr "纳入所有显示的照片"
 
-#: src/ui/window.rs:211
+#: src/ui/window.rs:212
 msgid "Exclude All Shown"
 msgstr "排除所有显示的照片"
 
-#: src/ui/window.rs:217
+#: src/ui/window.rs:218
 msgid "Include or Exclude"
 msgstr "纳入或排除"
 
-#: src/ui/window.rs:233
+#: src/ui/window.rs:234
 msgid "Add Photos to Convert"
 msgstr "添加要转换的照片"
 
-#: src/ui/window.rs:237
+#: src/ui/window.rs:238
 msgid "Scanning Photos…"
 msgstr "正在识别照片…"
 
-#: src/ui/window.rs:242
+#: src/ui/window.rs:243
 msgid "No Matching Photos"
 msgstr "没有匹配的照片"
 
-#: src/ui/window.rs:243
+#: src/ui/window.rs:244
 msgid "Try another filter or search."
 msgstr "请尝试其他筛选或搜索。"
 
-#: src/ui/window.rs:277
+#: src/ui/window.rs:278
 msgid "Sto_p"
 msgstr "停止(_P)"
 
-#: src/ui/window.rs:304
+#: src/ui/window.rs:305
 msgid "Details"
 msgstr "详情"
 
-#: src/ui/window.rs:538
+#: src/ui/window.rs:546
 #, python-brace-format
 msgid "{included} of {all} photo included"
 msgid_plural "{included} of {all} photos included"
 msgstr[0] "已纳入 {included} 张，共 {all} 张"
 
-#: src/ui/window.rs:575
+#: src/ui/window.rs:583
 msgid "General"
 msgstr "常规"
 
-#: src/ui/window.rs:580
+#: src/ui/window.rs:588
 msgid "Start Conversion"
 msgstr "开始转换"
 
-#: src/ui/window.rs:582
+#: src/ui/window.rs:590
 msgid "Keyboard Shortcuts"
 msgstr "键盘快捷键"
 
-#: src/ui/window.rs:583
+#: src/ui/window.rs:591
 msgid "Quit"
 msgstr "退出"
 
-#: src/ui/window.rs:615
+#: src/ui/window.rs:623
 msgid "Convert Android Motion Photos and Apple Live Photos, keeping the moment."
 msgstr "在安卓动态照片与苹果实况照片之间转换，留住原来的瞬间。"
 
-#: src/ui/window.rs:618
+#: src/ui/window.rs:626
 msgid "translator-credits"
 msgstr "Lino"

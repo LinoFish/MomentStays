@@ -6,12 +6,13 @@
 # library's gettext (all LGPL) come from org.gnome.Platform and are linked
 # dynamically; nothing LGPL is bundled (AGENTS.md, dependency rules).
 #
-# Codecs: HEVC video and AAC audio decoding (needed by the Linux codec
-# backend from PR #15 for video frames and audio checks) are not in the base
-# runtime; they come from the org.freedesktop.Platform.codecs-extra runtime
-# extension (FFmpeg-based, provided by Flathub, not bundled here). Users
-# install it with: flatpak install flathub org.freedesktop.Platform.codecs-extra//25.08
-# The app must keep working (with codec steps refused) when it is absent.
+# Codecs: the core's Linux backend (`linux-native`) uses libjpeg-turbo,
+# lcms2, libheif and GStreamer from the runtime. HEVC/H.264/AAC decoding
+# comes from the org.freedesktop.Platform.codecs-extra extension that
+# Flathub installs with the runtime (FFmpeg decoders, libheif HEVC plugin);
+# nothing is bundled. Without it (disabled or offline installs) the core
+# degrades: image checks report "unknown", frame extraction / re-encoding
+# return Unsupported, the audio check is "unavailable" (docs/linux/FLATPAK_PLAN.md).
 #
 # TODO before Flathub: replace `--share=network` in the build with
 # offline crate sources (flatpak-cargo-generator -> cargo-sources.json),
@@ -44,8 +45,8 @@ modules:
       build-args:
         - --share=network
     build-commands:
-      # TODO(PR #15): add `--features linux-native` once the core feature is on main.
-      - cargo build --release --locked --manifest-path linux/Cargo.toml
+      # Default features include `linux-native` (the core's system codec backend).
+      - cargo build --release --locked --features linux-native --manifest-path linux/Cargo.toml
       - install -Dm755 linux/target/release/momentstays /app/bin/momentstays
       - |
         for lang in $(cat linux/po/LINGUAS); do

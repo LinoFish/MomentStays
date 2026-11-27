@@ -22,7 +22,7 @@ pub const LOCALEDIR: &str = match option_env!("MOMENTSTAYS_LOCALEDIR") {
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Whether this build carries the Linux system codec backend
-/// (`linux-native`, from PR #15). Without it, codec steps (pixel checks,
+/// (`linux-native`, a default feature). Without it, codec steps (pixel checks,
 /// re-encoding, video frames) are refused by the core.
 pub const NATIVE_CODECS: bool = cfg!(feature = "linux-native");
 
