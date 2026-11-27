@@ -43,7 +43,8 @@ pub struct Settings {
     pub container: String,
     pub burst_conversion: Option<bool>,
     pub live_conversion: Option<bool>,
-    /// "livePhoto" | "auxiliaryOnly" | …
+    /// Swift `ExportMode` raw value (the engine's `output_mode`):
+    /// "livephoto" | "livephoto+auxiliary" | "auxiliary-only" | "livephoto+candidates".
     pub export_mode: String,
     /// "primary" | …
     pub track: String,
@@ -56,10 +57,12 @@ impl Item {
         self.hdr
             .unwrap_or_else(|| HdrKind::from_label(&self.hdr_label))
     }
+    /// Swift `hdr.contains("HDR")`: by code, except for labels the code
+    /// table does not know (`other`), which only the text can answer.
     fn mentions_hdr(&self) -> bool {
         match self.hdr {
-            Some(k) => k.mentions_hdr(),
-            None => self.hdr_label.contains("HDR"),
+            Some(k) if k != HdrKind::Other => k.mentions_hdr(),
+            _ => self.hdr_label.contains("HDR"),
         }
     }
     fn is_static_hdr(&self) -> bool {
@@ -112,7 +115,7 @@ pub fn blocking_reason(item: &Item, s: &Settings) -> Option<String> {
         && single
         && s.available_live
         && s.live_conversion != Some(false)
-        && (s.export_mode != "livePhoto" || s.track != "primary")
+        && (s.export_mode != "livephoto" || s.track != "primary")
     {
         return Some(LIVE_COMBO.into());
     }
@@ -170,7 +173,7 @@ mod tests {
         Settings {
             direction: "to-apple".into(),
             container: "jpeg".into(),
-            export_mode: "livePhoto".into(),
+            export_mode: "livephoto".into(),
             track: "primary".into(),
             ..Settings::default()
         }
@@ -243,7 +246,7 @@ mod tests {
         let combo = Settings {
             available_live: true,
             legacy_hdr: true,
-            export_mode: "auxiliaryOnly".into(),
+            export_mode: "auxiliary-only".into(),
             ..s.clone()
         };
         assert_eq!(blocking_reason(&ultra, &combo).unwrap(), LIVE_COMBO);
@@ -267,6 +270,38 @@ mod tests {
             ..Item::default()
         };
         assert_eq!(blocking_reason(&covered, &s).unwrap(), COVER_HDR);
+    }
+
+    #[test]
+    fn export_mode_uses_engine_raw_values() {
+        // Swift sends `ExportMode.rawValue`; plain Live Photo output on the
+        // primary track must not trip the static-HDR + live-extras rule.
+        let ultra = Item {
+            hdr: Some(HdrKind::UltraHdr),
+            confirmed_static: true,
+            ..Item::default()
+        };
+        let plain = Settings {
+            available_live: true,
+            legacy_hdr: true,
+            ..settings()
+        };
+        assert_eq!(blocking_reason(&ultra, &plain), None);
+        for mode in ["livephoto+auxiliary", "auxiliary-only", "livephoto+candidates"] {
+            let extras = Settings {
+                export_mode: mode.into(),
+                ..plain.clone()
+            };
+            assert_eq!(blocking_reason(&ultra, &extras).unwrap(), LIVE_COMBO, "{mode}");
+        }
+        let unknown = Item {
+            hdr: Some(HdrKind::Other),
+            hdr_label: "某 HDR".into(),
+            custom_cover: true,
+            is_motion: true,
+            ..Item::default()
+        };
+        assert_eq!(blocking_reason(&unknown, &settings()).unwrap(), COVER_HDR);
     }
 
     #[test]

@@ -40,18 +40,29 @@ pub struct Inferred {
     /// Seconds since 1970-01-01 UTC, when known without a zone database
     /// (Unix tokens, or calendar tokens with an explicit offset).
     pub unix: Option<f64>,
+    /// The matched digits (`.123` fraction digits, or the whole Unix token),
+    /// so a host can redo the floating-point steps exactly as it did before
+    /// (Swift: `Double("0." + digits)`, `Double(token) / pow(10, n - 10)`).
+    pub digits: Option<String>,
 }
 
 impl Inferred {
     pub fn json(&self) -> Value {
         json!({"source": self.source.code(), "local": self.local,
-            "offset_seconds": self.offset_seconds, "fraction": self.fraction, "unix": self.unix})
+            "offset_seconds": self.offset_seconds, "fraction": self.fraction, "unix": self.unix,
+            "digits": self.digits})
     }
 }
 
-/// `NSString.lastPathComponent.deletingPathExtension`.
+/// `NSString.lastPathComponent.deletingPathExtension` (trailing slashes are
+/// not a component, as in Foundation).
 fn stem(filename: &str) -> &str {
-    let name = filename.rsplit('/').next().unwrap_or(filename);
+    let trimmed = filename.trim_end_matches('/');
+    let name = if trimmed.is_empty() {
+        filename
+    } else {
+        trimmed.rsplit('/').next().unwrap_or(trimmed)
+    };
     match name.rfind('.') {
         Some(i) if i > 0 => &name[..i],
         _ => name,
@@ -281,17 +292,19 @@ pub fn infer(filename: &str) -> Option<Inferred> {
                 invalid = true;
                 continue;
             }
-            let fraction = m.fraction.map_or(0.0, |r| {
-                format!("0.{}", std::str::from_utf8(&s[r]).unwrap())
-                    .parse()
-                    .unwrap_or(0.0)
-            });
+            let digits = m
+                .fraction
+                .map(|r| String::from_utf8_lossy(&s[r]).into_owned());
+            let fraction = digits
+                .as_ref()
+                .map_or(0.0, |d| format!("0.{d}").parse().unwrap_or(0.0));
             candidates.push(Inferred {
                 source: Source::FilenameDateTime,
                 local: Some(p),
                 offset_seconds: offset,
                 fraction,
                 unix: offset.map(|o| unix_at_offset(p, o) as f64 + fraction),
+                digits,
             });
         }
     }
@@ -307,13 +320,15 @@ pub fn infer(filename: &str) -> Option<Inferred> {
             .unwrap_or(s.len());
         let n = end - at;
         if [10, 13, 16, 19].contains(&n) && !ranges.iter().any(|r| r.start < end && at < r.end) {
-            let value: f64 = std::str::from_utf8(&s[at..end]).ok()?.parse().ok()?;
+            let token = std::str::from_utf8(&s[at..end]).ok()?;
+            let value: f64 = token.parse().ok()?;
             candidates.push(Inferred {
                 source: Source::UnixTimestamp,
                 local: None,
                 offset_seconds: Some(0),
                 fraction: 0.0,
                 unix: Some(value / 10f64.powi(n as i32 - 10)),
+                digits: Some(token.into()),
             });
         }
         at = end;
@@ -359,6 +374,8 @@ mod tests {
         );
         let f = infer("20240229_123456.123.jpg").unwrap();
         assert!((shanghai(&f) - EXPECTED as f64 - 0.123).abs() < 1e-5);
+        assert_eq!(f.digits.as_deref(), Some("123"));
+        assert_eq!(infer("IMG_20240229_123456.jpg").unwrap().digits, None);
         let z = infer("2024-02-29T12:34:56-0530.jpg").unwrap();
         assert_eq!(z.offset_seconds, Some(-(5 * 3600 + 30 * 60)));
     }
@@ -370,6 +387,7 @@ mod tests {
             let i = infer(&name).unwrap();
             assert_eq!(i.source, Source::UnixTimestamp);
             assert_eq!(i.unix, Some(EXPECTED as f64));
+            assert_eq!(i.digits, Some((EXPECTED * factor).to_string()));
         }
         let ms = infer(&format!("{}.jpg", EXPECTED * 1000 + 123)).unwrap();
         assert!((ms.unix.unwrap() - EXPECTED as f64 - 0.123).abs() < 1e-5);

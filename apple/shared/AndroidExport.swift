@@ -38,6 +38,14 @@ enum AndroidExport {
         return Pair(still:still,movie:URL(fileURLWithPath:movie),identifier:id,cover:CMTime(seconds:cover,preferredTimescale:1_000_000_000),frame:frame)
     }
 
+    /// The one sibling still whose Apple content identifier equals the movie's,
+    /// decided by the shared Rust core (`live-selection`).
+    static func coreLiveStill(_ movie: URL) throws -> URL {
+        let v = try RustCore.engine(["mode":"live-selection","input":movie.path])
+        guard let still = v["still"] as? String else { throw Failure("Rust engine: invalid live selection") }
+        return URL(fileURLWithPath:still)
+    }
+
     static func selection(_ sources: [URL]) throws -> (base:URL,entries:[URL]) {
         var images: [URL] = []
         for source in sources {

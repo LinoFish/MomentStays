@@ -1150,6 +1150,36 @@ extension WorkspaceModel {
     var availableTime: Bool { migrationScopeItems.contains { ($0.row.confirmedStatic && !$0.row.isStaticHDR && !$0.isMotion && $0.row.burst == nil) || isMigrationReady($0) } }
     var availableMetadataTime: Bool { settings.direction == .toApple || migrationScopeItems.contains { !$0.isMotion && $0.row.burst == nil } }
     func actionBlockingReason(_ item: PhotoQueueItem) -> String? {
+        Self.swiftActionBlockingReason(item, settings: settings, availableLive: availableLive)
+    }
+    /// Shared Rust decision (`action-blocking-reason`,
+    /// core/src/engine/decisions/workspace.rs), one bridge call for all items.
+    static func coreActionBlockingReasons(_ items: [PhotoQueueItem], settings: ConversionSettings, availableLive: Bool) -> [String?] {
+        guard !items.isEmpty else { return [] }
+        var options: [String:Any] = ["legacy_hdr":settings.legacyHDR,"direction":settings.direction.rawValue,
+            "container":settings.container.rawValue,"export_mode":settings.exportMode.rawValue,
+            "track":settings.track.rawValue,"available_live":availableLive]
+        if let value = settings.burstConversion { options["burst_conversion"] = value }
+        if let value = settings.liveConversion { options["live_conversion"] = value }
+        let rows: [[String:Any]] = items.map { item in
+            var v: [String:Any] = ["hdr":item.hdr,"motion":item.isMotion,"has_burst":item.row.burst != nil,
+                "static":item.row.confirmedStatic,"extension":item.source.pathExtension.lowercased(),
+                "custom_cover":settings.coverIndex(for:item.source) != nil]
+            if let kind = item.row.hdrKind { v["hdr_kind"] = kind }
+            if let value = item.row.privateHDRSupported { v["private_hdr_supported"] = value }
+            if let value = item.row.privateHDRReason { v["private_hdr_reason"] = value }
+            return v
+        }
+        do {
+            let reply = try RustCore.engine(["mode":"action-blocking-reason","settings":options,"items":rows])
+            guard let reasons = reply["reasons"] as? [Any], reasons.count == items.count else { throw Failure("Rust engine: invalid blocking reasons") }
+            return reasons.map { $0 as? String }
+        } catch {
+            return items.map { _ in "无法判断是否可以转换：" + error.localizedDescription }
+        }
+    }
+    // Legacy Swift decision, kept only until the core parity check has run.
+    static func swiftActionBlockingReason(_ item: PhotoQueueItem, settings: ConversionSettings, availableLive: Bool) -> String? {
         if item.hdr == "荣耀私有 HDR" && !item.isMotion && item.row.burst == nil && item.row.privateHDRSupported != true {
             return item.row.privateHDRReason ?? "荣耀私有 HDR 未通过配置检查，不能转换"
         }

@@ -200,6 +200,42 @@ extension PhotoTimeRepair {
         let source: TimeSource
     }
 
+    /// Filename tokens are found and validated by the shared Rust core
+    /// (`filename-time`, core/src/engine/decisions/filename_time.rs); Foundation
+    /// resolves wall-clock tokens in `zone` and rejects times the zone skips.
+    static func coreInferredTimes(filenames: [String], zone: TimeZone) -> [InferredTime?] {
+        guard !filenames.isEmpty else { return [] }
+        guard let reply = try? RustCore.engine(["mode":"filename-time","filenames":filenames]),
+              let list = reply["inferred"] as? [Any], list.count == filenames.count else {
+            return filenames.map { _ in nil }
+        }
+        return list.map { resolve($0 as? [String:Any], zone: zone) }
+    }
+    static func coreInferredTime(filename: String, zone: TimeZone) -> InferredTime? {
+        coreInferredTimes(filenames: [filename], zone: zone)[0]
+    }
+    private static func resolve(_ value: [String:Any]?, zone: TimeZone) -> InferredTime? {
+        guard let value = value, let source = (value["source"] as? String).flatMap(TimeSource.init(rawValue:)) else { return nil }
+        let digits = value["digits"] as? String
+        if source == .unixTimestamp {
+            guard let token = digits, let number = Double(token) else { return nil }
+            return InferredTime(date: Date(timeIntervalSince1970: number / pow(10, Double(token.count - 10))), source: .unixTimestamp)
+        }
+        guard source == .filenameDateTime, let local = value["local"] as? [Int], local.count == 6 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        if let offset = value["offset_seconds"] as? Int {
+            guard let explicitZone = TimeZone(secondsFromGMT: offset) else { return nil }
+            calendar.timeZone = explicitZone
+        }
+        let parts = DateComponents(year: local[0], month: local[1], day: local[2],
+                                   hour: local[3], minute: local[4], second: local[5])
+        guard let date = calendar.date(from: parts),
+              calendar.dateComponents([.year,.month,.day,.hour,.minute,.second], from: date) == parts else { return nil }
+        let fraction = digits.map { Double("0." + $0) ?? 0 } ?? 0
+        return InferredTime(date: date.addingTimeInterval(fraction), source: .filenameDateTime)
+    }
+
     // Compiled once: inference runs for every missing-time photo in the plan.
     private static let calendarPatterns: [NSRegularExpression] = {
         let suffix = #"(?:\.(\d{1,9}))?(Z|[+-]\d{2}:?\d{2})?(?!\d)"#
