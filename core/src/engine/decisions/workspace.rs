@@ -287,12 +287,20 @@ mod tests {
             ..settings()
         };
         assert_eq!(blocking_reason(&ultra, &plain), None);
-        for mode in ["livephoto+auxiliary", "auxiliary-only", "livephoto+candidates"] {
+        for mode in [
+            "livephoto+auxiliary",
+            "auxiliary-only",
+            "livephoto+candidates",
+        ] {
             let extras = Settings {
                 export_mode: mode.into(),
                 ..plain.clone()
             };
-            assert_eq!(blocking_reason(&ultra, &extras).unwrap(), LIVE_COMBO, "{mode}");
+            assert_eq!(
+                blocking_reason(&ultra, &extras).unwrap(),
+                LIVE_COMBO,
+                "{mode}"
+            );
         }
         let unknown = Item {
             hdr: Some(HdrKind::Other),
