@@ -221,18 +221,14 @@ Google 兼容的动态照片 JPEG、三星（包括 SEF 和已验证的 HEIC 布
 
 ## 致谢
 
-感谢以下项目、作者与维护者提供的代码、依赖、研究成果和设计工作流：
+感谢以下项目、作者与维护者：
 
-- **系统 API 与原生素材**：[Apple 框架与 SDK 文档](https://developer.apple.com/documentation/)、[SF Symbols](https://developer.apple.com/sf-symbols/) 与[系统字体](https://developer.apple.com/fonts/)，用于原生界面、媒体处理、图库读写和系统交付。
-- **Rust 核心代码依赖**：[RustCrypto](https://github.com/RustCrypto/hashes)（`sha2`、`md-5`）、[roxmltree](https://github.com/RazrFalcon/roxmltree)、[serde_json](https://github.com/serde-rs/json)，以及锁定的全部传递依赖。Rust 核心目前为独立实验模块；完整 23 个 crate 的版本、许可证和上游链接见第三方说明。
-- **动态照片实现参考**：[MotionTrans](https://github.com/Huakira/MotionTrans)（静态图像分离）、[Live Photo Box](https://github.com/LengxiQwQ/live-photo-box)（华为、OPPO、vivo 字段）、[ExifTool](https://exiftool.org/) 与 [motionphoto](https://github.com/doodspav/motionphoto)（三星 SEF/偏移结构）。
-- **HDR、HEIC 与兼容研究**：[OpenHarmony](https://github.com/openharmony/multimedia_image_framework)、[libheif](https://github.com/strukturag/libheif)、[libultrahdr](https://github.com/google/libultrahdr)、[MotionPhotoSamples](https://github.com/NightMean/MotionPhotoSamples)。另曾评估 [libmotionphoto](https://github.com/google/libmotionphoto)、[MotionPhoto2](https://github.com/PetrVys/MotionPhoto2)、[LiveMux](https://github.com/ysya/LiveMux) 的跨平台复用可行性，现有 App 未接入这些候选库。
-- **打包、文档与验证工具**：[ds_store](https://github.com/dmgbuild/ds_store)、[mac_alias](https://github.com/dmgbuild/mac_alias)（Finder 布局）；[dmgbuild](https://github.com/dmgbuild/dmgbuild)、[Chromium](https://chromium.googlesource.com/chromium/src/+/main/chrome/installer/mac/generate_dsstore.py)（安装包布局参考）；[Python-Markdown](https://github.com/Python-Markdown/markdown)、[importlib_metadata](https://github.com/python/importlib_metadata)、[zipp](https://github.com/jaraco/zipp)（手册生成）；[fontTools](https://github.com/fonttools/fonttools)、[Brotli](https://github.com/google/brotli)（字体来源核对）。
-- **设计与审查 Skill**：[huashu-design / 花叔 Design](https://github.com/alchaincyf/huashu-design)（应用原型探索、网站设计）；[frontend-design / Anthropic](https://github.com/anthropics/skills/tree/main/skills/frontend-design)（视觉方向与层级）；[ui-ux-pro-max / NextLevelBuilder](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)（设计与交互指南）；[ux-audit / Pauline Mila Alonso](https://github.com/paulunemoon/ux-audit-skill)（基于证据的 UX 审查）。
-- **网站字体**：[Noto Serif SC / Noto CJK](https://github.com/notofonts/noto-cjk)、[Adobe / Source Han Serif](https://github.com/adobe-fonts/source-han-serif) 与 [Google Fonts](https://github.com/google/fonts)；采用 [SIL OFL 1.1](docs/branding/fonts/OFL.txt)，保留[字体设计者致谢及完整许可证](docs/branding/fonts/README.md)。
-- **规范与互操作参考**：[Android Motion Photo](https://developer.android.com/media/platform/motion-photo-format)、[Apple 开发文档](https://developer.apple.com/documentation/)/[HIG](https://developer.apple.com/design/human-interface-guidelines/)、[Adobe XMP](https://developer.adobe.com/xmp/)、[W3C RDF](https://www.w3.org/RDF/)/[WCAG](https://www.w3.org/TR/WCAG22/)、[ISO 媒体](https://www.iso.org/standard/85596.html)与[增益图格式](https://www.iso.org/standard/86775.html)，以及 [LocalSend](https://github.com/localsend/localsend) 的系统共享生态研究。
+- **依赖**：[oxideav-h265](https://github.com/OxideAV/oxideav-h265)、[jpeg-decoder](https://github.com/image-rs/jpeg-decoder)、[RustCrypto](https://github.com/RustCrypto/hashes)（`sha2`、`md-5`）、[serde_json](https://github.com/serde-rs/json) 等，Rust 核心共锁定 34 个第三方 crate，静态链接进 App。
+- **格式研究**：[MotionTrans](https://github.com/Huakira/MotionTrans)、[Live Photo Box](https://github.com/LengxiQwQ/live-photo-box)、[ExifTool](https://exiftool.org/)、[motionphoto](https://github.com/doodspav/motionphoto)、[OpenHarmony](https://github.com/openharmony/multimedia_image_framework)、[libultrahdr](https://github.com/google/libultrahdr) 与 [libheif](https://github.com/strukturag/libheif)。
+- **测试样例**：[MotionPhotoSamples](https://github.com/NightMean/MotionPhotoSamples)。
+- **网站字体**：[Noto Serif SC](https://github.com/notofonts/noto-cjk)，采用 [SIL OFL 1.1](docs/branding/fonts/OFL.txt)，见[字体致谢](docs/branding/fonts/README.md)。
 
-[完整第三方分类说明](THIRD_PARTY_NOTICES.md)逐项记录实际用途、直接/传递依赖、工具链、许可证及分发范围。参考项目、评估候选、Skill 和随包素材分别标明，个人样片与本地 Skill 文件不随项目发布。
+随 App 分发组件的版本、许可证及许可证全文见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 开源协议
 
