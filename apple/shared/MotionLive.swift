@@ -79,4 +79,3 @@ func trackInfo(_ asset: AVAsset, _ track: AVAssetTrack) throws -> TrackInfo {
     return TrackInfo(track: track, pts: pts, durations: durations, sizes: sizes,
                      hash: hex(hash.finalize()))
 }
-
