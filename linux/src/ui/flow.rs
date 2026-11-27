@@ -610,12 +610,10 @@ fn sources_panel(app: &Shared) -> gtk::Widget {
 // ---- Step 3 -------------------------------------------------------------
 
 fn note_row(text: &str) -> adw::ActionRow {
-    let row = adw::ActionRow::builder()
+    adw::ActionRow::builder()
         .subtitle(glib::markup_escape_text(text))
         .subtitle_lines(0)
-        .build();
-    row.add_css_class("property");
-    row
+        .build()
 }
 
 fn switch_row(
@@ -1019,12 +1017,14 @@ fn android_options(
 
 // ---- Step 4 -------------------------------------------------------------
 
-fn folder_row(
+/// A folder and, below it, its Choose Folder… row (fits the 264 pt column).
+fn folder_rows(
+    g: &adw::PreferencesGroup,
     title: &str,
     path: Option<&std::path::Path>,
     empty: &str,
     action: &str,
-) -> adw::ActionRow {
+) {
     let row = adw::ActionRow::builder()
         .title(title)
         .subtitle(glib::markup_escape_text(
@@ -1033,15 +1033,16 @@ fn folder_row(
                 .unwrap_or_else(|| empty.to_string()),
         ))
         .subtitle_selectable(true)
+        .subtitle_lines(0)
         .build();
     row.add_prefix(&gtk::Image::from_icon_name("folder-symbolic"));
-    let choose = gtk::Button::builder()
-        .label(gettext("Choose Folder…"))
-        .valign(gtk::Align::Center)
-        .action_name(action)
-        .build();
-    row.add_suffix(&choose);
-    row
+    g.add(&row);
+    g.add(
+        &adw::ButtonRow::builder()
+            .title(gettext("Choose Folder…"))
+            .action_name(action)
+            .build(),
+    );
 }
 
 fn delivery_panel(app: &Shared) -> gtk::Widget {
@@ -1049,12 +1050,13 @@ fn delivery_panel(app: &Shared) -> gtk::Widget {
     b.set_spacing(18);
     let g = group(Some(&gettext("Output Location")));
     let output = app.output.borrow().clone();
-    g.add(&folder_row(
+    folder_rows(
+        &g,
         &gettext("Folder"),
         output.as_deref(),
         &gettext("Not selected"),
         "win.choose-output",
-    ));
+    );
     let unconverted = app.unconverted.get();
     if unconverted != Unconverted::None {
         let items = [
@@ -1079,12 +1081,13 @@ fn delivery_panel(app: &Shared) -> gtk::Widget {
         ));
         if unconverted == Unconverted::SeparateLocation {
             let separate = app.unconverted_output.borrow().clone();
-            g.add(&folder_row(
+            folder_rows(
+                &g,
                 &gettext("Export Unchanged"),
                 separate.as_deref(),
                 &gettext("Choose a different folder for unchanged resources"),
                 "win.choose-unconverted-output",
-            ));
+            );
         } else {
             g.add(&note_row(&gettext("Use this run's output location, with a separate folder for original resources. Sources are not overwritten, and unchanged exports do not count as conversions.")));
         }

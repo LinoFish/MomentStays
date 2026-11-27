@@ -325,7 +325,7 @@ msgstr ""
 msgid "Original COVER"
 msgstr ""
 
-#: src/ui/burst.rs:113 src/ui/queue.rs:828
+#: src/ui/burst.rs:113 src/ui/queue.rs:827
 msgid "Select this photo"
 msgstr ""
 
@@ -535,238 +535,238 @@ msgstr ""
 msgid "Remove Folder"
 msgstr ""
 
-#: src/ui/flow.rs:702 src/ui/queue.rs:925
+#: src/ui/flow.rs:700 src/ui/queue.rs:924
 msgid "Live Photo"
 msgstr ""
 
-#: src/ui/flow.rs:711
+#: src/ui/flow.rs:709
 msgid "Format, Video, and Cover Options"
 msgstr ""
 
-#: src/ui/flow.rs:734 src/ui/queue.rs:916 src/ui/queue.rs:918
+#: src/ui/flow.rs:732 src/ui/queue.rs:915 src/ui/queue.rs:917
 msgid "Burst"
 msgstr ""
 
-#: src/ui/flow.rs:743
+#: src/ui/flow.rs:741
 msgid "Choose Burst Members and Representative…"
 msgstr ""
 
-#: src/ui/flow.rs:755
+#: src/ui/flow.rs:753
 msgid "Export Unchanged Photos"
 msgstr ""
 
-#: src/ui/flow.rs:767
+#: src/ui/flow.rs:765
 msgid "Export complete, unchanged source resources. Choose the location in Export Preview."
 msgstr ""
 
-#: src/ui/flow.rs:774
+#: src/ui/flow.rs:772
 msgid "Photo Dates"
 msgstr ""
 
-#: src/ui/flow.rs:775
+#: src/ui/flow.rs:773
 msgid "Enable only when photo dates appear out of order in Photos. Source files are not modified."
 msgstr ""
 
-#: src/ui/flow.rs:791
+#: src/ui/flow.rs:789
 msgid "Fill missing capture dates (PhotoTime)"
 msgstr ""
 
-#: src/ui/flow.rs:792
+#: src/ui/flow.rs:790
 msgid "Recognize a date or Unix timestamp from the original filename. Fill missing dates only in output copies; existing nonempty dates stay unchanged."
 msgstr ""
 
-#: src/ui/flow.rs:807
+#: src/ui/flow.rs:805
 msgid "Generate synthetic ordering dates when recognition fails"
 msgstr ""
 
-#: src/ui/flow.rs:810
+#: src/ui/flow.rs:808
 msgid "Synthetic dates are not actual capture dates. They follow natural filename order at one-second intervals. Time zone: "
 msgstr ""
 
-#: src/ui/flow.rs:816
+#: src/ui/flow.rs:814
 msgid "If a motion container or HDR resource cannot be fully verified, it is not published or split into a still; see Export Preview for the reason."
 msgstr ""
 
-#: src/ui/flow.rs:820
+#: src/ui/flow.rs:818
 msgid "Set output file dates from EXIF"
 msgstr ""
 
-#: src/ui/flow.rs:821
+#: src/ui/flow.rs:819
 msgid "Independently set creation and modification dates; off by default. After repair, read actual EXIF dates. Without usable EXIF, keep source file dates."
 msgstr ""
 
-#: src/ui/flow.rs:832
+#: src/ui/flow.rs:830
 msgid "HDR (experimental, off by default)"
 msgstr ""
 
-#: src/ui/flow.rs:833
+#: src/ui/flow.rs:831
 msgid "Only supported HDR profiles are attempted. Unsupported items are listed in preview; the original device's HDR appearance is not guaranteed."
 msgstr ""
 
-#: src/ui/flow.rs:858
+#: src/ui/flow.rs:856
 msgid "Output content"
 msgstr ""
 
-#: src/ui/flow.rs:869
+#: src/ui/flow.rs:867
 msgid "Main photo live, other covers still"
 msgstr ""
 
-#: src/ui/flow.rs:873
+#: src/ui/flow.rs:871
 msgid "Export Every Cover as a Live Photo"
 msgstr ""
 
-#: src/ui/flow.rs:878
+#: src/ui/flow.rs:876
 msgid "High-resolution Cover Output"
 msgstr ""
 
-#: src/ui/flow.rs:900
+#: src/ui/flow.rs:898
 msgid "Video Source"
 msgstr ""
 
-#: src/ui/flow.rs:914
+#: src/ui/flow.rs:912
 msgid "A high-resolution cover is selected; the motion video is required."
 msgstr ""
 
-#: src/ui/flow.rs:933
+#: src/ui/flow.rs:931
 msgid "Use Choose Cover beside a photo to select a high-resolution candidate. New covers are JPEG and do not preserve the original cover's HDR."
 msgstr ""
 
-#: src/ui/flow.rs:943
+#: src/ui/flow.rs:941
 msgid "Target Format"
 msgstr ""
 
-#: src/ui/flow.rs:950
+#: src/ui/flow.rs:948
 msgid "Return to step 1, Conversion Direction, to change the route or target brand."
 msgstr ""
 
-#: src/ui/flow.rs:954
+#: src/ui/flow.rs:952
 msgid "Google / General is recommended for newer HONOR devices. HONOR format is a fallback."
 msgstr ""
 
-#: src/ui/flow.rs:957
+#: src/ui/flow.rs:955
 msgid "Newer HONOR devices have been verified with the Google format exported by MomentStays. This does not imply support for Google Camera originals."
 msgstr ""
 
-#: src/ui/flow.rs:965
+#: src/ui/flow.rs:963
 msgid "Photo Format"
 msgstr ""
 
-#: src/ui/flow.rs:973
+#: src/ui/flow.rs:971
 msgid "This vendor supports JPEG only."
 msgstr ""
 
-#: src/ui/flow.rs:979
+#: src/ui/flow.rs:977
 msgid "Preserve original JPEG encoding"
 msgstr ""
 
-#: src/ui/flow.rs:987
+#: src/ui/flow.rs:985
 msgid "Main image quality"
 msgstr ""
 
-#: src/ui/flow.rs:988
+#: src/ui/flow.rs:986
 msgid "Gain-map quality"
 msgstr ""
 
-#: src/ui/flow.rs:1006
+#: src/ui/flow.rs:1004
 msgid "JPEG preservation avoids recompression. HEIC-to-JPEG uses main image quality; gain-map quality applies only when re-encoding."
 msgstr ""
 
-#: src/ui/flow.rs:1007
+#: src/ui/flow.rs:1005
 msgid "HDR uses Ultra HDR. SDR stays unchanged."
 msgstr ""
 
-#: src/ui/flow.rs:1012
+#: src/ui/flow.rs:1010
 msgid "Preserve original HEIC encoding"
 msgstr ""
 
-#: src/ui/flow.rs:1016
+#: src/ui/flow.rs:1014
 msgid "No quality adjustment is needed. Check compatibility and HDR display on the target phone."
 msgstr ""
 
-#: src/ui/flow.rs:1039
+#: src/ui/flow.rs:1042
 msgid "Choose Folder…"
 msgstr ""
 
-#: src/ui/flow.rs:1050
+#: src/ui/flow.rs:1051
 msgid "Output Location"
 msgstr ""
 
-#: src/ui/flow.rs:1053
+#: src/ui/flow.rs:1055
 msgid "Folder"
 msgstr ""
 
-#: src/ui/flow.rs:1055
+#: src/ui/flow.rs:1057
 msgid "Not selected"
 msgstr ""
 
-#: src/ui/flow.rs:1063
+#: src/ui/flow.rs:1065
 msgid "Export to the Same Location"
 msgstr ""
 
-#: src/ui/flow.rs:1067
+#: src/ui/flow.rs:1069
 msgid "Export to a Different Location"
 msgstr ""
 
-#: src/ui/flow.rs:1072
+#: src/ui/flow.rs:1074
 msgid "Unchanged-export location"
 msgstr ""
 
-#: src/ui/flow.rs:1083
+#: src/ui/flow.rs:1086
 msgid "Export Unchanged"
 msgstr ""
 
-#: src/ui/flow.rs:1085
+#: src/ui/flow.rs:1088
 msgid "Choose a different folder for unchanged resources"
 msgstr ""
 
-#: src/ui/flow.rs:1089
+#: src/ui/flow.rs:1092
 msgid "Use this run's output location, with a separate folder for original resources. Sources are not overwritten, and unchanged exports do not count as conversions."
 msgstr ""
 
-#: src/ui/flow.rs:1094
+#: src/ui/flow.rs:1097
 msgid "When a Result Exists"
 msgstr ""
 
-#: src/ui/flow.rs:1111
+#: src/ui/flow.rs:1114
 msgid "Existing Output"
 msgstr ""
 
-#: src/ui/flow.rs:1118
+#: src/ui/flow.rs:1121
 msgid "Verify and Reuse checks sources, scope, settings, and output files, and continues without reprocessing when they match."
 msgstr ""
 
-#: src/ui/flow.rs:1123
+#: src/ui/flow.rs:1126
 msgid "Write Report Files"
 msgstr ""
 
-#: src/ui/flow.rs:1124
+#: src/ui/flow.rs:1127
 msgid "Save the manifest and JSON report next to the results."
 msgstr ""
 
-#: src/ui/flow.rs:1151 src/ui/window.rs:467
+#: src/ui/flow.rs:1154 src/ui/window.rs:467
 #, python-brace-format
 msgid "Processed {done} / {total}"
 msgstr ""
 
-#: src/ui/flow.rs:1173
+#: src/ui/flow.rs:1176
 #, python-brace-format
 msgid "Converted {converted} · Unchanged {copied} · Existing {resumed} · Skipped {skipped} · Failed {failed}"
 msgstr ""
 
-#: src/ui/flow.rs:1187
+#: src/ui/flow.rs:1190
 #, python-brace-format
 msgid "Unchanged export: new {copied} · reused {resumed} · skipped {skipped} · failed {failed}"
 msgstr ""
 
-#: src/ui/flow.rs:1200 src/ui/window.rs:45
+#: src/ui/flow.rs:1203 src/ui/window.rs:45
 msgid "Open Output Folder"
 msgstr ""
 
-#: src/ui/flow.rs:1206
+#: src/ui/flow.rs:1209
 msgid "View Full Report"
 msgstr ""
 
-#: src/ui/flow.rs:1212
+#: src/ui/flow.rs:1215
 msgid "File generation and unchanged exports are recorded separately; the report in the output folder lists every photo."
 msgstr ""
 
@@ -918,15 +918,15 @@ msgstr ""
 msgid "Will Not Convert"
 msgstr ""
 
-#: src/ui/queue.rs:907
+#: src/ui/queue.rs:906
 msgid "Cover: "
 msgstr ""
 
-#: src/ui/queue.rs:933 src/ui/queue.rs:935
+#: src/ui/queue.rs:932 src/ui/queue.rs:934
 msgid "Missing Date"
 msgstr ""
 
-#: src/ui/queue.rs:962
+#: src/ui/queue.rs:961
 msgid "Current preview"
 msgstr ""
 
@@ -1038,39 +1038,39 @@ msgstr ""
 msgid "{count} photos expected to run. Click a photo for output resources and reasons. Estimates do not guarantee success."
 msgstr ""
 
-#: src/ui/window.rs:559
+#: src/ui/window.rs:558
 msgid "File generation and unchanged exports are recorded separately. Click a photo for its actual result and reason."
 msgstr ""
 
-#: src/ui/window.rs:573
+#: src/ui/window.rs:572
 #, python-brace-format
 msgid "Export estimate · {count} photos · Source thumbnails"
 msgstr ""
 
-#: src/ui/window.rs:577
+#: src/ui/window.rs:576
 #, python-brace-format
 msgid "Results · {count} photos · Source thumbnails"
 msgstr ""
 
-#: src/ui/window.rs:580
+#: src/ui/window.rs:579
 msgid "Scope: all pending photos"
 msgstr ""
 
-#: src/ui/window.rs:583
+#: src/ui/window.rs:582
 #, python-brace-format
 msgid "{count} selected"
 msgstr ""
 
-#: src/ui/window.rs:589
+#: src/ui/window.rs:588
 #, python-brace-format
 msgid " · {count} selected items hidden"
 msgstr ""
 
-#: src/ui/window.rs:597
+#: src/ui/window.rs:596
 msgid "Click a photo to inspect it. Use the check mark or Ctrl-click to include it. Filtering and preview do not change the processing scope"
 msgstr ""
 
-#: src/ui/window.rs:605
+#: src/ui/window.rs:604
 #, python-brace-format
 msgid "Showing {shown} / {total}"
 msgstr ""

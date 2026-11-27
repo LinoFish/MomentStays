@@ -331,7 +331,7 @@ msgstr "第 {index} 幀"
 msgid "Original COVER"
 msgstr "原始 COVER"
 
-#: src/ui/burst.rs:113 src/ui/queue.rs:828
+#: src/ui/burst.rs:113 src/ui/queue.rs:827
 msgid "Select this photo"
 msgstr "勾選此照片"
 
@@ -541,238 +541,238 @@ msgstr "監測變化"
 msgid "Remove Folder"
 msgstr "移除資料夾"
 
-#: src/ui/flow.rs:702 src/ui/queue.rs:925
+#: src/ui/flow.rs:700 src/ui/queue.rs:924
 msgid "Live Photo"
 msgstr "原況照片"
 
-#: src/ui/flow.rs:711
+#: src/ui/flow.rs:709
 msgid "Format, Video, and Cover Options"
 msgstr "格式、影片與封面選項"
 
-#: src/ui/flow.rs:734 src/ui/queue.rs:916 src/ui/queue.rs:918
+#: src/ui/flow.rs:732 src/ui/queue.rs:915 src/ui/queue.rs:917
 msgid "Burst"
 msgstr "連拍"
 
-#: src/ui/flow.rs:743
+#: src/ui/flow.rs:741
 msgid "Choose Burst Members and Representative…"
 msgstr "選擇連拍成員與代表照片…"
 
-#: src/ui/flow.rs:755
+#: src/ui/flow.rs:753
 msgid "Export Unchanged Photos"
 msgstr "輸出未修改的照片"
 
-#: src/ui/flow.rs:767
+#: src/ui/flow.rs:765
 msgid "Export complete, unchanged source resources. Choose the location in Export Preview."
 msgstr "完整輸出未轉換的原資源；位置在匯出預覽中選擇。"
 
-#: src/ui/flow.rs:774
+#: src/ui/flow.rs:772
 msgid "Photo Dates"
 msgstr "照片時間"
 
-#: src/ui/flow.rs:775
+#: src/ui/flow.rs:773
 msgid "Enable only when photo dates appear out of order in Photos. Source files are not modified."
 msgstr "僅在相簿中的照片時間錯亂時開啟。原片不改寫。"
 
-#: src/ui/flow.rs:791
+#: src/ui/flow.rs:789
 msgid "Fill missing capture dates (PhotoTime)"
 msgstr "補全缺失的拍攝時間（PhotoTime）"
 
-#: src/ui/flow.rs:792
+#: src/ui/flow.rs:790
 msgid "Recognize a date or Unix timestamp from the original filename. Fill missing dates only in output copies; existing nonempty dates stay unchanged."
 msgstr "從原檔名識別日期或 Unix 時間，只補全輸出副本中的缺失時間；已有非空時間保持不變。"
 
-#: src/ui/flow.rs:807
+#: src/ui/flow.rs:805
 msgid "Generate synthetic ordering dates when recognition fails"
 msgstr "無法識別時生成合成排序時間"
 
-#: src/ui/flow.rs:810
+#: src/ui/flow.rs:808
 msgid "Synthetic dates are not actual capture dates. They follow natural filename order at one-second intervals. Time zone: "
 msgstr "合成時間不是真實拍攝時間；按原檔名自然順序逐張增加一秒。時區："
 
-#: src/ui/flow.rs:816
+#: src/ui/flow.rs:814
 msgid "If a motion container or HDR resource cannot be fully verified, it is not published or split into a still; see Export Preview for the reason."
 msgstr "動態容器或 HDR 資源無法完整驗證時不釋出，也不會拆成靜態圖；請在匯出預覽檢視原因。"
 
-#: src/ui/flow.rs:820
+#: src/ui/flow.rs:818
 msgid "Set output file dates from EXIF"
 msgstr "將 EXIF 時間寫入輸出檔案時間"
 
-#: src/ui/flow.rs:821
+#: src/ui/flow.rs:819
 msgid "Independently set creation and modification dates; off by default. After repair, read actual EXIF dates. Without usable EXIF, keep source file dates."
 msgstr "獨立控制建立和修改時間，預設關閉；補缺後讀取實際 EXIF，無可用 EXIF 時沿用來原始檔時間。"
 
-#: src/ui/flow.rs:832
+#: src/ui/flow.rs:830
 msgid "HDR (experimental, off by default)"
 msgstr "HDR（實驗性，預設關閉）"
 
-#: src/ui/flow.rs:833
+#: src/ui/flow.rs:831
 msgid "Only supported HDR profiles are attempted. Unsupported items are listed in preview; the original device's HDR appearance is not guaranteed."
 msgstr "僅嘗試已支援的 HDR 配置；不支援項會在預覽列出，不保證還原原廠顯示效果。"
 
-#: src/ui/flow.rs:858
+#: src/ui/flow.rs:856
 msgid "Output content"
 msgstr "匯出內容"
 
-#: src/ui/flow.rs:869
+#: src/ui/flow.rs:867
 msgid "Main photo live, other covers still"
 msgstr "主照片原況，其餘靜態照片"
 
-#: src/ui/flow.rs:873
+#: src/ui/flow.rs:871
 msgid "Export Every Cover as a Live Photo"
 msgstr "每張都匯出為 Live Photo"
 
-#: src/ui/flow.rs:878
+#: src/ui/flow.rs:876
 msgid "High-resolution Cover Output"
 msgstr "高畫質封面輸出"
 
-#: src/ui/flow.rs:900
+#: src/ui/flow.rs:898
 msgid "Video Source"
 msgstr "影片來源"
 
-#: src/ui/flow.rs:914
+#: src/ui/flow.rs:912
 msgid "A high-resolution cover is selected; the motion video is required."
 msgstr "已選擇高畫質封面，固定使用動態影片。"
 
-#: src/ui/flow.rs:933
+#: src/ui/flow.rs:931
 msgid "Use Choose Cover beside a photo to select a high-resolution candidate. New covers are JPEG and do not preserve the original cover's HDR."
 msgstr "點選照片旁的「選擇封面…」更換高畫質封面。新封面為 JPEG，不保留原封面的 HDR。"
 
-#: src/ui/flow.rs:943
+#: src/ui/flow.rs:941
 msgid "Target Format"
 msgstr "目標格式"
 
-#: src/ui/flow.rs:950
+#: src/ui/flow.rs:948
 msgid "Return to step 1, Conversion Direction, to change the route or target brand."
 msgstr "更換轉換方向或目標廠商，請返回第一步「轉換方向」。"
 
-#: src/ui/flow.rs:954
+#: src/ui/flow.rs:952
 msgid "Google / General is recommended for newer HONOR devices. HONOR format is a fallback."
 msgstr "新款榮耀推薦選擇 Google / 通用；榮耀格式僅作備用。"
 
-#: src/ui/flow.rs:957
+#: src/ui/flow.rs:955
 msgid "Newer HONOR devices have been verified with the Google format exported by MomentStays. This does not imply support for Google Camera originals."
 msgstr "新款榮耀已驗證可識別留刻匯出的 Google 格式，不代表能識別 Google 相機拍攝的原片。"
 
-#: src/ui/flow.rs:965
+#: src/ui/flow.rs:963
 msgid "Photo Format"
 msgstr "照片格式"
 
-#: src/ui/flow.rs:973
+#: src/ui/flow.rs:971
 msgid "This vendor supports JPEG only."
 msgstr "此廠商僅支援 JPEG。"
 
-#: src/ui/flow.rs:979
+#: src/ui/flow.rs:977
 msgid "Preserve original JPEG encoding"
 msgstr "保留 JPEG 原圖編碼"
 
-#: src/ui/flow.rs:987
+#: src/ui/flow.rs:985
 msgid "Main image quality"
 msgstr "主圖質量"
 
-#: src/ui/flow.rs:988
+#: src/ui/flow.rs:986
 msgid "Gain-map quality"
 msgstr "增益圖質量"
 
-#: src/ui/flow.rs:1006
+#: src/ui/flow.rs:1004
 msgid "JPEG preservation avoids recompression. HEIC-to-JPEG uses main image quality; gain-map quality applies only when re-encoding."
 msgstr "保留 JPEG 時不重壓原圖。HEIC 轉 JPEG 使用主圖質量；增益圖質量僅在重編碼時生效。"
 
-#: src/ui/flow.rs:1007
+#: src/ui/flow.rs:1005
 msgid "HDR uses Ultra HDR. SDR stays unchanged."
 msgstr "HDR 使用 Ultra HDR，SDR 保持不變。"
 
-#: src/ui/flow.rs:1012
+#: src/ui/flow.rs:1010
 msgid "Preserve original HEIC encoding"
 msgstr "保留 HEIC 原始編碼"
 
-#: src/ui/flow.rs:1016
+#: src/ui/flow.rs:1014
 msgid "No quality adjustment is needed. Check compatibility and HDR display on the target phone."
 msgstr "無需調整質量。相容性和 HDR 顯示需在目標手機確認。"
 
-#: src/ui/flow.rs:1039
+#: src/ui/flow.rs:1042
 msgid "Choose Folder…"
 msgstr "選擇資料夾…"
 
-#: src/ui/flow.rs:1050
+#: src/ui/flow.rs:1051
 msgid "Output Location"
 msgstr "輸出位置"
 
-#: src/ui/flow.rs:1053
+#: src/ui/flow.rs:1055
 msgid "Folder"
 msgstr "資料夾"
 
-#: src/ui/flow.rs:1055
+#: src/ui/flow.rs:1057
 msgid "Not selected"
 msgstr "尚未選擇"
 
-#: src/ui/flow.rs:1063
+#: src/ui/flow.rs:1065
 msgid "Export to the Same Location"
 msgstr "匯出到相同位置"
 
-#: src/ui/flow.rs:1067
+#: src/ui/flow.rs:1069
 msgid "Export to a Different Location"
 msgstr "匯出到不同位置"
 
-#: src/ui/flow.rs:1072
+#: src/ui/flow.rs:1074
 msgid "Unchanged-export location"
 msgstr "原樣匯出位置"
 
-#: src/ui/flow.rs:1083
+#: src/ui/flow.rs:1086
 msgid "Export Unchanged"
 msgstr "原樣匯出"
 
-#: src/ui/flow.rs:1085
+#: src/ui/flow.rs:1088
 msgid "Choose a different folder for unchanged resources"
 msgstr "請選擇不同的原檔案匯出目錄"
 
-#: src/ui/flow.rs:1089
+#: src/ui/flow.rs:1092
 msgid "Use this run's output location, with a separate folder for original resources. Sources are not overwritten, and unchanged exports do not count as conversions."
 msgstr "使用本次轉換輸出位置，另建原檔案目錄，不覆蓋來源；原樣匯出不會計為轉換成功。"
 
-#: src/ui/flow.rs:1094
+#: src/ui/flow.rs:1097
 msgid "When a Result Exists"
 msgstr "已有輸出時"
 
-#: src/ui/flow.rs:1111
+#: src/ui/flow.rs:1114
 msgid "Existing Output"
 msgstr "已有輸出時"
 
-#: src/ui/flow.rs:1118
+#: src/ui/flow.rs:1121
 msgid "Verify and Reuse checks sources, scope, settings, and output files, and continues without reprocessing when they match."
 msgstr "校驗並複用會核對來源、範圍、設定和輸出檔案，匹配時繼續且不重新處理。"
 
-#: src/ui/flow.rs:1123
+#: src/ui/flow.rs:1126
 msgid "Write Report Files"
 msgstr "寫入報告檔案"
 
-#: src/ui/flow.rs:1124
+#: src/ui/flow.rs:1127
 msgid "Save the manifest and JSON report next to the results."
 msgstr "在結果旁儲存清單和 JSON 報告。"
 
-#: src/ui/flow.rs:1151 src/ui/window.rs:467
+#: src/ui/flow.rs:1154 src/ui/window.rs:467
 #, python-brace-format
 msgid "Processed {done} / {total}"
 msgstr "已處理 {done} / {total}"
 
-#: src/ui/flow.rs:1173
+#: src/ui/flow.rs:1176
 #, python-brace-format
 msgid "Converted {converted} · Unchanged {copied} · Existing {resumed} · Skipped {skipped} · Failed {failed}"
 msgstr "已轉換 {converted} · 原樣 {copied} · 已有 {resumed} · 跳過 {skipped} · 失敗 {failed}"
 
-#: src/ui/flow.rs:1187
+#: src/ui/flow.rs:1190
 #, python-brace-format
 msgid "Unchanged export: new {copied} · reused {resumed} · skipped {skipped} · failed {failed}"
 msgstr "原樣匯出：新增 {copied} · 複用 {resumed} · 跳過 {skipped} · 失敗 {failed}"
 
-#: src/ui/flow.rs:1200 src/ui/window.rs:45
+#: src/ui/flow.rs:1203 src/ui/window.rs:45
 msgid "Open Output Folder"
 msgstr "開啟輸出資料夾"
 
-#: src/ui/flow.rs:1206
+#: src/ui/flow.rs:1209
 msgid "View Full Report"
 msgstr "檢視完整報告"
 
-#: src/ui/flow.rs:1212
+#: src/ui/flow.rs:1215
 msgid "File generation and unchanged exports are recorded separately; the report in the output folder lists every photo."
 msgstr "檔案生成與原樣輸出分別記錄；輸出資料夾中的報告列出每張照片。"
 
@@ -924,15 +924,15 @@ msgstr "只篩選顯示，不改變本輪處理範圍"
 msgid "Will Not Convert"
 msgstr "明確不會轉換"
 
-#: src/ui/queue.rs:907
+#: src/ui/queue.rs:906
 msgid "Cover: "
 msgstr "封面："
 
-#: src/ui/queue.rs:933 src/ui/queue.rs:935
+#: src/ui/queue.rs:932 src/ui/queue.rs:934
 msgid "Missing Date"
 msgstr "缺失時間"
 
-#: src/ui/queue.rs:962
+#: src/ui/queue.rs:961
 msgid "Current preview"
 msgstr "當前預覽"
 
@@ -1044,39 +1044,39 @@ msgstr "檢視報告"
 msgid "{count} photos expected to run. Click a photo for output resources and reasons. Estimates do not guarantee success."
 msgstr "預計可執行 {count} 張；點選照片檢視輸出資源與原因。預估不代表實際成功。"
 
-#: src/ui/window.rs:559
+#: src/ui/window.rs:558
 msgid "File generation and unchanged exports are recorded separately. Click a photo for its actual result and reason."
 msgstr "檔案生成與原樣輸出分別記錄；點選照片檢視實際結果與原因。"
 
-#: src/ui/window.rs:573
+#: src/ui/window.rs:572
 #, python-brace-format
 msgid "Export estimate · {count} photos · Source thumbnails"
 msgstr "匯出預估 · {count} 張 · 原片縮圖"
 
-#: src/ui/window.rs:577
+#: src/ui/window.rs:576
 #, python-brace-format
 msgid "Results · {count} photos · Source thumbnails"
 msgstr "執行結果 · {count} 張 · 原片縮圖"
 
-#: src/ui/window.rs:580
+#: src/ui/window.rs:579
 msgid "Scope: all pending photos"
 msgstr "範圍：全部待處理照片"
 
-#: src/ui/window.rs:583
+#: src/ui/window.rs:582
 #, python-brace-format
 msgid "{count} selected"
 msgstr "已選 {count} 張"
 
-#: src/ui/window.rs:589
+#: src/ui/window.rs:588
 #, python-brace-format
 msgid " · {count} selected items hidden"
 msgstr " · 隱藏選中 {count} 張"
 
-#: src/ui/window.rs:597
+#: src/ui/window.rs:596
 msgid "Click a photo to inspect it. Use the check mark or Ctrl-click to include it. Filtering and preview do not change the processing scope"
 msgstr "點選照片檢視特性與處理計劃；用勾選標記或 Ctrl 點選納入本輪。篩選與預覽不改變處理範圍"
 
-#: src/ui/window.rs:605
+#: src/ui/window.rs:604
 #, python-brace-format
 msgid "Showing {shown} / {total}"
 msgstr "顯示 {shown} / {total}"
