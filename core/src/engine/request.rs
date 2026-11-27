@@ -173,19 +173,25 @@ pub fn handle(
         }
         "hdr-kinds" => Ok(crate::engine::decisions::hdr_kind::table_json()),
         "filename-time" => {
-            use crate::engine::decisions::filename_time::infer;
-            // `filenames` (a list, answered in order) or one `filename`.
+            use crate::engine::decisions::filename_time::{infer, infer_stem};
+            // `filenames` (a list, answered in order) or one `filename`;
+            // with `stems`, the host already removed directory and extension.
+            let parse = if req["stems"].as_bool() == Some(true) {
+                infer_stem
+            } else {
+                infer
+            };
             if let Some(names) = req["filenames"].as_array() {
                 let inferred: Vec<Value> = names
                     .iter()
-                    .map(|n| json!(n.as_str().and_then(infer).map(|i| i.json())))
+                    .map(|n| json!(n.as_str().and_then(parse).map(|i| i.json())))
                     .collect();
                 return Ok(json!({ "inferred": inferred }));
             }
             let name = req["filename"]
                 .as_str()
                 .ok_or_else(|| Error::new("Missing filename"))?;
-            Ok(json!({"inferred": infer(name).map(|i| i.json())}))
+            Ok(json!({"inferred": parse(name).map(|i| i.json())}))
         }
         "track-info" => Ok(json!({"tracks": crate::engine::decisions::track_info::json(
             &crate::engine::decisions::track_info::track_info(&read(&first()?)?)?

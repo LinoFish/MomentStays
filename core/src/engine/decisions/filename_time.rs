@@ -54,9 +54,11 @@ impl Inferred {
     }
 }
 
-/// `NSString.lastPathComponent.deletingPathExtension` (trailing slashes are
-/// not a component, as in Foundation).
-fn stem(filename: &str) -> &str {
+/// `NSString.lastPathComponent.deletingPathExtension`, as observed on
+/// macOS: trailing slashes are not a component, and text after the last dot
+/// that contains a space is not an extension (`a.29 02-30-00` keeps its dot).
+/// Apple hosts pass Foundation's own stem instead (`infer_stem`).
+pub fn stem(filename: &str) -> &str {
     let trimmed = filename.trim_end_matches('/');
     let name = if trimmed.is_empty() {
         filename
@@ -64,7 +66,7 @@ fn stem(filename: &str) -> &str {
         trimmed.rsplit('/').next().unwrap_or(trimmed)
     };
     match name.rfind('.') {
-        Some(i) if i > 0 => &name[..i],
+        Some(i) if i > 0 && !name[i + 1..].contains(' ') => &name[..i],
         _ => name,
     }
 }
@@ -262,7 +264,13 @@ pub fn unix_at_offset(p: [u32; 6], offset_seconds: i32) -> i64 {
 
 /// Swift `inferredTime(filename:zone:)` without the zone (see module docs).
 pub fn infer(filename: &str) -> Option<Inferred> {
-    let s = stem(filename).as_bytes();
+    infer_stem(stem(filename))
+}
+
+/// `infer` for a name whose directory and extension the host already
+/// removed (Swift: `lastPathComponent.deletingPathExtension`).
+pub fn infer_stem(stem: &str) -> Option<Inferred> {
+    let s = stem.as_bytes();
     let mut candidates = Vec::new();
     let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
     let mut invalid = false;
@@ -416,6 +424,32 @@ mod tests {
         let gap = infer("2024-03-10_02-30-00.jpg").unwrap();
         assert_eq!(gap.local, Some([2024, 3, 10, 2, 30, 0]));
         assert_eq!(gap.unix, None);
+    }
+
+    #[test]
+    fn stems_follow_foundation() {
+        assert_eq!(stem("IMG_1.jpg"), "IMG_1");
+        assert_eq!(stem("dir/IMG_1.jpg/"), "IMG_1");
+        assert_eq!(stem(".hidden"), ".hidden");
+        assert_eq!(stem("a.tar.gz"), "a.tar");
+        // An "extension" with a space is part of the name on macOS.
+        assert_eq!(
+            stem("VID_2000.13-07 013000_1700000000"),
+            "VID_2000.13-07 013000_1700000000"
+        );
+        assert_eq!(
+            infer("VID_2000.13-07 013000_1700000000").unwrap().unix,
+            Some(1_700_000_000.0)
+        );
+        // The host's stem is taken as is.
+        assert_eq!(
+            infer_stem("20240229_123456.123").unwrap().digits.as_deref(),
+            Some("123")
+        );
+        assert_eq!(
+            infer_stem("x.1700000000").unwrap().source,
+            Source::UnixTimestamp
+        );
     }
 
     #[test]

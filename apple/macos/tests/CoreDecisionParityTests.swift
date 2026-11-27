@@ -4,15 +4,27 @@ import CryptoKit
 
 // Parity of the Swift decisions with the shared Rust core (core/src/engine/decisions):
 // filename capture time, action blocking reason, Live Photo still selection and
-// per-track sample facts. Every corpus is deterministic; each decision also prints
-// a SHA-256 digest of its results so a later build can be compared to this one.
+// per-track sample facts. Every corpus is deterministic, and each decision prints a
+// SHA-256 digest of its results. A decision whose Swift implementation was removed
+// is checked against the digest the removed Swift code produced on the same corpus
+// (recorded by this test in CI before the switch).
+//   action-blocking-reason, live-selection: legacy Swift digests from run 46057504970.
 @main
 struct CoreDecisionParityTests {
+    static let legacySwiftDigests = [
+        "action-blocking-reason": "75e5b2de2635069980c680baf3df66ca33acb89355016ac0d460d15af7f9b0c7",
+        "live-selection": "4859f98b15ef2ba1784bd0928c4f17d00e7fb5d7257c105b600c658d62dd7eea",
+    ]
+    static func golden(_ area: String, _ digest: String) {
+        guard let expected = legacySwiftDigests[area] else { return }
+        if digest != expected { mismatch(area, "digest \(digest) differs from the removed Swift implementation's \(expected)") }
+        else { print("\(area): identical to the removed Swift implementation on the whole corpus") }
+    }
     static var mismatches: [String: Int] = [:]
     static var examples: [String] = []
     static func mismatch(_ area: String, _ text: String) {
         mismatches[area, default: 0] += 1
-        if mismatches[area]! <= 25 { examples.append(area + ": " + text) }
+        if mismatches[area]! <= (area == "filename-time" ? 300 : 25) { examples.append(area + ": " + text) }
     }
 
     struct Rng {
@@ -153,17 +165,15 @@ struct CoreDecisionParityTests {
             // Every item under a sweep of settings; a seeded sample under the rest.
             let chosen = index % 97 == 0 ? items : (0..<400).map { _ in items[rng.int(items.count)] }
             let core = WorkspaceModel.coreActionBlockingReasons(chosen, settings: settings, availableLive: available)
+            if core.count != chosen.count { mismatch("action-blocking-reason", "settings#\(index): \(core.count) answers for \(chosen.count) items") }
             for (item, coreValue) in zip(chosen, core) {
-                let swift = WorkspaceModel.swiftActionBlockingReason(item, settings: settings, availableLive: available)
                 compared += 1
-                if swift != nil { blocked += 1 }
-                if swift != coreValue {
-                    mismatch("action-blocking-reason", "settings#\(index) item=\(item.name) hdr=\(item.hdr)/\(item.row.hdrKind ?? "nil") motion=\(item.isMotion) burst=\(item.row.burst != nil) static=\(item.row.confirmedStatic) supported=\(String(describing: item.row.privateHDRSupported)) cover=\(settings.coverIndex(for: item.source) != nil) legacy=\(settings.legacyHDR) dir=\(settings.direction.rawValue) container=\(settings.container.rawValue) burstConv=\(String(describing: settings.burstConversion)) liveConv=\(String(describing: settings.liveConversion)) mode=\(settings.exportMode.rawValue) track=\(settings.track.rawValue) live=\(available): swift=\(swift ?? "nil") core=\(coreValue ?? "nil")")
-                }
-                digest.add("\(index)|\(item.name)|\(swift ?? "nil")")
+                if coreValue != nil { blocked += 1 }
+                digest.add("\(index)|\(item.name)|\(coreValue ?? "nil")")
             }
         }
         print("action-blocking-reason: \(compared) item×settings cases (\(items.count) items, \(settingsList.count) settings, \(blocked) blocked), digest \(digest.value)")
+        golden("action-blocking-reason", digest.value)
         return digest.value
     }
 
@@ -228,13 +238,12 @@ struct CoreDecisionParityTests {
             catch { return "error:" + error.localizedDescription }
         }
         for (name, url) in cases {
-            let swift = result { try AndroidExport.selection([url]).entries }
-            let core = result { try NativeBatch.selection([try AndroidExport.coreLiveStill(url)]).entries }
-            if swift != core { mismatch("live-selection", "\(name): swift=\(swift) core=\(core)") }
-            print("  live-selection \(name): \(swift)")
-            digest.add(name + "|" + swift)
+            let core = result { try AndroidExport.selection([url]).entries }
+            print("  live-selection \(name): \(core)")
+            digest.add(name + "|" + core)
         }
         print("live-selection: \(digest.count) cases, digest \(digest.value)")
+        golden("live-selection", digest.value)
         return digest.value
     }
 
@@ -352,5 +361,33 @@ struct CoreDecisionParityTests {
         } catch {
             fputs("FAIL: \(error.localizedDescription)\n", stderr); exit(1)
         }
+    }
+}
+
+/// Per-track sample facts read from the MP4/MOV sample tables by the shared
+/// Rust core (`track-info`, core/src/engine/decisions/track_info.rs). Test-only:
+/// the app keeps AVAssetReader (MotionLive.swift `trackInfo`) until the
+/// timelines agree on audio and timed-metadata tracks too.
+struct CoreTrackInfo {
+    let handler: String
+    let timescale: Int32
+    let mediaPTS: [Int64]
+    let presentedPTS: [Int64?]
+    let durations: [Int64]
+    let sizes: [Int]
+    let hash: String
+}
+
+func coreTrackInfo(_ url: URL) throws -> [CoreTrackInfo] {
+    let v = try RustCore.engine(["mode":"track-info","input":url.path])
+    guard let tracks = v["tracks"] as? [[String:Any]] else { throw Failure("Rust engine: invalid track info") }
+    return try tracks.map { t in
+        guard let handler = t["handler"] as? String, let timescale = (t["timescale"] as? NSNumber)?.int32Value,
+              let media = t["media_pts"] as? [NSNumber], let presented = t["presented_pts"] as? [Any],
+              let durations = t["durations"] as? [NSNumber], let sizes = t["sizes"] as? [NSNumber],
+              let hash = t["sha256"] as? String else { throw Failure("Rust engine: invalid track info") }
+        return CoreTrackInfo(handler:handler,timescale:timescale,mediaPTS:media.map(\.int64Value),
+            presentedPTS:presented.map { ($0 as? NSNumber)?.int64Value },durations:durations.map(\.int64Value),
+            sizes:sizes.map(\.intValue),hash:hash)
     }
 }

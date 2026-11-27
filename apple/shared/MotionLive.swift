@@ -80,28 +80,3 @@ func trackInfo(_ asset: AVAsset, _ track: AVAssetTrack) throws -> TrackInfo {
                      hash: hex(hash.finalize()))
 }
 
-/// Per-track sample facts read from the MP4/MOV sample tables by the shared
-/// Rust core (`track-info`, core/src/engine/decisions/track_info.rs).
-struct CoreTrackInfo {
-    let handler: String
-    let timescale: Int32
-    let mediaPTS: [Int64]
-    let presentedPTS: [Int64?]
-    let durations: [Int64]
-    let sizes: [Int]
-    let hash: String
-}
-
-func coreTrackInfo(_ url: URL) throws -> [CoreTrackInfo] {
-    let v = try RustCore.engine(["mode":"track-info","input":url.path])
-    guard let tracks = v["tracks"] as? [[String:Any]] else { throw Failure("Rust engine: invalid track info") }
-    return try tracks.map { t in
-        guard let handler = t["handler"] as? String, let timescale = (t["timescale"] as? NSNumber)?.int32Value,
-              let media = t["media_pts"] as? [NSNumber], let presented = t["presented_pts"] as? [Any],
-              let durations = t["durations"] as? [NSNumber], let sizes = t["sizes"] as? [NSNumber],
-              let hash = t["sha256"] as? String else { throw Failure("Rust engine: invalid track info") }
-        return CoreTrackInfo(handler:handler,timescale:timescale,mediaPTS:media.map(\.int64Value),
-            presentedPTS:presented.map { ($0 as? NSNumber)?.int64Value },durations:durations.map(\.int64Value),
-            sizes:sizes.map(\.intValue),hash:hash)
-    }
-}

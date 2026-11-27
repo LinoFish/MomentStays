@@ -205,7 +205,9 @@ extension PhotoTimeRepair {
     /// resolves wall-clock tokens in `zone` and rejects times the zone skips.
     static func coreInferredTimes(filenames: [String], zone: TimeZone) -> [InferredTime?] {
         guard !filenames.isEmpty else { return [] }
-        guard let reply = try? RustCore.engine(["mode":"filename-time","filenames":filenames]),
+        // Foundation's own stem rules (macOS keeps a dot whose "extension" has a space).
+        let stems = filenames.map { (($0 as NSString).lastPathComponent as NSString).deletingPathExtension }
+        guard let reply = try? RustCore.engine(["mode":"filename-time","filenames":stems,"stems":true]),
               let list = reply["inferred"] as? [Any], list.count == filenames.count else {
             return filenames.map { _ in nil }
         }
