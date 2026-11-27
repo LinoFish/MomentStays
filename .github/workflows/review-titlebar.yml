@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]
+        os: [macos-15, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -28,7 +28,7 @@ jobs:
           mkdir -p shots
           app=.build/gui/preview/MomentStays.app/Contents/MacOS/MomentStays
           snap() { name=$1; w=$2; h=$3; shift 3; perl -e "alarm 45; exec @ARGV" "$app" --ui-snapshot "$PWD/shots/$name.png" --ui-width $w --ui-height $h "$@" > "shots/$name.log" 2>&1 || echo "FAIL $name" >> shots/failures.txt; }
-          for s in 2 4; do
+          for s in 1 2 3 4 5; do
             snap step$s-light 1120 700 --ui-step $s
             snap step$s-dark 1120 700 --ui-step $s --ui-appearance dark
           done

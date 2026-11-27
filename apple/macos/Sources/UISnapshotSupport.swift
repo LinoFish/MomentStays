@@ -307,6 +307,11 @@ final class UISnapshotSupport {
                 + (view.mouseDownCanMoveWindow ? "+drag" : "")
         }
         var result: [String: String] = [:]
+        // What WorkspaceWindow.sendEvent would hand a press to instead of the system title bar.
+        if let menu = frames["workspace-more-menu"], let workspace = window as? WorkspaceWindow {
+            let local = NSPoint(x: menu.midX, y: content.isFlipped ? menu.midY : content.bounds.height - menu.midY)
+            result["result_menu_routed"] = workspace.titlebarControl(at: content.convert(local, to: nil)).map { String(describing: type(of: $0)) } ?? "system"
+        }
         if let menu = frames["workspace-more-menu"] { result["result_menu"] = hit(menu.midX, menu.midY) }
         if let header = frames["canvas-header"], let title = frames["canvas-title"] {
             result["canvas_gap"] = hit((title.maxX + (frames["workspace-more-menu"]?.minX ?? header.maxX)) / 2, header.midY)

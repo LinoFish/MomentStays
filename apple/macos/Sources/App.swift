@@ -4,6 +4,26 @@ import SwiftUI
 final class WorkspaceWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    // The workspace headers sit under the transparent title bar. Where the
+    // system title bar view would take a press meant for a header control
+    // (seen with toolbars on macOS 15), hand the press to that control; empty
+    // space and the traffic lights keep the system behaviour.
+    override func sendEvent(_ event: NSEvent) {
+        if [.leftMouseDown, .rightMouseDown].contains(event.type), let control = titlebarControl(at: event.locationInWindow) {
+            if event.type == .leftMouseDown { control.mouseDown(with: event) } else { control.rightMouseDown(with: event) }
+            return
+        }
+        super.sendEvent(event)
+    }
+    func titlebarControl(at point: NSPoint) -> NSView? {
+        guard attachedSheet == nil, let content = contentView, let frame = content.superview,
+              point.y >= contentLayoutRect.maxY, let chrome = frame.hitTest(point),
+              !chrome.isDescendant(of: content), !(chrome is NSButton) else { return nil }
+        guard let hit = content.hitTest(content.superview?.convert(point, from: nil) ?? point),
+              hit is NSControl, !(hit is WindowDragView) else { return nil }
+        return hit
+    }
 }
 
 // macOS host: shared UI and task state live in SwiftUI/model files.
@@ -29,17 +49,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         for kind: NSWindow.ButtonType in [.closeButton,.miniaturizeButton,.zoomButton] {
             window.standardWindowButton(kind)?.isHidden = false
         }
-        // Content runs under a transparent title bar: the canvas and workflow
-        // headers share the traffic lights' row instead of sitting below an
-        // empty strip. An empty, fixed compact toolbar gives that row a native
-        // height with the traffic lights centred on it (macOS 11+).
+        // Content runs under a transparent title bar (the AppKit equivalent of
+        // SwiftUI's hidden title bar style): the canvas and workflow headers
+        // share the traffic lights' row instead of sitting below an empty strip.
+        // No toolbar: on macOS 15 an empty NSToolbar view swallows clicks on
+        // controls drawn beneath it.
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
-        let toolbar = NSToolbar(identifier:"MomentStaysWorkspace")
-        toolbar.allowsUserCustomization = false; toolbar.displayMode = .iconOnly
-        window.toolbar = toolbar
-        window.toolbarStyle = .unifiedCompact
         window.collectionBehavior.insert(.fullScreenPrimary)
         window.isMovableByWindowBackground = true
         window.title = AppText.text(AppName.display); window.isReleasedWhenClosed = false
