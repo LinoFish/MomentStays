@@ -34,6 +34,9 @@ jobs:
           name: ui-shots
           path: shots
           if-no-files-found: ignore
+      - name: build_gui_tests.sh
+        if: always()
+        run: bash apple/macos/scripts/build_gui_tests.sh
       - name: WorkspaceModelTests (check_workspace.py)
         if: always()
         run: bash apple/macos/scripts/run_checks_with_rust.sh check_workspace.py

@@ -781,10 +781,10 @@ struct PhotoQueueView: View {
                         .allowsHitTesting(false).recordLayout("photo-burst-" + item.id)
                 }
                 if item.isMotion {
-                    // Icon only; Text(Image) keeps the HDR badge's 11pt line height.
+                    // Icon only, at the HDR badge's 11pt font and 22pt height; tooltip and VoiceOver name it.
                     Text(Image(systemName:"livephoto"))
                         .font(.system(size:11,weight:.medium)).lineLimit(1).fixedSize()
-                        .padding(.horizontal,6).padding(.vertical,4)
+                        .frame(height:14).padding(.horizontal,6).padding(.vertical,4)
                         .foregroundColor(.white).background(Color.black.opacity(0.68)).cornerRadius(5)
                         .contentShape(Rectangle()).onTapGesture { click(item) }
                         .help(AppText.text("实况照片"))
