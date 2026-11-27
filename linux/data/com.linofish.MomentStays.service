@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=com.linofish.MomentStays
+Exec=/app/bin/momentstays --gapplication-service

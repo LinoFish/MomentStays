@@ -56,6 +56,8 @@ modules:
         # zh_HK readers get the Traditional Chinese catalog.
         install -d /app/share/locale/zh_HK/LC_MESSAGES
         cp /app/share/locale/zh_TW/LC_MESSAGES/momentstays.mo /app/share/locale/zh_HK/LC_MESSAGES/
+      # DBusActivatable=true in the desktop file needs the session service.
+      - install -Dm644 linux/data/com.linofish.MomentStays.service /app/share/dbus-1/services/com.linofish.MomentStays.service
       - install -Dm644 linux/data/com.linofish.MomentStays.desktop /app/share/applications/com.linofish.MomentStays.desktop
       - install -Dm644 linux/data/com.linofish.MomentStays.metainfo.xml /app/share/metainfo/com.linofish.MomentStays.metainfo.xml
       - install -Dm644 linux/data/icons/hicolor/scalable/apps/com.linofish.MomentStays.svg /app/share/icons/hicolor/scalable/apps/com.linofish.MomentStays.svg

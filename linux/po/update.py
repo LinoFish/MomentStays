@@ -15,6 +15,8 @@ blocks = pot.strip().split("\n\n")
 missing = []
 for col, lang in enumerate(["zh_CN", "zh_TW"]):
     out = ['msgid ""', 'msgstr ""', '"Project-Id-Version: momentstays\\n"',
+           '"PO-Revision-Date: 2026-11-28 00:00+0800\\n"',
+           '"Last-Translator: Lino\\n"', f'"Language-Team: {HEAD[lang][0]}\\n"',
            f'"Language: {lang}\\n"', '"MIME-Version: 1.0\\n"',
            '"Content-Type: text/plain; charset=UTF-8\\n"', '"Content-Transfer-Encoding: 8bit\\n"',
            '"Plural-Forms: nplurals=1; plural=0;\\n"', ""]
