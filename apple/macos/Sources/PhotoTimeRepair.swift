@@ -203,7 +203,7 @@ extension PhotoTimeRepair {
     /// Filename tokens are found and validated by the shared Rust core
     /// (`filename-time`, core/src/engine/decisions/filename_time.rs); Foundation
     /// resolves wall-clock tokens in `zone` and rejects times the zone skips.
-    static func coreInferredTimes(filenames: [String], zone: TimeZone) -> [InferredTime?] {
+    static func inferredTimes(filenames: [String], zone: TimeZone) -> [InferredTime?] {
         guard !filenames.isEmpty else { return [] }
         // Foundation's own stem rules (macOS keeps a dot whose "extension" has a space).
         let stems = filenames.map { (($0 as NSString).lastPathComponent as NSString).deletingPathExtension }
@@ -213,8 +213,10 @@ extension PhotoTimeRepair {
         }
         return list.map { resolve($0 as? [String:Any], zone: zone) }
     }
-    static func coreInferredTime(filename: String, zone: TimeZone) -> InferredTime? {
-        coreInferredTimes(filenames: [filename], zone: zone)[0]
+    /// Complete date+time or Unix tokens only. Invalid or ambiguous names use the
+    /// caller's filename-order fallback, never file modification/creation dates.
+    static func inferredTime(filename: String, zone: TimeZone) -> InferredTime? {
+        inferredTimes(filenames: [filename], zone: zone)[0]
     }
     private static func resolve(_ value: [String:Any]?, zone: TimeZone) -> InferredTime? {
         guard let value = value, let source = (value["source"] as? String).flatMap(TimeSource.init(rawValue:)) else { return nil }
@@ -238,59 +240,4 @@ extension PhotoTimeRepair {
         return InferredTime(date: date.addingTimeInterval(fraction), source: .filenameDateTime)
     }
 
-    // Compiled once: inference runs for every missing-time photo in the plan.
-    private static let calendarPatterns: [NSRegularExpression] = {
-        let suffix = #"(?:\.(\d{1,9}))?(Z|[+-]\d{2}:?\d{2})?(?!\d)"#
-        return [
-            #"(?i)(?<!\d)(\d{4})[-_](\d{2})[-_](\d{2})[T _-](\d{2})[-_:]?(\d{2})[-_:]?(\d{2})"# + suffix,
-            #"(?i)(?<!\d)(\d{4})(\d{2})(\d{2})[T _-]?(\d{2})[-_:]?(\d{2})[-_:]?(\d{2})"# + suffix
-        ].map { try! NSRegularExpression(pattern: $0) }
-    }()
-    private static let unixPattern = try! NSRegularExpression(pattern: #"(?<!\d)(\d{10}|\d{13}|\d{16}|\d{19})(?!\d)"#)
-
-    /// Complete date+time or Unix tokens only. Invalid or ambiguous names use the
-    /// caller's filename-order fallback, never file modification/creation dates.
-    static func inferredTime(filename: String, zone: TimeZone) -> InferredTime? {
-        let stem = ((filename as NSString).lastPathComponent as NSString).deletingPathExtension
-        let text = stem as NSString
-        let range = NSRange(location: 0, length: text.length)
-        var candidates: [InferredTime] = []
-        var calendarRanges: [NSRange] = []
-        var invalidCalendar = false
-        for regex in calendarPatterns {
-            for match in regex.matches(in: stem, range: range) {
-                calendarRanges.append(match.range)
-                let values = (1...6).map { Int(text.substring(with: match.range(at: $0)))! }
-                var calendar = Calendar(identifier: .gregorian)
-                calendar.timeZone = zone
-                if match.range(at: 8).location != NSNotFound {
-                    let token = text.substring(with: match.range(at: 8)).uppercased()
-                    if token == "Z" { calendar.timeZone = TimeZone(secondsFromGMT: 0)! }
-                    else {
-                        let digits = token.dropFirst().replacingOccurrences(of: ":", with: "")
-                        let hours = Int(digits.prefix(2))!, minutes = Int(digits.suffix(2))!
-                        guard hours <= 14, minutes < 60, hours < 14 || minutes == 0,
-                              let explicitZone = TimeZone(secondsFromGMT: (token.hasPrefix("-") ? -1 : 1) * (hours * 3600 + minutes * 60))
-                        else { invalidCalendar = true; continue }
-                        calendar.timeZone = explicitZone
-                    }
-                }
-                let parts = DateComponents(year: values[0], month: values[1], day: values[2],
-                                           hour: values[3], minute: values[4], second: values[5])
-                guard (1...9999).contains(values[0]), let date = calendar.date(from: parts),
-                      calendar.dateComponents([.year,.month,.day,.hour,.minute,.second], from: date) == parts
-                else { invalidCalendar = true; continue }
-                let fraction = match.range(at: 7).location == NSNotFound ? 0 : Double("0." + text.substring(with: match.range(at: 7)))!
-                candidates.append(InferredTime(date: date.addingTimeInterval(fraction), source: .filenameDateTime))
-            }
-        }
-        let unix = unixPattern
-        for match in unix.matches(in: stem, range: range) {
-            guard !calendarRanges.contains(where: { NSIntersectionRange($0, match.range).length > 0 }) else { continue }
-            let token = text.substring(with: match.range(at: 1))
-            guard let value = Double(token) else { continue }
-            candidates.append(InferredTime(date: Date(timeIntervalSince1970: value / pow(10, Double(token.count - 10))), source: .unixTimestamp))
-        }
-        return !invalidCalendar && candidates.count == 1 ? candidates[0] : nil
-    }
 }

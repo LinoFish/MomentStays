@@ -8,12 +8,14 @@ import CryptoKit
 // SHA-256 digest of its results. A decision whose Swift implementation was removed
 // is checked against the digest the removed Swift code produced on the same corpus
 // (recorded by this test in CI before the switch).
-//   action-blocking-reason, live-selection: legacy Swift digests from run 46057504970.
+//   action-blocking-reason, live-selection, filename-time: legacy Swift digests from
+//   run 46057504970 (filename-time legacy == core per case in run 46059778452).
 @main
 struct CoreDecisionParityTests {
     static let legacySwiftDigests = [
         "action-blocking-reason": "75e5b2de2635069980c680baf3df66ca33acb89355016ac0d460d15af7f9b0c7",
         "live-selection": "4859f98b15ef2ba1784bd0928c4f17d00e7fb5d7257c105b600c658d62dd7eea",
+        "filename-time": "f74b464e2a909efa69bf714106935f1697adccfc6535120ee0380b1d98d7e21b",
     ]
     static func golden(_ area: String, _ digest: String) {
         guard let expected = legacySwiftDigests[area] else { return }
@@ -102,15 +104,20 @@ struct CoreDecisionParityTests {
         let zones = ["Asia/Shanghai", "America/Los_Angeles", "UTC", "Australia/Lord_Howe"].map { TimeZone(identifier: $0)! }
         var found = 0
         for zone in zones {
-            let core = PhotoTimeRepair.coreInferredTimes(filenames: names, zone: zone)
-            for (name, coreValue) in zip(names, core) {
-                let swift = describe(PhotoTimeRepair.inferredTime(filename: name, zone: zone)), rust = describe(coreValue)
-                if swift != rust { mismatch("filename-time", "\(zone.identifier) \(name.debugDescription): swift=\(swift) core=\(rust)") }
-                if swift != "nil" { found += 1 }
-                digest.add(zone.identifier + "|" + name + "|" + swift)
+            let core = PhotoTimeRepair.inferredTimes(filenames: names, zone: zone)
+            if core.count != names.count { mismatch("filename-time", "\(core.count) answers for \(names.count) names") }
+            for (index, (name, value)) in zip(names, core).enumerated() {
+                let result = describe(value)
+                // The single-name entry point answers like the batch one.
+                if index % 50 == 0, describe(PhotoTimeRepair.inferredTime(filename: name, zone: zone)) != result {
+                    mismatch("filename-time", "\(zone.identifier) \(name.debugDescription): single and batch answers differ")
+                }
+                if result != "nil" { found += 1 }
+                digest.add(zone.identifier + "|" + name + "|" + result)
             }
         }
         print("filename-time: \(digest.count) name×zone cases (\(names.count) names, \(zones.count) zones, \(found) inferred), digest \(digest.value)")
+        golden("filename-time", digest.value)
         return digest.value
     }
 

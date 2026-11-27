@@ -40,6 +40,19 @@ Shared UI decisions (`engine::decisions`, for macOS and the GNOME app):
 (capture time from an original filename), `track-info` (per-track sample
 facts from MP4/MOV bytes), `action-blocking-reason` (per-item conversion
 blocker) and `live-selection` (still paired with a selected Live movie).
+The Apple app calls three of them: `WorkspaceModel.actionBlockingReason`
+(one `action-blocking-reason` call per plan revision for the whole queue),
+`PhotoTimeRepair.inferredTime` (`filename-time` with Foundation's own stems,
+`"stems": true`; wall-clock tokens are still resolved in the chosen time zone
+by Foundation) and `AndroidExport.selection` (`live-selection` for a selected
+movie). Parity with the removed Swift code is checked by
+`apple/macos/scripts/check_core_decisions.py`. `track-info` is not used by
+the Apple app: on that corpus video tracks match AVAssetReader plus
+`AVAssetTrack.segments`, but AAC tracks (AVFoundation maps them through a
+2112-sample priming segment that the core's edit-list mapping does not
+reproduce) and timed-metadata tracks behind an empty edit that is not a whole
+number of track ticks (the core truncates to ticks, CoreMedia keeps the exact
+time) differ, so `MotionPreview` keeps AVAssetReader.
 
 ## Platform backend and host events
 
