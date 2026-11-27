@@ -47,7 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         #endif
         window.contentView = NSHostingView(rootView:root.frame(minWidth:WindowSizing.workspace.width,minHeight:WindowSizing.workspace.height))
         window.contentMinSize = WindowSizing.workspace
-        window.center(); window.makeKeyAndOrderFront(nil)
+        window.center()
+        // Restore the user's last window size/position; diagnostics keep fixed geometry.
+        if startupArgument("--ui-snapshot") == nil { window.setFrameAutosaveName("MomentStaysWorkspace") }
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         #if UI_DIAGNOSTICS
         diagnostics.start()
@@ -90,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         command(file, "停止图库自动监测", #selector(stopMonitoring))
         file.addItem(.separator())
         command(file, "打开输出文件夹", #selector(openOutput))
-        command(file, "查看转换报告", #selector(showReport))
+        command(file, "查看处理报告", #selector(showReport))
         file.addItem(.separator())
         file.addItem(withTitle: AppText.text("关闭窗口"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         let edit = section("编辑")
@@ -121,7 +124,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
-        case #selector(start): return model.canApproveMigration && !model.sharing && window?.attachedSheet == nil
+        // ⌘Return mirrors the primary button: on the preview it starts, earlier it opens the preview.
+        case #selector(start): return !model.sharing && window?.attachedSheet == nil &&
+            (model.workspaceStep == .preview ? model.canApproveMigration
+                : [.importPhotos,.conversion].contains(model.workspaceStep) && model.canReviewMigration)
+        case #selector(NSText.selectAll(_:)): return model.canSelectAllPhotos && window?.attachedSheet == nil
         case #selector(stop): return model.canStop
         case #selector(rescan): return model.canRescan
         case #selector(importPhotos): return model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
@@ -138,6 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
 
+    // Reached through the responder chain only when no text field or table takes ⌘A.
+    @objc func selectAll(_ sender: Any?) { model.selectAllVisiblePhotos() }
     @objc private func exportResults() { platform.exportResults() }
     @objc private func shareResults() { platform.shareResults() }
     @objc private func recentResults() { platform.showRecentTasks() }

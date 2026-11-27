@@ -222,14 +222,57 @@ enum PhotoQueueScope: String, CaseIterable, Identifiable {
 }
 
 final class WorkspaceModel: ObservableObject {
-    @Published private(set) var settings = ConversionSettings()
+    @Published private(set) var settings = ConversionSettings() { didSet { derivedRevision &+= 1 } }
     @Published private(set) var phase: TaskPhase = .idle
     @Published private(set) var sources: [URL] = []
     @Published private(set) var sourceLabel = "尚未选择原片"
     @Published private(set) var output: URL?
-    @Published private(set) var items: [PhotoQueueItem] = []
+    @Published private(set) var items: [PhotoQueueItem] = [] { didSet { derivedRevision &+= 1 } }
     @Published private(set) var burstGroups: [BurstGroup] = [] {
-        didSet { burstMembership = Self.membership(burstGroups) }
+        didSet { burstMembership = Self.membership(burstGroups); derivedRevision &+= 1 }
+    }
+    // Views read the scope/ready plan many times per body pass. Every input of
+    // that plan bumps this revision, and the plan is rebuilt lazily once per
+    // revision instead of once per call (which made large queues quadratic).
+    private var derivedRevision = 0
+    private final class DerivedPlan {
+        var revision = -1
+        var scope: [PhotoQueueItem]?
+        var ready: [PhotoQueueItem]?
+        var readiness: [String:Bool] = [:]
+        var timeCandidates: [String:Bool] = [:]
+        var availableLive: Bool?
+        var visible: [PhotoQueueScope:[PhotoQueueItem]] = [:]
+        var sourceSignature: Int?
+    }
+    private let derivedPlan = DerivedPlan()
+    private var plan: DerivedPlan {
+        if derivedPlan.revision != derivedRevision {
+            derivedPlan.revision = derivedRevision
+            derivedPlan.scope = nil; derivedPlan.ready = nil; derivedPlan.readiness = [:]; derivedPlan.timeCandidates = [:]
+            derivedPlan.availableLive = nil; derivedPlan.visible = [:]; derivedPlan.sourceSignature = nil
+        }
+        return derivedPlan
+    }
+    // Filename time inference is a pure function of name and zone; keep it out of render passes.
+    private var inferredTimes: [String:PhotoTimeRepair.InferredTime?] = [:]
+    func inferredTime(_ item: PhotoQueueItem, zone: TimeZone) -> PhotoTimeRepair.InferredTime? {
+        let filename = timeOriginalFilename(item), key = zone.identifier + "|" + filename
+        if let cached = inferredTimes[key] { return cached }
+        let value = PhotoTimeRepair.inferredTime(filename:filename,zone:zone)
+        if inferredTimes.count > 20_000 { inferredTimes = [:] }
+        inferredTimes[key] = value
+        return value
+    }
+    /// Changes only when a source path or file version in the queue changes.
+    var sourceSignature: Int {
+        if let value = plan.sourceSignature { return value }
+        var hasher = Hasher()
+        for item in items {
+            hasher.combine(item.id); hasher.combine(item.row.version?.manualSignature ?? "")
+        }
+        let value = hasher.finalize(); plan.sourceSignature = value
+        return value
     }
     // Member path -> group index. Views and readiness checks ask this per photo;
     // a linear scan of every group's members made large burst queues quadratic.
@@ -300,7 +343,13 @@ final class WorkspaceModel: ObservableObject {
     }
     private func rebuildBurstGroups() {
         do {
-            let result = try RustCore.engine(["mode":"burst-plan","scan_rows":items.map { RustCore.rowJSON($0.row) }])
+            // Only rows carrying burst frame metadata can form a group; skip the
+            // engine round trip (and JSON for every row) on the main thread otherwise.
+            let rows = items.filter { $0.row.burst != nil }
+            guard !rows.isEmpty else {
+                burstGroups = []; settings.burstChoices = settings.burstChoices.map { _ in [:] }; return
+            }
+            let result = try RustCore.engine(["mode":"burst-plan","scan_rows":rows.map { RustCore.rowJSON($0.row) }])
             let data = try JSONSerialization.data(withJSONObject:result["groups"] ?? [])
             burstGroups = try JSONDecoder().decode([BurstGroup].self,from:data)
             let signatures = Dictionary(uniqueKeysWithValues:burstGroups.map { ($0.id,$0.signature) })
@@ -315,8 +364,8 @@ final class WorkspaceModel: ObservableObject {
     }
     // Preview focus is independent of the global conversion selection.
     @Published var selection: String?
-    @Published private(set) var selectedIDs: Set<String> = []
-    @Published private(set) var hasExplicitSelection = false
+    @Published private(set) var selectedIDs: Set<String> = [] { didSet { derivedRevision &+= 1 } }
+    @Published private(set) var hasExplicitSelection = false { didSet { derivedRevision &+= 1 } }
     @Published var manualPromptPresented = false
     @Published private(set) var manualPreparation = false
     private struct ManualPlan {
@@ -345,10 +394,12 @@ final class WorkspaceModel: ObservableObject {
             DispatchQueue.main.async { completion(available) }
         }
     }
+    // Called per row per render: no file IO here. The capability is bound to the
+    // scanned version, the callback rechecks the file, and choosing a cover
+    // revalidates the version again (selectCover expectedVersion).
     func hasCoverCandidates(_ item: PhotoQueueItem) -> Bool {
         guard settings.direction == .toApple, !item.requiresManualFrame,
-              let entry = candidateCapabilities[item.id], entry.version == item.row.version,
-              SourceVersion.read(item.source) == entry.version else { return false }
+              let entry = candidateCapabilities[item.id], entry.version == item.row.version else { return false }
         return entry.available == true
     }
     func requestCoverCandidates(_ item: PhotoQueueItem) {
@@ -386,6 +437,14 @@ final class WorkspaceModel: ObservableObject {
         hasExplicitSelection = true
         selectedIDs = valid
     }
+    /// ⌘A in the photo browser: add every photo the current filters show.
+    var canSelectAllPhotos: Bool {
+        [.importPhotos,.conversion].contains(workspaceStep) && !isBusy && !sharing && !visibleMigrationItems(in:.all).isEmpty
+    }
+    func selectAllVisiblePhotos() {
+        guard canSelectAllPhotos else { return }
+        setExplicitSelection(selectedIDs.union(visibleMigrationItems(in:.all).map(\.id)))
+    }
     func clearSelection() {
         guard !isBusy, !sharing else { return }
         selectedIDs = []; selectionVersions = [:]; hasExplicitSelection = false
@@ -401,19 +460,37 @@ final class WorkspaceModel: ObservableObject {
         manualVersions[item.id] = version
         updateSettings { $0.manualMidpoints = ($0.manualMidpoints ?? [:]).merging([item.id:true],uniquingKeysWith:{ _,new in new }) }
     }
+    private static let manualHashQueue = DispatchQueue(label:"MomentStays.manual-frame-hash",qos:.userInitiated)
+    private var manualFrameRequest: UUID?
+    // Hashing a whole original can take seconds; it runs off the main thread and
+    // the choice is committed only if the request, file version and queue still match.
     func confirmManualFrame(_ choice: ManualCoverChoice, for item: PhotoQueueItem) {
-        guard !isBusy, !sharing, settings.direction == .toApple, item.requiresManualFrame,
-              let version = SourceVersion.read(item.source), version == item.row.version,
-              choice.source_version == version.manualSignature, choice.track_index == 0, choice.frame_index >= 0,
-              (try? NativeBatch.hashFile(item.source)) == choice.source_sha256,
-              items.contains(where:{ $0.id == item.id && $0.row.version == version }) else {
+        func valid(_ version: SourceVersion) -> Bool {
+            !isBusy && !sharing && settings.direction == .toApple && item.requiresManualFrame &&
+                SourceVersion.read(item.source) == version && version == item.row.version &&
+                items.contains(where:{ $0.id == item.id && $0.row.version == version })
+        }
+        guard let version = SourceVersion.read(item.source), valid(version),
+              choice.source_version == version.manualSignature, choice.track_index == 0, choice.frame_index >= 0 else {
             notice = "来源发生变化，请重新扫描并选帧"; return
         }
-        manualVersions[item.id] = version
-        updateSettings {
-            $0.manualCovers = ($0.manualCovers ?? [:]).merging([item.id:choice],uniquingKeysWith:{ _,new in new })
-            $0.coverSelections?[item.id] = nil; $0.manualMidpoints?[item.id] = nil
-            $0.track = .primary; $0.exportMode = .livePhoto
+        let request = UUID(); manualFrameRequest = request
+        let source = item.source
+        Self.manualHashQueue.async { [weak self] in
+            let hash = try? NativeBatch.hashFile(source)
+            DispatchQueue.main.async {
+                guard let self = self, self.manualFrameRequest == request else { return }
+                self.manualFrameRequest = nil
+                guard hash == choice.source_sha256, valid(version) else {
+                    self.notice = "来源发生变化，请重新扫描并选帧"; return
+                }
+                self.manualVersions[item.id] = version
+                self.updateSettings {
+                    $0.manualCovers = ($0.manualCovers ?? [:]).merging([item.id:choice],uniquingKeysWith:{ _,new in new })
+                    $0.coverSelections?[item.id] = nil; $0.manualMidpoints?[item.id] = nil
+                    $0.track = .primary; $0.exportMode = .livePhoto
+                }
+            }
         }
     }
     func resolveManualPrompt(process: Bool?) {
@@ -442,6 +519,8 @@ final class WorkspaceModel: ObservableObject {
     }
     @Published private(set) var status = "选择照片或文件夹，开始转换"
     @Published private(set) var notice: String?
+    // Shown once the rescan that a stale plan triggers has finished (begin() clears notice).
+    private var noticeAfterScan: String?
     @Published private(set) var currentFile = ""
     @Published private(set) var progress: Double?
     @Published private(set) var report: ConversionReport?
@@ -463,10 +542,10 @@ final class WorkspaceModel: ObservableObject {
     @Published var sourceMenuRequested = false
     @Published private(set) var migrationTargetConfirmed = false
     @Published var migrationReviewPresented = false
-    @Published var migrationFeatureFilters: Set<MigrationPhotoFeature> = []
-    @Published var migrationSearch = ""
+    @Published var migrationFeatureFilters: Set<MigrationPhotoFeature> = [] { didSet { derivedRevision &+= 1 } }
+    @Published var migrationSearch = "" { didSet { derivedRevision &+= 1 } }
     @Published var migrationSearchExpanded = false
-    @Published var migrationSource: String?
+    @Published var migrationSource: String? { didSet { derivedRevision &+= 1 } }
     @Published var unconvertedExport: UnconvertedExportChoice = .none
     @Published var unconvertedExportLocation: UnconvertedExportChoice = .sameLocation
     @Published var unconvertedOutput: URL?
@@ -485,7 +564,7 @@ final class WorkspaceModel: ObservableObject {
     private var scanComplete = false
     private var inspectionActive = false
     private var rowIndices: [String: Int] = [:]
-    private var sourceOrigins: [String: LibraryOrigin] = [:]
+    private var sourceOrigins: [String: LibraryOrigin] = [:] { didSet { derivedRevision &+= 1 } }
     private var coverVersions: [String:SourceVersion] = [:]
     private struct OutputChoice {
         let destination: OutputDestination; let confirmed: Bool?; let folder: URL?
@@ -544,6 +623,9 @@ final class WorkspaceModel: ObservableObject {
         if directionChanged {
             candidateCapabilities = [:]
             cancelManualPreparation()
+            // An original-export plan and its folder were chosen for the previous
+            // route; never carry them silently into a different target.
+            unconvertedExport = .none; unconvertedOutput = nil; reviewedMigration = nil
             outputChoices[settings.direction] = OutputChoice(destination:settings.destination,confirmed:settings.outputConfirmed,folder:output,albumID:settings.albumID,albumTitle:settings.albumTitle)
             if let saved = outputChoices[next.direction] {
                 next.destination = saved.destination; next.outputConfirmed = saved.confirmed
@@ -626,6 +708,7 @@ final class WorkspaceModel: ObservableObject {
         phase = .idle; status = "选择照片或文件夹，开始转换"
         report = nil; errorMessage = nil; notice = nil; currentFile = ""; progress = nil
         deliverySummary = ""; librarySummary = ""; shareReady = false; detailExpanded = false
+        unconvertedExport = .none; unconvertedOutput = nil; noticeAfterScan = nil
     }
 
     func setOutput(_ url: URL) {
@@ -747,11 +830,34 @@ final class WorkspaceModel: ObservableObject {
                 self.phase = currentToken.isCancelled ? .stopped : .ready
                 self.status = currentToken.isCancelled ? "扫描已停止，可重新扫描" : self.motionCount > 0 ? "已就绪 · \(self.motionCount) 张可转换" : "没有可转换的动态照片或静态 HDR"
                 self.progress = nil
-            case .failure(let error): self.fail(error, cancelled: currentToken.isCancelled)
+                if let message = self.noticeAfterScan { self.noticeAfterScan = nil; self.notice = message }
+            case .failure(let error): self.noticeAfterScan = nil; self.fail(error, cancelled: currentToken.isCancelled)
             }
         })
     }
 
+    /// A reviewed plan that could not start (sources changed, output invalid, nothing
+    /// left to run) must not strand the user on the results step with a stale plan.
+    /// Return to an actionable step and say why; changed sources are rechecked.
+    func recoverFromUnstartedReview() {
+        guard !isBusy, !sharing, workspaceStep == .results else { return }
+        let message = notice ?? errorMessage.map { _ in "执行未开始，请检查后重试" } ?? "本轮来源发生变化，请重新检查迁移计划"
+        let changed = items.contains { item in item.row.version.map { SourceVersion.read(item.source) != $0 } ?? false }
+        resultScopeIDs = nil
+        if changed && canRescan {
+            noticeAfterScan = message
+            workspaceStep = .importPhotos
+            rescan(preservingResults:true)
+        } else {
+            workspaceStep = canReviewMigration ? .preview : migrationTargetConfirmed ? .importPhotos : .direction
+            notice = message
+        }
+    }
+
+    // Legacy direct start (manual-prompt and burst preflight). The app starts every
+    // run through the five-step review (approveMigrationReview → MacPlatformServices
+    // .consumeMigration → startReviewedMigration); only the model regression tests
+    // drive this entry, and no view presents its manual prompt any more.
     func start(outputOverride: URL? = nil) {
         guard canStart, !isPreview, !manualPromptPresented, !manualPreparation else { return }
         if !burstApproved && !selectedBurstGroups.isEmpty {
@@ -995,18 +1101,36 @@ extension WorkspaceModel {
             (!hasExplicitSelection || !selectedIDs.isEmpty) && !items.isEmpty
     }
     var migrationScopeItems: [PhotoQueueItem] {
-        items.filter { (hasExplicitSelection ? selectedIDs.contains($0.id) : category($0) != .converted) }
+        if let cached = plan.scope { return cached }
+        let value = items.filter { (hasExplicitSelection ? selectedIDs.contains($0.id) : category($0) != .converted) }
+        plan.scope = value
+        return value
     }
     func timeOriginalFilename(_ item: PhotoQueueItem) -> String { sourceOrigins[item.id]?.filename ?? item.name }
     func isTimeRepairCandidate(_ item: PhotoQueueItem) -> Bool {
+        if let cached = plan.timeCandidates[item.id] { return cached }
+        let value = computeTimeRepairCandidate(item)
+        plan.timeCandidates[item.id] = value
+        return value
+    }
+    private func computeTimeRepairCandidate(_ item: PhotoQueueItem) -> Bool {
         sourceOrigins[item.id] == nil && settings.photoTimeRepair == true && (settings.liveConversion == false || !availableLive || settings.exportMode != .auxiliaryOnly) && item.row.confirmedStatic && item.row.burst == nil &&
             item.row.captureTimeMissing == true && !item.isMotion &&
-            (settings.photoTimeSynthetic == true || PhotoTimeRepair.inferredTime(filename:timeOriginalFilename(item),zone:TimeZone(identifier:settings.photoTimeZone ?? "") ?? .current) != nil)
+            (settings.photoTimeSynthetic == true || inferredTime(item,zone:TimeZone(identifier:settings.photoTimeZone ?? "") ?? .current) != nil)
     }
     var migrationReadyItems: [PhotoQueueItem] {
-        migrationScopeItems.filter { isMigrationReady($0) }
+        if let cached = plan.ready { return cached }
+        let value = migrationScopeItems.filter { isMigrationReady($0) }
+        plan.ready = value
+        return value
     }
     func isMigrationReady(_ item: PhotoQueueItem) -> Bool {
+        if let cached = plan.readiness[item.id] { return cached }
+        let value = computeMigrationReady(item)
+        plan.readiness[item.id] = value
+        return value
+    }
+    private func computeMigrationReady(_ item: PhotoQueueItem) -> Bool {
             if actionBlockingReason(item) != nil { return false }
             if settings.photoTimeRepair == true && settings.direction != .toApple && item.isMotion && item.row.captureTimeMissing == true { return false }
             guard isTimeRepairCandidate(item) || item.isConvertible && category(item) == .ready else { return false }
@@ -1015,7 +1139,12 @@ extension WorkspaceModel {
             }
             return true
     }
-    var availableLive: Bool { migrationScopeItems.contains { $0.isMotion && $0.row.burst == nil } }
+    var availableLive: Bool {
+        if let cached = plan.availableLive { return cached }
+        let value = migrationScopeItems.contains { $0.isMotion && $0.row.burst == nil }
+        plan.availableLive = value
+        return value
+    }
     var availableBurst: Bool { settings.direction == .toApple && migrationScopeItems.contains { $0.row.burst?.supported == true } }
     var availableHDR: Bool { settings.privateHDRExperimentAvailable && migrationScopeItems.contains { $0.isConvertible && ($0.row.isStaticHDR || $0.hdr.contains("HDR")) && ($0.hdr != "荣耀私有 HDR" || $0.row.privateHDRSupported == true) } }
     var availableTime: Bool { migrationScopeItems.contains { ($0.row.confirmedStatic && !$0.row.isStaticHDR && !$0.isMotion && $0.row.burst == nil) || isMigrationReady($0) } }
@@ -1069,7 +1198,7 @@ extension WorkspaceModel {
     func anticipatedTime(_ item: PhotoQueueItem) -> String? {
         guard settings.photoTimeRepair == true, item.row.captureTimeMissing == true else { return nil }
         let zone = TimeZone(identifier:settings.photoTimeZone ?? "") ?? .current
-        if let inferred = PhotoTimeRepair.inferredTime(filename:timeOriginalFilename(item),zone:zone) {
+        if let inferred = inferredTime(item,zone:zone) {
             let origin = inferred.source == .unixTimestamp ? "Unix 时间" : "文件名候选，待核对"
             return "预计时间：" + PhotoTimeRepair.formatter(zone:zone).string(from:inferred.date) + " · " + origin + " · " + zone.identifier
         }
@@ -1080,11 +1209,14 @@ extension WorkspaceModel {
         return migrationScopeItems.filter { !ready.contains($0.id) && category($0) != .converted }
     }
     func visibleMigrationItems(in scope: PhotoQueueScope) -> [PhotoQueueItem] {
-        items.filter { item in
+        if let cached = plan.visible[scope] { return cached }
+        let value = items.filter { item in
             scope.includes(item,settings:settings) && migrationFeatureFilters.allSatisfy { $0.includes(item) } &&
             (migrationSearch.isEmpty || (item.name + " " + item.relative + " " + item.manufacturer).localizedCaseInsensitiveContains(migrationSearch)) &&
             (migrationSource.map { path in item.id == path || item.id.hasPrefix(path.hasSuffix("/") ? path : path + "/") } ?? true)
         }
+        plan.visible[scope] = value
+        return value
     }
     var migrationFilterKey: String {
         migrationFeatureFilters.map(\.rawValue).sorted().joined(separator:",") + "|" + (migrationSource ?? "") + "|" + migrationSearch

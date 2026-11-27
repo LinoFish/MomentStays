@@ -983,7 +983,16 @@
     "请选择原片文件夹之外的输出位置": "Choose an output location outside the source folder",
     "所选高清候选不存在；请重新选择封面": "The selected high-resolution candidate no longer exists; choose the cover again",
     "无法读取候选画面": "Couldn't read the candidate frame",
-    "不是受支持的动态照片": "Not a supported motion photo"
+    "不是受支持的动态照片": "Not a supported motion photo",
+    "执行未开始，请检查后重试": "The run did not start. Check and try again",
+    "返回上一步，保留当前选择和设置": "Go back one step, keeping the current selection and settings",
+    "查看处理报告": "View Processing Report",
+    "预览导出…": "Preview Export…",
+    "添加照片后可预览导出": "Add photos to preview the export",
+    "照片识别完成且至少选择一张后可预览导出": "Preview the export once photos are inspected and at least one is selected",
+    "使用已校验的结果再次交付，不重新转换": "Deliver the verified results again without converting",
+    "勾选「{0}」": "Select “{0}”",
+    "取消勾选「{0}」": "Deselect “{0}”"
   },
   "verbatimArguments": {
     "照片：{0}\n已有输出：{1}\n\n校验并复用会核对来源、范围、设置和输出文件，匹配时继续且不重新处理。跳过会保留已有文件。覆盖会在新结果完成并通过校验后替换输出文件夹；失败时保留旧结果。": [
@@ -998,6 +1007,12 @@
       1
     ],
     "部分目录不可读取：{0}": [
+      0
+    ],
+    "勾选「{0}」": [
+      0
+    ],
+    "取消勾选「{0}」": [
       0
     ]
   }

@@ -38,7 +38,7 @@ jobs:
           snap step2-select 1120 700 --ui-step 2 --ui-select-first --ui-preview
           snap step2-long 720 600 --ui-step 2 --ui-long-locations
           snap progress 1120 700 --ui-progress-preview --ui-step 4
-          snap running 1120 700 --ui-step 4 --ui-task-phase running
+          snap running 1120 700 --ui-step 4 --ui-task-phase converting
           snap error 1120 700 --ui-step 3 --ui-error-preview
           snap settings 1120 700 --ui-step 3 --ui-expand-settings
           snap settings-dark 1120 700 --ui-step 3 --ui-expand-settings --ui-appearance dark

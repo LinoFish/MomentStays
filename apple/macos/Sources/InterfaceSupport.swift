@@ -14,7 +14,7 @@ struct QueueMarqueeLayout: Equatable {
 }
 struct QueueMarqueeConfiguration: Equatable {
     let layout: QueueMarqueeLayout
-    let sourceRevision: [String]
+    let sourceRevision: Int
     let sources: [String]
     let selected: Set<String>
     let explicit: Bool

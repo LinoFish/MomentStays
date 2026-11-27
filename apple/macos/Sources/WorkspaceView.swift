@@ -58,6 +58,13 @@ struct WorkspaceView: View {
         .onChange(of:model.sources.isEmpty) { empty in
             if empty && !executionActive { model.workspaceStep = model.migrationTargetConfirmed ? .importPhotos : .direction; furthestStep = model.workspaceStep }
         }
+        // A new route re-plans the queue; steps 3–5 of the old route are stale.
+        .onChange(of:model.settings.direction) { _ in
+            guard !executionActive else { return }
+            let floor: WorkspaceStep = model.migrationTargetConfirmed ? .importPhotos : .direction
+            if furthestStep.rawValue > floor.rawValue { furthestStep = floor }
+            if model.workspaceStep.rawValue > furthestStep.rawValue { model.workspaceStep = furthestStep }
+        }
         .onChange(of:model.settingsPresented) { presented in
             if presented {
                 model.settingsPresented = false
@@ -118,10 +125,12 @@ struct WorkspaceView: View {
                 Divider()
                 HStack(spacing:8) {
                     Button(AppText.text("返回")) {
-                        if let previous = WorkspaceStep(rawValue:model.workspaceStep.rawValue - 1) {
-                            model.workspaceStep = previous
-                        }
+                        // Skip steps whose prerequisites no longer hold instead of reopening them.
+                        var candidate = WorkspaceStep(rawValue:model.workspaceStep.rawValue - 1)
+                        while let step = candidate, !canVisit(step) { candidate = WorkspaceStep(rawValue:step.rawValue - 1) }
+                        if let previous = candidate { model.workspaceStep = previous }
                     }.disabled(model.workspaceStep == .direction)
+                        .help(AppText.text("返回上一步，保留当前选择和设置"))
                     primaryAction.frame(maxWidth:.infinity)
                 }.controlSize(.large).recordLayout("command-bar")
                 Text(AppText.text(primaryActionHint)).font(.caption).foregroundColor(.secondary)
@@ -182,13 +191,17 @@ struct WorkspaceView: View {
             .accessibilityIdentifier("workflow-step-\(step.rawValue)")
             .recordLayout("workflow-step-\(step.rawValue)")
     }
+    // Steps 3 and 4 need a valid scope now; the furthest-visited step only keeps
+    // them browsable while a frozen task runs, so an emptied selection or rescan
+    // can never reopen a stale plan.
     private func canVisit(_ step: WorkspaceStep) -> Bool {
+        let visitedWhileRunning = executionActive && furthestStep.rawValue >= step.rawValue
         switch step {
         case .direction: return true
         case .importPhotos: return model.migrationTargetConfirmed
-        case .conversion: return model.migrationTargetConfirmed && (furthestStep.rawValue >= step.rawValue || canContinueImport)
-        case .preview: return model.migrationTargetConfirmed && (furthestStep.rawValue >= step.rawValue || model.canReviewMigration)
-        case .results: return furthestStep == .results || executionActive || model.report != nil
+        case .conversion: return model.migrationTargetConfirmed && (canContinueImport || visitedWhileRunning)
+        case .preview: return model.migrationTargetConfirmed && (model.canReviewMigration || visitedWhileRunning)
+        case .results: return executionActive || model.report != nil || !model.deliverySummary.isEmpty || model.workspaceStep == .results
         }
     }
     private var directionCanvas: some View {
@@ -357,7 +370,7 @@ struct WorkspaceView: View {
                 return "原样导出 \(model.migrationUnconvertedItems.count) 张"
             }
             return "开始执行 \(model.migrationReadyItems.count) 张"
-        case .results: return "返回照片"
+        case .results: return "返回导入照片"
         }
     }
     private var primaryActionHint: String {
