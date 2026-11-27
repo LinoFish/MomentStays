@@ -14,6 +14,10 @@ gstreamer1.0-libav`; tests also use `ffmpeg` and `heif-enc` (`libheif-examples`)
 
 ## Libraries and licences
 
+MomentStays itself is **GPL-3.0-only**. Third-party code follows the dependency
+rules in `AGENTS.md` (「依赖协议规则」); everything below is registered in
+`THIRD_PARTY_NOTICES.md` and checked by `cargo deny check licenses` (`core/deny.toml`).
+
 All system libraries are **dynamically** linked and, in the Flatpak, provided by
 the runtime (HEVC/AAC decoders by the auto-installed
 `org.freedesktop.Platform.codecs-extra`). No codec is bundled.
@@ -34,7 +38,8 @@ Rust crates added (optional, only with the feature): `gstreamer`,
 (glib/gobject/gio-sys, gstreamer-*-sys: MIT; futures-*, num-*, smallvec,
 itertools, kstring, …: MIT OR Apache-2.0; muldiv, slab, winnow: MIT;
 target-lexicon: Apache-2.0 WITH LLVM-exception); build dependency
-`pkg-config` (MIT OR Apache-2.0). No GPL/AGPL crate.
+`pkg-config` (MIT OR Apache-2.0). No GPL/LGPL/AGPL crate; LGPL code is used
+only as runtime-provided, dynamically linked system libraries.
 
 ## Per method
 

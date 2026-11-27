@@ -7,7 +7,7 @@
 - 只提供 Flatpak（Flathub），不做 deb/rpm/AppImage/Snap，避免多套系统库组合。
 - 选 GNOME 运行时而非 `org.freedesktop.Platform`：GTK4、libadwaita、GStreamer、libheif、libjpeg-turbo、lcms2 都已在运行时内（GNOME 50 基于 freedesktop-sdk 25.08），无需自己打包这些 LGPL 库。
 - HEVC/H.264/AAC 解码来自运行时自动安装的扩展 `org.freedesktop.Platform.codecs-extra`（FFmpeg 解码器、libde265/libx265、libheif HEVC 插件）。应用不捆绑任何编解码器。
-- 协议：项目改为 GPL-3.0-only；LGPL 系统库（GTK、GStreamer、libheif 等）一律由运行时提供、动态链接；Rust 依赖仅允许 MIT/Apache-2.0/BSD/ISC/Zlib/MPL-2.0 等宽松协议（当前清单见 `core/LINUX_NATIVE.md`）。
+- 协议：项目改为 GPL-3.0-only；LGPL 系统库（GTK、GStreamer、libheif 等）一律由运行时提供、动态链接；Rust 依赖仅允许 MIT/Apache-2.0/BSD/ISC/Zlib/MPL-2.0 等宽松协议（当前清单见 `core/LINUX_NATIVE.md` 与 `THIRD_PARTY_NOTICES.md`，CI 以 `cargo deny check licenses` 检查）。
 
 ## 2. 应用 ID
 
