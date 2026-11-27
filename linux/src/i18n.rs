@@ -37,11 +37,6 @@ pub fn gettext(msgid: &str) -> String {
     gtk::glib::dgettext(Some(GETTEXT_PACKAGE), msgid).into()
 }
 
-/// Plural form of [`gettext`].
-pub fn ngettext(singular: &str, plural: &str, n: u32) -> String {
-    gtk::glib::dngettext(Some(GETTEXT_PACKAGE), singular, plural, n as _).into()
-}
-
 /// Replace `{name}` placeholders, so translators can reorder them.
 pub fn fill(template: &str, args: &[(&str, &str)]) -> String {
     let mut out = template.to_string();

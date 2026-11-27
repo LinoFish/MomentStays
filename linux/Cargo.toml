@@ -16,7 +16,7 @@ momentstays-core = { path = "../core" }
 # gtk4-rs / libadwaita-rs: MIT bindings; GTK and libadwaita themselves (LGPL)
 # come from the org.gnome.Platform runtime and are linked dynamically.
 gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
-adw = { package = "libadwaita", version = "0.9", features = ["v1_6"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_7"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 
 [build-dependencies]

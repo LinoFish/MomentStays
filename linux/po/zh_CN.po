@@ -10,525 +10,1105 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: src/main.rs:20 src/ui/window.rs:43 src/ui/window.rs:615
+#: src/main.rs:20 src/ui/window.rs:75 src/ui/window.rs:829
 msgid "MomentStays"
 msgstr "留刻"
 
-#: src/model/claims.rs:13
-msgid "Android Motion Photos become Apple Live Photos. Supported static HDR photos are exported as stills."
-msgstr "安卓动态照片转换为苹果实况照片。受支持的静态 HDR 照片导出为静态图片。"
-
-#: src/model/claims.rs:16
-msgid "Apple Live Photos become Motion Photos for the chosen Android brand. JPEG for every brand; HEIC for Samsung only. Bursts are not converted in this direction."
-msgstr "苹果实况照片转换为所选安卓品牌的动态照片。所有品牌支持 JPEG；HEIC 仅限三星。此方向不转换连拍。"
+#: src/model/claims.rs:14
+msgid "Motion photos; local static HDR; HONOR/Huawei JPEG bursts. Google/Samsung bursts are experimental. Private HDR supports only specific profiles."
+msgstr "实况；本地静态 HDR；荣耀/华为 JPEG 连拍。Google/三星连拍为实验支持。私有 HDR 仅部分配置。"
 
 #: src/model/claims.rs:19
-msgid "Bursts (experimental): Android → Apple only, JPEG only. Google, Samsung and known Huawei/Honor burst formats."
-msgstr "连拍（实验性）：仅安卓 → 苹果，仅 JPEG。支持 Google、三星及已知的华为/荣耀连拍格式。"
+msgid "; local static HDR supports verified types only; burst conversion is unsupported."
+msgstr "；静态 HDR 仅本地已支持类型；不支持连拍转换。"
 
-#: src/model/claims.rs:22
-msgid "Try Converting Private HDR"
-msgstr "尝试转换私有 HDR（实验性）"
+#: src/model/claims.rs:21
+msgid "Only the verified routes below are supported. Available Live Photo, HDR, and burst actions depend on inspection and preview. Private HDR is experimental and off by default. Arbitrary Android-to-Android transfers are unsupported."
+msgstr "仅支持下列已验证路线。实况、HDR、连拍的实际可执行范围以扫描和预览为准；私有 HDR 为实验功能，默认关闭，不支持任意安卓互转。"
 
-#: src/model/claims.rs:23
-msgid "Experimental and off by default. Only supported configurations are tried; results are limited and the original display effect is not guaranteed. Standard HDR is handled as usual."
-msgstr "实验功能，默认关闭。仅尝试已支持的配置，效果有局限，不保证原厂显示效果。标准 HDR 按原规则处理。"
+#: src/model/claims.rs:24
+msgid "Conversion changes the format or metadata of output copies. Keep source photos archived and backed up. Source files remain read-only."
+msgstr "转换会修改输出副本的格式或元数据；建议保留原图存档备份。源文件保持只读。"
 
 #: src/model/claims.rs:27
-msgid "Source files are only read. Results are written to the output folder; keep a backup of your originals."
-msgstr "源文件保持只读，结果写入输出文件夹；建议保留原图备份。"
-
-#: src/model/claims.rs:28
 msgid "This build has no Linux codec backend: static HDR checks, burst checks and image re-encoding are unavailable."
 msgstr "此版本未包含 Linux 编解码后端：无法进行静态 HDR 检查、连拍检查和图像重新编码。"
 
-#: src/ui/grid.rs:37
-msgid "The scan stopped unexpectedly."
-msgstr "扫描意外中止。"
+#: src/model/flow.rs:35
+msgid "Conversion Direction"
+msgstr "转换方向"
 
-#: src/ui/grid.rs:100 src/ui/inspector.rs:54 src/ui/window.rs:33
-msgid "Live"
-msgstr "实况"
+#: src/model/flow.rs:36 src/model/flow.rs:291
+msgid "Import Photos"
+msgstr "导入照片"
 
-#: src/ui/grid.rs:101 src/ui/inspector.rs:91 src/ui/window.rs:34
-msgid "HDR"
-msgstr "HDR"
+#: src/model/flow.rs:37 src/model/flow.rs:292
+msgid "Choose Features"
+msgstr "选择转换特性"
 
-#: src/ui/grid.rs:103
-msgid "Burst · Google"
-msgstr "连拍 · Google"
+#: src/model/flow.rs:38
+msgid "Export Preview"
+msgstr "导出预览"
 
-#: src/ui/grid.rs:104
-msgid "Burst · Samsung"
-msgstr "连拍 · 三星"
+#: src/model/flow.rs:39
+msgid "Results"
+msgstr "执行结果"
 
-#: src/ui/grid.rs:105
-msgid "Burst · Huawei"
-msgstr "连拍 · 华为"
+#: src/model/flow.rs:44
+msgid "Choose source and target to determine import scope"
+msgstr "选择来源与目标，确定可导入范围"
 
-#: src/ui/grid.rs:106
-msgid "Burst · Honor"
-msgstr "连拍 · 荣耀"
+#: src/model/flow.rs:45
+msgid "Add photos and choose this run's scope"
+msgstr "添加照片，确定本轮范围"
 
-#: src/ui/grid.rs:108
-msgid "Not Convertible"
-msgstr "不可转换"
+#: src/model/flow.rs:46
+msgid "Choose the photo features to process in this run"
+msgstr "选择本轮要处理的照片特性"
 
-#: src/ui/grid.rs:146
-msgid "Include in This Conversion"
-msgstr "纳入本次转换"
+#: src/model/flow.rs:47
+msgid "Inspect planned output and choose a destination"
+msgstr "检查预计输出，选择导出位置"
 
-#: src/ui/inspector.rs:53
-msgid "Live / Motion Photo"
-msgstr "实况 / 动态照片"
+#: src/model/flow.rs:48
+msgid "View progress and per-photo results"
+msgstr "查看执行进度与逐项结果"
 
-#: src/ui/inspector.rs:55
-msgid "Static HDR photo"
-msgstr "静态 HDR 照片"
+#: src/model/flow.rs:136
+msgid "Current"
+msgstr "当前"
 
-#: src/ui/inspector.rs:56
-msgid "Burst member (experimental)"
-msgstr "连拍成员（实验性）"
+#: src/model/flow.rs:137
+msgid "View"
+msgstr "可查看"
 
-#: src/ui/inspector.rs:57
-msgid "Not convertible in this direction"
-msgstr "此方向不可转换"
+#: src/model/flow.rs:138
+msgid "Upcoming"
+msgstr "待进行"
 
-#: src/ui/inspector.rs:63
-msgid "Yes"
-msgstr "是"
+#: src/model/flow.rs:281 src/ui/window.rs:463
+msgid "Stopping"
+msgstr "停止中"
 
-#: src/ui/inspector.rs:65
-msgid "No"
-msgstr "否"
+#: src/model/flow.rs:283
+msgid "Stop"
+msgstr "停止"
 
-#: src/ui/inspector.rs:78
-msgid "Photo"
-msgstr "照片"
+#: src/model/flow.rs:293
+msgid "Preview Export"
+msgstr "预览导出"
 
-#: src/ui/inspector.rs:81
-msgid "Scan"
-msgstr "扫描"
+#: src/model/flow.rs:296
+msgid "Choose Output Location…"
+msgstr "选择输出位置…"
 
-#: src/ui/inspector.rs:82
-msgid "Reported by the conversion engine."
-msgstr "由转换引擎报告。"
+#: src/model/flow.rs:298
+#, python-brace-format
+msgid "Export {count} Unchanged Photos"
+msgstr "原样导出 {count} 张"
 
-#: src/ui/inspector.rs:86
-msgid "File"
-msgstr "文件"
+#: src/model/flow.rs:300
+#, python-brace-format
+msgid "Run on {count} Photos"
+msgstr "开始执行 {count} 张"
 
-#: src/ui/inspector.rs:87
-msgid "Location"
-msgstr "位置"
+#: src/model/flow.rs:303
+msgid "Back to Import Photos"
+msgstr "返回导入照片"
 
-#: src/ui/inspector.rs:88
-msgid "Type"
-msgstr "类型"
+#: src/model/flow.rs:318
+msgid "Waiting for a safe stop"
+msgstr "等待安全停止"
 
-#: src/ui/inspector.rs:89
-msgid "Included"
-msgstr "已纳入"
+#: src/model/flow.rs:320
+msgid "The task is frozen. Earlier steps can be browsed read-only"
+msgstr "任务已冻结，可只读浏览前面的步骤"
 
-#: src/ui/inspector.rs:90
-msgid "Device"
-msgstr "设备"
+#: src/model/flow.rs:326
+msgid "0 selected. Select photos to continue"
+msgstr "已选 0 张，请重新勾选照片"
 
-#: src/ui/inspector.rs:92
-msgid "Cover"
-msgstr "封面"
+#: src/model/flow.rs:331
+msgid "Direction selected. Import photos next"
+msgstr "方向已选，下一步导入照片"
 
-#: src/ui/inspector.rs:93
-msgid "Engine Note"
-msgstr "引擎说明"
+#: src/model/flow.rs:333
+msgid "Choose a direction card on the left"
+msgstr "请选择左侧的方向卡片"
 
-#: src/ui/inspector.rs:100 src/ui/window.rs:35
-msgid "Burst"
-msgstr "连拍"
+#: src/model/flow.rs:338
+msgid "Recognizing sources; please wait"
+msgstr "正在识别来源，请稍候"
 
-#: src/ui/inspector.rs:104
-msgid "Format"
-msgstr "格式"
+#: src/model/flow.rs:340
+msgid "Add photos, then select this run's scope"
+msgstr "添加照片后选择本轮范围"
 
-#: src/ui/inspector.rs:105
-msgid "Group"
-msgstr "组"
+#: src/model/flow.rs:343
+#, python-brace-format
+msgid "This run: {count} photos. Filtering does not change selection"
+msgstr "本轮 {count} 张，筛选不改变选择"
 
-#: src/ui/inspector.rs:106
-msgid "Frame"
-msgstr "帧"
+#: src/model/flow.rs:350
+msgid "Fill missing dates only; keep the original photo format"
+msgstr "仅补缺照片时间；原照片格式保持不变"
 
-#: src/ui/inspector.rs:107
-msgid "Original Cover Frame"
-msgstr "原始代表帧"
+#: src/model/flow.rs:352
+msgid "Choose this run's features here; change direction in step 1"
+msgstr "只选择本轮处理特性，转换方向在第一步更改"
 
-#: src/ui/inspector.rs:108
-msgid "Support"
-msgstr "支持情况"
+#: src/model/flow.rs:357
+msgid "Choose this run's output location"
+msgstr "请选择本轮输出位置"
 
-#: src/ui/inspector.rs:132
-msgid "No Photo Selected"
-msgstr "未选择照片"
+#: src/model/flow.rs:361 src/ui/run.rs:76
+msgid "Choose an unchanged-export folder"
+msgstr "请选择原样导出目录"
 
-#: src/ui/inspector.rs:133
-msgid "Select a photo to see what the scan found."
-msgstr "选择一张照片，查看扫描结果。"
+#: src/model/flow.rs:363
+msgid "Run the ready scope. Estimates do not guarantee success"
+msgstr "按本轮就绪范围执行，预估不代表实际成功"
 
-#: src/ui/inspector.rs:188 src/ui/prefs.rs:13
-msgid "Samsung"
-msgstr "三星"
+#: src/model/flow.rs:366
+msgid "Keep this run's results and return to photos"
+msgstr "保留本轮结果，可返回查看照片"
 
-#: src/ui/inspector.rs:189 src/ui/prefs.rs:14
-msgid "Huawei"
-msgstr "华为"
+#: src/model/plan.rs:146
+msgid "Only some members are selected. Select the whole group or explicitly export independent photos"
+msgstr "只选择了部分成员；请选择全组，或显式按独立照片导出"
 
-#: src/ui/inspector.rs:190
-msgid "Honor"
-msgstr "荣耀"
+#: src/model/plan.rs:159
+msgid "Select a representative frame"
+msgstr "请选择代表帧"
 
-#: src/ui/inspector.rs:197
-msgid "Supported (experimental)"
-msgstr "已支持（实验性）"
+#: src/model/plan.rs:239
+msgid "The selected Live Photo auxiliary-output options cannot currently be combined with static HDR. Adjust those options or process separately"
+msgstr "本轮实况附加输出选项与静态 HDR 的组合尚未支持；请调整实况选项或分批处理"
 
-#: src/ui/prefs.rs:11
-msgid "Google / Generic (recommended for newer Honor)"
-msgstr "Google / 通用（新款荣耀推荐）"
+#: src/model/plan.rs:252
+msgid "Target JPEG requires HDR reconstruction. HDR cannot be safely preserved while its action is off; change the format or selected features"
+msgstr "目标 JPEG 需要 HDR 重建，未选择 HDR 时不能安全保留；请调整格式或特性"
 
-#: src/ui/prefs.rs:12
+#: src/model/plan.rs:257
+msgid "HDR-only processing cannot safely preserve the original burst container yet. Enable burst conversion or export unchanged resources"
+msgstr "仅 HDR 尚不能安全保留原连拍封装；请启用连拍或原样输出"
+
+#: src/model/plan.rs:259
+msgid "Burst conversion is not selected; original burst resources are preserved"
+msgstr "未选择连拍转换；原连拍资源保持不变"
+
+#: src/model/plan.rs:265
+msgid "HDR-only processing cannot safely preserve this motion container yet. Enable Live Photo conversion or export unchanged resources"
+msgstr "仅 HDR 尚不能安全保留此原动态封装；请启用实况或原样输出"
+
+#: src/model/plan.rs:267
+msgid "Live Photo conversion is not selected; original motion resources are preserved"
+msgstr "未选择实况转换；原动态资源保持不变"
+
+#: src/model/plan.rs:272
+msgid "HDR conversion is not selected; original HDR resources are preserved"
+msgstr "未选择 HDR 转换；原 HDR 资源保持不变"
+
+#: src/model/plan.rs:280
+msgid "A custom cover cannot preserve unselected HDR. Restore the original cover or change the selected features"
+msgstr "自选封面不能保留未选择转换的 HDR；请恢复原封面或调整特性"
+
+#: src/model/plan.rs:343
+msgid "Will not convert: "
+msgstr "不会转换："
+
+#: src/model/plan.rs:348
+msgid "Partly executable: HDR cannot be converted"
+msgstr "部分可执行：HDR 不可转换"
+
+#: src/model/plan.rs:350
+msgid "May fail; execution-time verification required"
+msgstr "可能失败，需执行校验"
+
+#: src/model/plan.rs:356
+msgid "Expected to Run"
+msgstr "预计可执行"
+
+#: src/model/plan.rs:359
+msgid "Date already present; no repair needed"
+msgstr "已有时间，无需补缺"
+
+#: src/model/plan.rs:362
+msgid "Planned unchanged export"
+msgstr "预计原样输出"
+
+#: src/model/plan.rs:364 src/ui/inspector.rs:234 src/ui/queue.rs:744
+msgid "Not converted in this run"
+msgstr "本轮不转换"
+
+#: src/model/plan.rs:371
+msgid "Plan to export complete original resources; required resources still need readability checks."
+msgstr "预计按完整原资源输出；仍需检查必要资源是否可读。"
+
+#: src/model/plan.rs:373
+msgid "No converted output will be generated. See the plan for the reason."
+msgstr "不生成转换成片；原因见本次计划。"
+
+#: src/model/plan.rs:377
+msgid "Planned output: date-repaired still copy in the original format"
+msgstr "预计输出：补缺时间的静态照片副本，保持原格式"
+
+#: src/model/plan.rs:379
+msgid "Planned output: target motion format and required paired resources"
+msgstr "预计输出：目标动态格式与必要配对资源"
+
+#: src/model/plan.rs:381
+msgid "Planned output: selected burst members and group resources"
+msgstr "预计输出：所选连拍成员与组资源"
+
+#: src/model/plan.rs:383
+msgid "Planned output: one static HDR image, without Live Photo video"
+msgstr "预计输出：静态 HDR 单图，不生成实况视频"
+
+#: src/model/plan.rs:402
+msgid "Export selected photos independently without writing burst markers"
+msgstr "原样输出所选独立照片，不写连拍标记"
+
+#: src/model/plan.rs:404
+msgid "Convert burst markers; preserve existing indices and all selected frames. Missing frames are allowed; the original total is not inferred"
+msgstr "连拍标记转换 · 保留现有原序号与全部所选帧；允许缺帧，不猜原总数"
+
+#: src/model/plan.rs:410
+msgid "PhotoTime fills only missing capture dates in output copies, preserving image encoding and other features. Without a reliable date or explicit synthetic-time option, no capture date is written."
+msgstr "PhotoTime：只补全输出副本的缺失拍摄时间，保留原编码与其他特性；没有可靠日期且未选合成排序时间时不写拍摄时间。"
+
+#: src/model/plan.rs:417
+msgid "Capture-date rewriting cannot safely rebuild this target motion container yet. Disable date repair or choose another route; it will not be silently flattened into a still image."
+msgstr "时间写入尚不支持当前目标动态容器的安全重封装；请关闭补缺选项或更改路线，不会静默拆为静态图。"
+
+#: src/model/plan.rs:421
+msgid "Cannot convert with the current settings. Unchanged export may be available; target compatibility is not guaranteed"
+msgstr "当前不能转换；可选择原样导出，不承诺目标兼容"
+
+#: src/model/plan.rs:427
+msgid "Static HDR: process as one image, without video, cover time, or Live Photo pairing"
+msgstr "静态 HDR：独立单图处理；没有视频、封面或实况配对"
+
+#: src/model/plan.rs:434
+msgid "Convert motion photos into Apple paired resources"
+msgstr "实况转换为 Apple 配对资源"
+
+#: src/model/plan.rs:436
+msgid "Convert Live Photos into the target motion format"
+msgstr "实况转换为目标动态格式"
+
+#: src/model/plan.rs:439
+msgid "Preserve motion, audio, and a trusted cover"
+msgstr "保留动态、声音与可信封面"
+
+#: src/model/plan.rs:443
+msgid "HDR follows available capabilities. Private HDR conversion is experimental; unsupported HDR is reported and ignored without blocking other supported actions"
+msgstr "HDR 按实际能力处理；私有 HDR 转换属实验性尝试，无法处理时记录忽略原因，不阻断其他已支持步骤"
+
+#: src/model/plan.rs:445
+msgid "HDR follows the standard compatibility path. Private HDR conversion is off or does not apply to this output"
+msgstr "HDR 按标准兼容路径处理；私有 HDR 实验转换未启用或不适用于当前输出"
+
+#: src/model/plan.rs:453
+msgid "The custom high-resolution cover is JPEG and does not preserve the original cover's HDR"
+msgstr "自选高清封面为 JPEG，不保留原封面的 HDR"
+
+#: src/ui/burst.rs:30
+msgid "Trusted HONOR JPEG → Apple only. Missing frames are allowed; existing frame indices are preserved. No frames or video are synthesized. Filenames cannot establish the camera's original total; only currently available members are checked."
+msgstr "仅支持可信荣耀 JPEG → Apple。允许缺帧，保留现有成员的原始帧序号，不补帧、不合成视频。文件名不能证明相机原始总帧数；这里只核对当前来源中可见的成员。"
+
+#: src/ui/burst.rs:52
+#, python-brace-format
+msgid "{label} · {frames} frames · {selected} selected"
+msgstr "{label} · {frames} 帧 · 已选 {selected} 帧"
+
+#: src/ui/burst.rs:96 src/ui/burst.rs:103
+#, python-brace-format
+msgid "Frame {index}"
+msgstr "第 {index} 帧"
+
+#: src/ui/burst.rs:99
+msgid "Original COVER"
+msgstr "原始 COVER"
+
+#: src/ui/burst.rs:113 src/ui/queue.rs:828
+msgid "Select this photo"
+msgstr "勾选此照片"
+
+#: src/ui/burst.rs:127
+#, python-brace-format
+msgid "Set frame {index} as representative"
+msgstr "将第 {index} 帧设为代表帧"
+
+#: src/ui/burst.rs:149
+msgid "Export selected photos independently (no burst markers)"
+msgstr "按所选独立照片导出（不写连拍标记）"
+
+#: src/ui/burst.rs:190
+msgid "Burst Conversion Plan"
+msgstr "连拍迁移计划"
+
+#: src/ui/burst.rs:195 src/ui/cover.rs:72
+msgid "Done"
+msgstr "完成"
+
+#: src/ui/burst.rs:197
+msgid "Save selection and return to workspace"
+msgstr "保存选择并返回工作台"
+
+#: src/ui/cover.rs:67
+msgid "Choose Cover"
+msgstr "选择封面"
+
+#: src/ui/cover.rs:86
+msgid "Reading high-resolution cover…"
+msgstr "正在读取高清封面…"
+
+#: src/ui/cover.rs:119 src/ui/cover.rs:126
+msgid "No other high-resolution covers found"
+msgstr "未找到其他高清封面"
+
+#: src/ui/cover.rs:145
+msgid "Source cover"
+msgstr "源封面"
+
+#: src/ui/cover.rs:161
+#, python-brace-format
+msgid "Cover {seconds} s"
+msgstr "封面 {seconds} 秒"
+
+#: src/ui/cover.rs:204
+msgid "Changing the cover does not affect the motion video. New covers are JPEG and do not preserve the original cover's HDR."
+msgstr "更换封面不影响动态视频。新封面为 JPEG，不保留原封面的 HDR。"
+
+#: src/ui/direction.rs:17
+msgid "Apple photos"
+msgstr "Apple 照片"
+
+#: src/ui/direction.rs:18 src/ui/direction.rs:27
+msgid "Google / General"
+msgstr "Google / 通用"
+
+#: src/ui/direction.rs:20
+msgid "Google → HONOR"
+msgstr "Google → 荣耀"
+
+#: src/ui/direction.rs:21
+msgid "HONOR → Google"
+msgstr "荣耀 → Google"
+
+#: src/ui/direction.rs:28
 msgid "Xiaomi"
 msgstr "小米"
 
-#: src/ui/prefs.rs:15
-msgid "Honor (fallback)"
+#: src/ui/direction.rs:29
+msgid "Samsung"
+msgstr "三星"
+
+#: src/ui/direction.rs:30
+msgid "Huawei"
+msgstr "华为"
+
+#: src/ui/direction.rs:31
+msgid "HONOR (Fallback)"
 msgstr "荣耀（备用）"
 
-#: src/ui/prefs.rs:29
-msgid "Verify and Resume"
-msgstr "校验并继续"
+#: src/ui/direction.rs:40
+msgid "Supported photos → Apple (Live / HDR / Burst)"
+msgstr "受支持照片 → Apple（实况 / HDR / 连拍）"
 
-#: src/ui/prefs.rs:30
-msgid "Skip"
-msgstr "跳过"
+#: src/ui/direction.rs:41
+msgid "Apple Live Photos → "
+msgstr "苹果实况 → "
 
-#: src/ui/prefs.rs:31
-msgid "Overwrite"
-msgstr "覆盖"
+#: src/ui/direction.rs:42
+msgid "Google → HONOR (JPEG)"
+msgstr "Google → 荣耀（JPEG）"
 
-#: src/ui/prefs.rs:48
-msgid "Export"
-msgstr "导出"
+#: src/ui/direction.rs:43
+msgid "HONOR → Google (JPEG)"
+msgstr "荣耀 → Google（JPEG）"
 
-#: src/ui/prefs.rs:54
-msgid "Android Target"
-msgstr "安卓目标"
+#: src/ui/direction.rs:50
+msgid "Verified Google Motion Photo JPEG → HONOR only. HEIC, Photos library sources, and bursts are unsupported."
+msgstr "仅 Google 实况 JPEG → 荣耀；不支持 HEIC、相册来源或连拍。"
 
-#: src/ui/prefs.rs:55
-msgid "Used for Apple → Android. Change the direction in the header bar."
-msgstr "用于苹果 → 安卓。转换方向在标题栏中更改。"
+#: src/ui/direction.rs:51
+msgid "Recognized HONOR Motion Photo JPEG → Google only. HEIC, Photos library sources, and bursts are unsupported."
+msgstr "仅已识别荣耀实况 JPEG → Google；不支持 HEIC、相册来源或连拍。"
 
-#: src/ui/prefs.rs:61
-msgid "Brand"
-msgstr "品牌"
+#: src/ui/direction.rs:54
+msgid "Apple Live Photos · "
+msgstr "Apple 实况 · "
 
-#: src/ui/prefs.rs:66
+#: src/ui/direction.rs:89
+msgid "Android to Apple"
+msgstr "安卓到苹果"
+
+#: src/ui/direction.rs:90
+msgid "Apple to Android"
+msgstr "苹果到安卓"
+
+#: src/ui/direction.rs:91
+msgid "Android to Android"
+msgstr "安卓到安卓"
+
+#: src/ui/flow.rs:49 src/ui/window.rs:109
+msgid "Workflow"
+msgstr "操作步骤"
+
+#: src/ui/flow.rs:61
+msgid "Complete workflow in five steps"
+msgstr "完整操作流程，共五步"
+
+#: src/ui/flow.rs:88
+msgid "Back"
+msgstr "返回"
+
+#: src/ui/flow.rs:89
+msgid "Go back one step, keeping the current selection and settings"
+msgstr "返回上一步，保留当前选择和设置"
+
+#: src/ui/flow.rs:218
+#, python-brace-format
+msgid "Step {step} of {count}"
+msgstr "第 {step} 步 / 共 {count} 步"
+
+#: src/ui/flow.rs:240
+#, python-brace-format
+msgid "View {step}, keeping the current selection and settings"
+msgstr "查看{step}，保留当前选择和设置"
+
+#: src/ui/flow.rs:245
+#, python-brace-format
+msgid "Finish the earlier steps to open {step}"
+msgstr "完成前面的步骤后进入{step}"
+
+#: src/ui/flow.rs:439
+msgid "Choose a source and target on the left. Import options depend on this direction; choose processing features after importing."
+msgstr "在左侧选择来源与目标。导入入口会按此方向开放，照片特性在导入后单独选择。"
+
+#: src/ui/flow.rs:445
+msgid "Changing direction reuses valid inspection data and rechecks eligibility. Sources and selections are retained; incompatible items show a reason."
+msgstr "更改方向后复用有效解析，重新检查适用范围；保留来源和勾选，不兼容项会说明原因。"
+
+#: src/ui/flow.rs:471
+msgid "Sources"
+msgstr "来源"
+
+#: src/ui/flow.rs:475
+msgid "Rescan Sources"
+msgstr "重新检查来源"
+
+#: src/ui/flow.rs:477
+msgid "Clear Sources and List"
+msgstr "清空来源与列表"
+
+#: src/ui/flow.rs:483
+msgid "Rescan or clear sources"
+msgstr "重新检查或清空来源"
+
+#: src/ui/flow.rs:487
+msgid "Source Actions"
+msgstr "来源操作"
+
+#: src/ui/flow.rs:511
+msgid "Add folders of photos; subfolders are included."
+msgstr "添加照片文件夹；包含子文件夹。"
+
+#: src/ui/flow.rs:520
+msgid "Clear All Sources"
+msgstr "清空所有来源"
+
+#: src/ui/flow.rs:524
+msgid "Clear this run's list only; never delete source files"
+msgstr "只清空本轮列表，不删除原片"
+
+#: src/ui/flow.rs:535
+#, python-brace-format
+msgid "{sources} sources · {photos} photos"
+msgstr "{sources} 个入口 · {photos} 张"
+
+#: src/ui/flow.rs:547
+msgid "All Sources"
+msgstr "全部来源"
+
+#: src/ui/flow.rs:569 src/ui/flow.rs:571
+msgid "Watch for Changes"
+msgstr "监测变化"
+
+#: src/ui/flow.rs:582
+msgid "Remove Folder"
+msgstr "移除文件夹"
+
+#: src/ui/flow.rs:702 src/ui/queue.rs:925
+msgid "Live Photo"
+msgstr "实况照片"
+
+#: src/ui/flow.rs:711
+msgid "Format, Video, and Cover Options"
+msgstr "格式、视频与封面选项"
+
+#: src/ui/flow.rs:734 src/ui/queue.rs:916 src/ui/queue.rs:918
+msgid "Burst"
+msgstr "连拍"
+
+#: src/ui/flow.rs:743
+msgid "Choose Burst Members and Representative…"
+msgstr "选择连拍成员与代表照片…"
+
+#: src/ui/flow.rs:755
+msgid "Export Unchanged Photos"
+msgstr "输出未修改的照片"
+
+#: src/ui/flow.rs:767
+msgid "Export complete, unchanged source resources. Choose the location in Export Preview."
+msgstr "完整输出未转换的原资源；位置在导出预览中选择。"
+
+#: src/ui/flow.rs:774
+msgid "Photo Dates"
+msgstr "照片时间"
+
+#: src/ui/flow.rs:775
+msgid "Enable only when photo dates appear out of order in Photos. Source files are not modified."
+msgstr "仅在相册中的照片时间错乱时开启。原片不改写。"
+
+#: src/ui/flow.rs:791
+msgid "Fill missing capture dates (PhotoTime)"
+msgstr "补全缺失的拍摄时间（PhotoTime）"
+
+#: src/ui/flow.rs:792
+msgid "Recognize a date or Unix timestamp from the original filename. Fill missing dates only in output copies; existing nonempty dates stay unchanged."
+msgstr "从原文件名识别日期或 Unix 时间，只补全输出副本中的缺失时间；已有非空时间保持不变。"
+
+#: src/ui/flow.rs:807
+msgid "Generate synthetic ordering dates when recognition fails"
+msgstr "无法识别时生成合成排序时间"
+
+#: src/ui/flow.rs:810
+msgid "Synthetic dates are not actual capture dates. They follow natural filename order at one-second intervals. Time zone: "
+msgstr "合成时间不是真实拍摄时间；按原文件名自然顺序逐张增加一秒。时区："
+
+#: src/ui/flow.rs:816
+msgid "If a motion container or HDR resource cannot be fully verified, it is not published or split into a still; see Export Preview for the reason."
+msgstr "动态容器或 HDR 资源无法完整验证时不发布，也不会拆成静态图；请在导出预览查看原因。"
+
+#: src/ui/flow.rs:820
+msgid "Set output file dates from EXIF"
+msgstr "将 EXIF 时间写入输出文件时间"
+
+#: src/ui/flow.rs:821
+msgid "Independently set creation and modification dates; off by default. After repair, read actual EXIF dates. Without usable EXIF, keep source file dates."
+msgstr "独立控制创建和修改时间，默认关闭；补缺后读取实际 EXIF，无可用 EXIF 时沿用来源文件时间。"
+
+#: src/ui/flow.rs:832
+msgid "HDR (experimental, off by default)"
+msgstr "HDR（实验性，默认关闭）"
+
+#: src/ui/flow.rs:833
+msgid "Only supported HDR profiles are attempted. Unsupported items are listed in preview; the original device's HDR appearance is not guaranteed."
+msgstr "仅尝试已支持的 HDR 配置；不支持项会在预览列出，不保证还原原厂显示效果。"
+
+#: src/ui/flow.rs:858
+msgid "Output content"
+msgstr "导出内容"
+
+#: src/ui/flow.rs:869
+msgid "Main photo live, other covers still"
+msgstr "主照片实况，其余静态照片"
+
+#: src/ui/flow.rs:873
+msgid "Export Every Cover as a Live Photo"
+msgstr "每张都导出为 Live Photo"
+
+#: src/ui/flow.rs:878
+msgid "High-resolution Cover Output"
+msgstr "高清封面输出"
+
+#: src/ui/flow.rs:900
+msgid "Video Source"
+msgstr "视频来源"
+
+#: src/ui/flow.rs:914
+msgid "A high-resolution cover is selected; the motion video is required."
+msgstr "已选择高清封面，固定使用动态视频。"
+
+#: src/ui/flow.rs:933
+msgid "Use Choose Cover beside a photo to select a high-resolution candidate. New covers are JPEG and do not preserve the original cover's HDR."
+msgstr "点击照片旁的「选择封面…」更换高清封面。新封面为 JPEG，不保留原封面的 HDR。"
+
+#: src/ui/flow.rs:943
+msgid "Target Format"
+msgstr "目标格式"
+
+#: src/ui/flow.rs:950
+msgid "Return to step 1, Conversion Direction, to change the route or target brand."
+msgstr "更换转换方向或目标厂商，请返回第一步「转换方向」。"
+
+#: src/ui/flow.rs:954
+msgid "Google / General is recommended for newer HONOR devices. HONOR format is a fallback."
+msgstr "新款荣耀推荐选择 Google / 通用；荣耀格式仅作备用。"
+
+#: src/ui/flow.rs:957
+msgid "Newer HONOR devices have been verified with the Google format exported by MomentStays. This does not imply support for Google Camera originals."
+msgstr "新款荣耀已验证可识别留刻导出的 Google 格式，不代表能识别 Google 相机拍摄的原片。"
+
+#: src/ui/flow.rs:965
 msgid "Photo Format"
 msgstr "照片格式"
 
-#: src/ui/prefs.rs:70
-msgid "HEIC is available for Samsung only."
-msgstr "HEIC 仅适用于三星。"
+#: src/ui/flow.rs:973
+msgid "This vendor supports JPEG only."
+msgstr "此厂商仅支持 JPEG。"
 
-#: src/ui/prefs.rs:76
-msgid "Keep Original JPEG Encoding"
+#: src/ui/flow.rs:979
+msgid "Preserve original JPEG encoding"
 msgstr "保留 JPEG 原图编码"
 
-#: src/ui/prefs.rs:77
-msgid "The main image is not recompressed when kept."
-msgstr "保留时不重新压缩主图。"
+#: src/ui/flow.rs:987
+msgid "Main image quality"
+msgstr "主图质量"
 
-#: src/ui/prefs.rs:87
-msgid "Output"
-msgstr "输出"
+#: src/ui/flow.rs:988
+msgid "Gain-map quality"
+msgstr "增益图质量"
 
-#: src/ui/prefs.rs:91
+#: src/ui/flow.rs:1006
+msgid "JPEG preservation avoids recompression. HEIC-to-JPEG uses main image quality; gain-map quality applies only when re-encoding."
+msgstr "保留 JPEG 时不重压原图。HEIC 转 JPEG 使用主图质量；增益图质量仅在重编码时生效。"
+
+#: src/ui/flow.rs:1007
+msgid "HDR uses Ultra HDR. SDR stays unchanged."
+msgstr "HDR 使用 Ultra HDR，SDR 保持不变。"
+
+#: src/ui/flow.rs:1012
+msgid "Preserve original HEIC encoding"
+msgstr "保留 HEIC 原始编码"
+
+#: src/ui/flow.rs:1016
+msgid "No quality adjustment is needed. Check compatibility and HDR display on the target phone."
+msgstr "无需调整质量。兼容性和 HDR 显示需在目标手机确认。"
+
+#: src/ui/flow.rs:1039
+msgid "Choose Folder…"
+msgstr "选择文件夹…"
+
+#: src/ui/flow.rs:1050
+msgid "Output Location"
+msgstr "输出位置"
+
+#: src/ui/flow.rs:1053
+msgid "Folder"
+msgstr "文件夹"
+
+#: src/ui/flow.rs:1055
+msgid "Not selected"
+msgstr "尚未选择"
+
+#: src/ui/flow.rs:1063
+msgid "Export to the Same Location"
+msgstr "导出到相同位置"
+
+#: src/ui/flow.rs:1067
+msgid "Export to a Different Location"
+msgstr "导出到不同位置"
+
+#: src/ui/flow.rs:1072
+msgid "Unchanged-export location"
+msgstr "原样导出位置"
+
+#: src/ui/flow.rs:1083
+msgid "Export Unchanged"
+msgstr "原样导出"
+
+#: src/ui/flow.rs:1085
+msgid "Choose a different folder for unchanged resources"
+msgstr "请选择不同的原文件导出目录"
+
+#: src/ui/flow.rs:1089
+msgid "Use this run's output location, with a separate folder for original resources. Sources are not overwritten, and unchanged exports do not count as conversions."
+msgstr "使用本次转换输出位置，另建原文件目录，不覆盖来源；原样导出不会计为转换成功。"
+
+#: src/ui/flow.rs:1094
 msgid "When a Result Exists"
-msgstr "结果已存在时"
+msgstr "已有输出时"
 
-#: src/ui/prefs.rs:98
-msgid "Verify and Resume keeps verified results and redoes incomplete ones."
-msgstr "“校验并继续”保留已校验的结果，重做未完成的结果。"
+#: src/ui/flow.rs:1111
+msgid "Existing Output"
+msgstr "已有输出时"
 
-#: src/ui/prefs.rs:102
+#: src/ui/flow.rs:1118
+msgid "Verify and Reuse checks sources, scope, settings, and output files, and continues without reprocessing when they match."
+msgstr "校验并复用会核对来源、范围、设置和输出文件，匹配时继续且不重新处理。"
+
+#: src/ui/flow.rs:1123
 msgid "Write Report Files"
 msgstr "写入报告文件"
 
-#: src/ui/prefs.rs:103
+#: src/ui/flow.rs:1124
 msgid "Save the manifest and JSON report next to the results."
 msgstr "在结果旁保存清单和 JSON 报告。"
 
-#: src/ui/prefs.rs:109
-msgid "Use EXIF Time for File Dates"
-msgstr "将 EXIF 时间写入输出文件时间"
+#: src/ui/flow.rs:1151 src/ui/window.rs:467
+#, python-brace-format
+msgid "Processed {done} / {total}"
+msgstr "已处理 {done} / {total}"
 
-#: src/ui/prefs.rs:110
-msgid "Off by default. Otherwise output files keep the source file's modification time."
-msgstr "默认关闭。关闭时输出文件沿用来源文件的修改时间。"
+#: src/ui/flow.rs:1173
+#, python-brace-format
+msgid "Converted {converted} · Unchanged {copied} · Existing {resumed} · Skipped {skipped} · Failed {failed}"
+msgstr "已转换 {converted} · 原样 {copied} · 已有 {resumed} · 跳过 {skipped} · 失败 {failed}"
 
-#: src/ui/prefs.rs:121
-msgid "Bursts"
-msgstr "连拍"
+#: src/ui/flow.rs:1187
+#, python-brace-format
+msgid "Unchanged export: new {copied} · reused {resumed} · skipped {skipped} · failed {failed}"
+msgstr "原样导出：新增 {copied} · 复用 {resumed} · 跳过 {skipped} · 失败 {failed}"
 
-#: src/ui/prefs.rs:127
-msgid "Experimental"
-msgstr "实验性功能"
+#: src/ui/flow.rs:1200 src/ui/window.rs:45
+msgid "Open Output Folder"
+msgstr "打开输出文件夹"
 
-#: src/ui/prefs.rs:141 src/ui/window.rs:148 src/ui/window.rs:589
-msgid "Export Settings"
-msgstr "导出设置"
+#: src/ui/flow.rs:1206
+msgid "View Full Report"
+msgstr "查看完整报告"
 
-#: src/ui/run.rs:22 src/ui/window.rs:146
-msgid "Choose Output Folder"
-msgstr "选择输出文件夹"
+#: src/ui/flow.rs:1212
+msgid "File generation and unchanged exports are recorded separately; the report in the output folder lists every photo."
+msgstr "文件生成与原样输出分别记录；输出文件夹中的报告列出每张照片。"
 
-#: src/ui/run.rs:23
+#: src/ui/inspector.rs:50 src/ui/inspector.rs:121 src/ui/queue.rs:148 src/ui/queue.rs:242
+msgid "Photo Inspector"
+msgstr "照片检查器"
+
+#: src/ui/inspector.rs:66 src/ui/queue.rs:817
+msgid "Choose Cover…"
+msgstr "选择封面…"
+
+#: src/ui/inspector.rs:71
+msgid "Source and Resources"
+msgstr "来源与资源"
+
+#: src/ui/inspector.rs:77
+msgid "Previewing does not change global selection. Conversion and unchanged export create separate copies; sources stay unchanged."
+msgstr "查看预览不改变全局勾选。转换与原样导出生成独立副本，原片保持不变。"
+
+#: src/ui/inspector.rs:123
+msgid "Add sources, then open a photo preview to inspect features and the plan."
+msgstr "添加来源后，使用照片的“预览”查看特性和处理计划。"
+
+#: src/ui/inspector.rs:225
+msgid "Result"
+msgstr "结果"
+
+#: src/ui/inspector.rs:239
+msgid "Planned Output"
+msgstr "本次预计输出"
+
+#: src/ui/inspector.rs:250
+msgid "Features and This Run's Plan"
+msgstr "特性与本次计划"
+
+#: src/ui/inspector.rs:258
+#, python-brace-format
+msgid "Original burst index: {index}; the camera's original total is unknown."
+msgstr "连拍原序号：{index}；相机原始总帧数未知。"
+
+#: src/ui/inspector.rs:266
+msgid "Still image: no video, motion cover, or Live Photo pair is generated."
+msgstr "静态图片：不生成视频、动态封面或实况配对。"
+
+#: src/ui/inspector.rs:274
+#, python-brace-format
+msgid "High-resolution cover selected: candidate {index}"
+msgstr "已选择高清候选封面：第 {index} 个"
+
+#: src/ui/queue.rs:98
+msgid "Clear Feature Filters"
+msgstr "清除特性筛选"
+
+#: src/ui/queue.rs:104 src/ui/queue.rs:532
+msgid "Filter"
+msgstr "筛选"
+
+#: src/ui/queue.rs:107
+msgid "Filter by photo features. Multiple choices show photos matching all selected features without changing task scope"
+msgstr "按照片特性筛选；多项勾选时只显示同时具备的照片，不改变本轮处理范围"
+
+#: src/ui/queue.rs:113
+msgid "Inspect Burst Groups"
+msgstr "检查连拍组"
+
+#: src/ui/queue.rs:115 src/ui/window.rs:797
+msgid "Search Photos"
+msgstr "搜索照片"
+
+#: src/ui/queue.rs:119 src/ui/queue.rs:127
+msgid "Search filenames, sources, or devices"
+msgstr "搜索文件名、来源或设备"
+
+#: src/ui/queue.rs:145
+msgid "Show or hide the photo inspector (Ctrl+Alt+P)"
+msgstr "展开或收起照片检查器（Ctrl+Alt+P）"
+
+#: src/ui/queue.rs:151
+msgid "Switch to List"
+msgstr "切换为列表"
+
+#: src/ui/queue.rs:155
+msgid "Select Filtered Photos"
+msgstr "选择当前筛选结果"
+
+#: src/ui/queue.rs:158
+msgid "Deselect All"
+msgstr "取消全选"
+
+#: src/ui/queue.rs:160
+msgid "Restore Default Processing Scope"
+msgstr "恢复默认处理范围"
+
+#: src/ui/queue.rs:166
+msgid "Clear Filters and View All"
+msgstr "清除筛选并查看全部"
+
+#: src/ui/queue.rs:173
+msgid "Selection and filtering actions"
+msgstr "勾选与筛选操作"
+
+#: src/ui/queue.rs:217
+msgid "Add Photos"
+msgstr "添加照片"
+
+#: src/ui/queue.rs:218
+msgid "Add files, folders, or Photos library items, or drop them into the photo area"
+msgstr "添加文件、文件夹或图库照片，也可直接拖进左侧照片区"
+
+#: src/ui/queue.rs:224 src/ui/window.rs:476
+msgid "Recognizing photos"
+msgstr "正在识别照片"
+
+#: src/ui/queue.rs:229
+msgid "No Matching Photos"
+msgstr "没有匹配的照片"
+
+#: src/ui/queue.rs:230
+msgid "Try another filter or search."
+msgstr "请尝试其他筛选或搜索。"
+
+#: src/ui/queue.rs:240
+msgid "Back to Photo List"
+msgstr "返回照片列表"
+
+#: src/ui/queue.rs:473
+msgid "The scan stopped unexpectedly."
+msgstr "扫描意外中止。"
+
+#: src/ui/queue.rs:534
+#, python-brace-format
+msgid "Filter {count}"
+msgstr "筛选 {count}"
+
+#: src/ui/queue.rs:546
+#, python-brace-format
+msgid "Inspect burst groups: {groups} groups · {frames} frames"
+msgstr "检查连拍组：{groups} 组 · {frames} 帧"
+
+#: src/ui/queue.rs:648
+msgid "All"
+msgstr "全部"
+
+#: src/ui/queue.rs:702
+msgid "Filter the view only, without changing this run's scope"
+msgstr "只筛选显示，不改变本轮处理范围"
+
+#: src/ui/queue.rs:754
+msgid "Will Not Convert"
+msgstr "明确不会转换"
+
+#: src/ui/queue.rs:907
+msgid "Cover: "
+msgstr "封面："
+
+#: src/ui/queue.rs:933 src/ui/queue.rs:935
+msgid "Missing Date"
+msgstr "缺失时间"
+
+#: src/ui/queue.rs:962
+msgid "Current preview"
+msgstr "当前预览"
+
+#: src/ui/run.rs:32
 msgid "_Select"
 msgstr "选择(_S)"
 
-#: src/ui/run.rs:33 src/ui/sidebar.rs:25
+#: src/ui/run.rs:42 src/ui/sources.rs:27
 msgid "This folder cannot be opened as a local folder."
 msgstr "无法将此文件夹作为本地文件夹打开。"
 
-#: src/ui/run.rs:37 src/ui/run.rs:66
+#: src/ui/run.rs:46 src/ui/run.rs:172
 msgid "Choose an output folder outside the source folders."
-msgstr "请选择原片文件夹之外的输出位置。"
+msgstr "请选择来源文件夹之外的输出文件夹。"
 
-#: src/ui/run.rs:73
-msgid "No photos are included."
-msgstr "没有纳入任何照片。"
+#: src/ui/run.rs:61
+msgid "Choose Output Folder"
+msgstr "选择输出文件夹"
 
-#: src/ui/run.rs:89
-#, python-brace-format
-msgid "Converting {done} of {total}…"
-msgstr "正在转换第 {done} 张，共 {total} 张…"
-
-#: src/ui/run.rs:103
+#: src/ui/run.rs:235
 msgid "The conversion stopped unexpectedly."
 msgstr "转换意外中止。"
 
-#: src/ui/run.rs:119
-msgid "Stopping safely…"
-msgstr "正在安全停止…"
-
-#: src/ui/run.rs:151
-msgid "Conversion Stopped"
-msgstr "转换已停止"
-
-#: src/ui/run.rs:153
-msgid "Conversion Finished"
-msgstr "转换完成"
-
-#: src/ui/run.rs:155
-msgid "Finished with Problems"
-msgstr "已完成，但有问题"
-
-#: src/ui/run.rs:158
-#, python-brace-format
-msgid "Converted: {converted}\nVerified existing: {resumed}\nCopied unchanged: {copied}\nSkipped: {skipped}\nFailed: {failed}"
-msgstr "已转换：{converted}\n已校验现有结果：{resumed}\n原样复制：{copied}\n已跳过：{skipped}\n失败：{failed}"
-
-#: src/ui/run.rs:176
-msgid "See the report in the output folder for every photo."
-msgstr "每张照片的结果见输出文件夹中的报告。"
-
-#: src/ui/run.rs:181
-msgid "_Close"
-msgstr "关闭(_C)"
-
-#: src/ui/run.rs:182
-msgid "_Open Output Folder"
-msgstr "打开输出文件夹(_O)"
-
-#: src/ui/run.rs:203
+#: src/ui/run.rs:295
 #, python-brace-format
 msgid "Results are in “{folder}”."
-msgstr "结果位于“{folder}”。"
+msgstr "结果已保存到“{folder}”。"
 
-#: src/ui/sidebar.rs:17 src/ui/window.rs:51 src/ui/window.rs:586
+#: src/ui/sources.rs:19 src/ui/window.rs:796
 msgid "Add Source Folder"
 msgstr "添加来源文件夹"
 
-#: src/ui/sidebar.rs:18
+#: src/ui/sources.rs:20
 msgid "_Add"
 msgstr "添加(_A)"
 
-#: src/ui/sidebar.rs:37
+#: src/ui/sources.rs:39
 msgid "Folders inside the new folder were merged into it."
 msgstr "新文件夹内已有的文件夹已合并。"
 
-#: src/ui/sidebar.rs:43
+#: src/ui/sources.rs:45
 #, python-brace-format
 msgid "Already included in “{folder}”."
 msgstr "已包含在“{folder}”中。"
 
-#: src/ui/sidebar.rs:98 src/ui/sidebar.rs:100
-msgid "Watch for Changes"
-msgstr "监视变化"
-
-#: src/ui/sidebar.rs:111
-msgid "Remove Folder"
-msgstr "移除文件夹"
-
-#: src/ui/sidebar.rs:167
+#: src/ui/sources.rs:138
 #, python-brace-format
 msgid "Cannot watch “{folder}”: {error}"
 msgstr "无法监视“{folder}”：{error}"
 
-#: src/ui/window.rs:23
+#: src/ui/window.rs:49
+msgid "Processing Report…"
+msgstr "处理报告…"
+
+#: src/ui/window.rs:54
 msgid "_Export Settings"
 msgstr "导出设置(_E)"
 
-#: src/ui/window.rs:24
+#: src/ui/window.rs:55
 msgid "_Keyboard Shortcuts"
 msgstr "键盘快捷键(_K)"
 
-#: src/ui/window.rs:25
+#: src/ui/window.rs:56
 msgid "_About MomentStays"
 msgstr "关于留刻(_A)"
 
-#: src/ui/window.rs:32
-msgid "All"
-msgstr "全部"
+#: src/ui/window.rs:99
+msgid "Export, share, reveal outputs, reports, and recent results without converting again"
+msgstr "导出、共享、打开输出、处理报告与最近结果；不重新转换"
 
-#: src/ui/window.rs:36
-msgid "Needs Attention"
-msgstr "需检查"
+#: src/ui/window.rs:104
+msgid "Results and Delivery"
+msgstr "结果与交付"
 
-#: src/ui/window.rs:56
-msgid "Main Menu"
-msgstr "主菜单"
+#: src/ui/window.rs:153
+msgid "Task progress"
+msgstr "任务进度"
 
-#: src/ui/window.rs:62
-msgid "Sources"
-msgstr "来源"
+#: src/ui/window.rs:186
+msgid "Restore Default Scope"
+msgstr "恢复默认范围"
 
-#: src/ui/window.rs:69
-msgid "No Source Folders"
-msgstr "没有来源文件夹"
+#: src/ui/window.rs:194
+msgid "Preview Export…"
+msgstr "预览导出…"
 
-#: src/ui/window.rs:70
-msgid "Add the folders that hold your photos. Subfolders are included."
-msgstr "添加存放照片的文件夹，包含子文件夹。"
+#: src/ui/window.rs:324
+msgid "Cannot Complete Operation"
+msgstr "无法完成操作"
 
-#: src/ui/window.rs:75
-msgid "_Add Folder…"
-msgstr "添加文件夹(_A)…"
+#: src/ui/window.rs:325
+msgid "OK"
+msgstr "好"
 
-#: src/ui/window.rs:108
-msgid "Android → Apple"
-msgstr "安卓 → 苹果"
+#: src/ui/window.rs:481
+msgid "Finished; some photos need attention"
+msgstr "已完成，部分照片需要检查"
 
-#: src/ui/window.rs:109
-msgid "Apple → Android"
-msgstr "苹果 → 安卓"
+#: src/ui/window.rs:535
+msgid "Show Reason"
+msgstr "查看原因"
 
-#: src/ui/window.rs:112
-msgid "Convert Android Motion Photos to Apple Live Photos"
-msgstr "将安卓动态照片转换为苹果实况照片"
+#: src/ui/window.rs:537
+msgid "View Report"
+msgstr "查看报告"
 
-#: src/ui/window.rs:115
-msgid "Convert Apple Live Photos to Android Motion Photos"
-msgstr "将苹果实况照片转换为安卓动态照片"
-
-#: src/ui/window.rs:125
-msgid "Toggle Sources"
-msgstr "显示或隐藏来源"
-
-#: src/ui/window.rs:129 src/ui/window.rs:587
-msgid "Search Photos"
-msgstr "搜索照片"
-
-#: src/ui/window.rs:131
-msgid "_Start"
-msgstr "开始(_S)"
-
-#: src/ui/window.rs:134
-msgid "Convert the included photos"
-msgstr "转换已纳入的照片"
-
-#: src/ui/window.rs:136
-msgid "Output Folder…"
-msgstr "输出文件夹…"
-
-#: src/ui/window.rs:152
-msgid "Toggle Details"
-msgstr "显示或隐藏详情"
-
-#: src/ui/window.rs:165
-msgid "Search file names, folders or devices"
-msgstr "搜索文件名、文件夹或设备"
-
-#: src/ui/window.rs:208
-msgid "Include All Shown"
-msgstr "纳入所有显示的照片"
-
-#: src/ui/window.rs:212
-msgid "Exclude All Shown"
-msgstr "排除所有显示的照片"
-
-#: src/ui/window.rs:218
-msgid "Include or Exclude"
-msgstr "纳入或排除"
-
-#: src/ui/window.rs:234
-msgid "Add Photos to Convert"
-msgstr "添加要转换的照片"
-
-#: src/ui/window.rs:238
-msgid "Scanning Photos…"
-msgstr "正在识别照片…"
-
-#: src/ui/window.rs:243
-msgid "No Matching Photos"
-msgstr "没有匹配的照片"
-
-#: src/ui/window.rs:244
-msgid "Try another filter or search."
-msgstr "请尝试其他筛选或搜索。"
-
-#: src/ui/window.rs:278
-msgid "Sto_p"
-msgstr "停止(_P)"
-
-#: src/ui/window.rs:305
-msgid "Details"
-msgstr "详情"
-
-#: src/ui/window.rs:546
+#: src/ui/window.rs:551
 #, python-brace-format
-msgid "{included} of {all} photo included"
-msgid_plural "{included} of {all} photos included"
-msgstr[0] "已纳入 {included} 张，共 {all} 张"
+msgid "{count} photos expected to run. Click a photo for output resources and reasons. Estimates do not guarantee success."
+msgstr "预计可执行 {count} 张；点击照片查看输出资源与原因。预估不代表实际成功。"
+
+#: src/ui/window.rs:559
+msgid "File generation and unchanged exports are recorded separately. Click a photo for its actual result and reason."
+msgstr "文件生成与原样输出分别记录；点击照片查看实际结果与原因。"
+
+#: src/ui/window.rs:573
+#, python-brace-format
+msgid "Export estimate · {count} photos · Source thumbnails"
+msgstr "导出预估 · {count} 张 · 原片缩略图"
+
+#: src/ui/window.rs:577
+#, python-brace-format
+msgid "Results · {count} photos · Source thumbnails"
+msgstr "执行结果 · {count} 张 · 原片缩略图"
+
+#: src/ui/window.rs:580
+msgid "Scope: all pending photos"
+msgstr "范围：全部待处理照片"
 
 #: src/ui/window.rs:583
+#, python-brace-format
+msgid "{count} selected"
+msgstr "已选 {count} 张"
+
+#: src/ui/window.rs:589
+#, python-brace-format
+msgid " · {count} selected items hidden"
+msgstr " · 隐藏选中 {count} 张"
+
+#: src/ui/window.rs:597
+msgid "Click a photo to inspect it. Use the check mark or Ctrl-click to include it. Filtering and preview do not change the processing scope"
+msgstr "点击照片查看特性与处理计划；用勾选标记或 Ctrl 点击纳入本轮。筛选与预览不改变处理范围"
+
+#: src/ui/window.rs:605
+#, python-brace-format
+msgid "Showing {shown} / {total}"
+msgstr "显示 {shown} / {total}"
+
+#: src/ui/window.rs:793
 msgid "General"
 msgstr "常规"
 
-#: src/ui/window.rs:588
-msgid "Start Conversion"
-msgstr "开始转换"
+#: src/ui/window.rs:798
+msgid "Next Step"
+msgstr "下一步"
 
-#: src/ui/window.rs:590
+#: src/ui/window.rs:801
+msgid "Show or Hide the Photo Inspector"
+msgstr "展开或收起照片检查器"
+
+#: src/ui/window.rs:803
+msgid "Export Settings"
+msgstr "导出设置"
+
+#: src/ui/window.rs:804
 msgid "Keyboard Shortcuts"
 msgstr "键盘快捷键"
 
-#: src/ui/window.rs:591
+#: src/ui/window.rs:805
 msgid "Quit"
 msgstr "退出"
 
-#: src/ui/window.rs:623
+#: src/ui/window.rs:837
 msgid "Convert Android Motion Photos and Apple Live Photos, keeping the moment."
 msgstr "在安卓动态照片与苹果实况照片之间转换，留住原来的瞬间。"
 
-#: src/ui/window.rs:626
+#: src/ui/window.rs:840
 msgid "translator-credits"
 msgstr "Lino"

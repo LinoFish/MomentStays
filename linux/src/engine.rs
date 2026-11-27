@@ -55,6 +55,44 @@ pub fn rows(reply: Value) -> Vec<Value> {
     }
 }
 
+/// Host facts the macOS app adds to scan rows (`ConversionService`):
+/// whether the still has a capture date (`capture_time_missing`), whether
+/// its file name carries one (`filename_time`), and the HONOR private HDR
+/// preflight. The core ignores these keys when the rows come back.
+pub fn annotate(mut row: Value) -> Value {
+    let Some(source) = row["source"].as_str().map(std::path::PathBuf::from) else {
+        return row;
+    };
+    let photo = matches!(
+        source
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .as_deref(),
+        Some("jpg" | "jpeg" | "heic" | "heif")
+    );
+    if photo {
+        row["capture_time_missing"] =
+            Value::from(momentstays_core::exif_time::capture_time_from_file(&source).is_none());
+    }
+    let name = source
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    row["filename_time"] =
+        Value::from(momentstays_core::engine::decisions::filename_time::infer(&name).is_some());
+    if row["hdr"] == crate::model::queue::HONOR_PRIVATE_HDR {
+        let req = serde_json::json!({"mode": "honor-hdr-preflight", "source": source});
+        match run(&req, Arc::default(), Arc::new(StopToken::new())) {
+            Ok(v) => {
+                row["private_hdr_supported"] = v["supported"].clone();
+                row["private_hdr_reason"] = v["reason"].clone();
+            }
+            Err(_) => row["private_hdr_supported"] = Value::from(false),
+        }
+    }
+    row
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,6 +131,19 @@ mod tests {
         assert!(rows[0]["source"]
             .as_str()
             .is_some_and(|s| s.ends_with("a.jpg")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn annotate_adds_host_time_facts() {
+        let dir = std::env::temp_dir().join(format!("ms-gnome-time-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("IMG_20240102_030405.jpg");
+        std::fs::write(&file, [0xFF, 0xD8, 0xFF, 0xD9]).expect("write");
+        let row = annotate(json!({"source": file.to_string_lossy(), "hdr": "SDR"}));
+        assert_eq!(row["capture_time_missing"], true);
+        assert_eq!(row["filename_time"], true);
+        assert!(row.get("private_hdr_supported").is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

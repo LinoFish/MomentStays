@@ -9,9 +9,9 @@ with the same JSON requests as the macOS app). Ships only as a Flatpak on
 
 | Path | What |
 | --- | --- |
-| `src/model/` | View-model logic without GTK (queue, filters, sources, settings → core request, result summary, feature claims); unit tested |
+| `src/model/` | View-model logic without GTK, unit tested: the five-step workflow and its gating (`flow.rs`, a port of the macOS `WorkspaceView` rules), this run's plan (`plan.rs`, macOS `isMigrationReady` …), queue, selection and filters, sources, settings → core requests, result summary, feature claims |
 | `src/engine.rs` | Blocking bridge to the core; the UI runs it with `gio::spawn_blocking` |
-| `src/ui/` | Window, header bars, split views, grid, inspector, preferences, run/progress |
+| `src/ui/` | Window laid out like the macOS app: queue column (step title, result menu, feature tabs and tools, grid/list with the photo inspector, status bar) and the 300 pt workflow column (step list, Back + primary action, hint, one `AdwNavigationPage` per step); direction cards, cover and burst dialogs, run/progress |
 | `data/` | `style.css` (brand accent), GResource, desktop file, metainfo, icon |
 | `po/` | gettext catalogs: `zh_CN` (zh-Hans), `zh_TW` (zh-Hant, also installed as `zh_HK`); English is the source |
 | `flatpak/` | Draft Flatpak manifest |
@@ -28,7 +28,8 @@ flatpak-builder --force-clean --user --install build-dir linux/flatpak/com.linof
 
 Translations: edit `po/translations.py`, then run `python3 po/update.py` from
 `linux/` (regenerates `momentstays.pot` and the `.po` files; fails if a string
-is untranslated).
+is untranslated). `po/gen_translations.py` refills `translations.py` for new
+strings from the macOS app's catalog (zh-Hans) and OpenCC (zh-Hant).
 
 ## Linux codec backend
 

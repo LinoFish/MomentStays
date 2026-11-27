@@ -1,4 +1,5 @@
-//! Source folders: add (portal folder chooser), remove, monitoring.
+//! Source folders (step 2): add (portal folder chooser), remove, clear,
+//! monitoring.
 
 use super::Shared;
 use crate::i18n::{fill, gettext};
@@ -10,7 +11,8 @@ use std::time::Duration;
 
 /// Open the folder chooser (xdg-desktop-portal FileChooser inside Flatpak).
 pub fn choose_folder(app: &Shared) {
-    if app.busy() {
+    // macOS `canImportSources`: a direction comes first.
+    if app.busy() || !app.target_confirmed.get() {
         return;
     }
     let dialog = gtk::FileDialog::builder()
@@ -47,21 +49,36 @@ pub fn add_folder(app: &Shared, path: PathBuf) {
         }
     }
     sync_monitors(app);
-    refresh(app);
-    super::grid::scan(app);
+    super::queue::scan(app);
 }
 
-fn remove_folder(app: &Shared, path: &Path) {
+pub fn remove_folder(app: &Shared, path: &Path) {
     if app.busy() {
         return;
     }
     app.sources.borrow_mut().remove(path);
+    if app.queue.borrow().source() == Some(path) {
+        app.queue.borrow_mut().set_source(None);
+    }
     sync_monitors(app);
-    refresh(app);
-    super::grid::scan(app);
+    super::queue::scan(app);
 }
 
-fn set_monitoring(app: &Shared, path: &Path, on: bool) {
+/// Clear Sources and List: forget every source; source files stay untouched.
+pub fn clear(app: &Shared) {
+    if app.busy() {
+        return;
+    }
+    let paths = app.sources.borrow().paths();
+    for p in paths {
+        app.sources.borrow_mut().remove(&p);
+    }
+    app.queue.borrow_mut().set_source(None);
+    sync_monitors(app);
+    super::queue::scan(app);
+}
+
+pub fn set_monitoring(app: &Shared, path: &Path, on: bool) {
     if app.sources.borrow_mut().set_monitoring(path, on) {
         sync_monitors(app);
     }
@@ -71,52 +88,6 @@ pub fn display_name(path: &Path) -> String {
     path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
-}
-
-/// Rebuild the folder rows from the model.
-pub fn refresh(app: &Shared) {
-    let list = &app.w.folder_list;
-    while let Some(child) = list.first_child() {
-        list.remove(&child);
-    }
-    let folders = app.sources.borrow().folders().to_vec();
-    app.w
-        .sidebar_stack
-        .set_visible_child_name(if folders.is_empty() { "empty" } else { "list" });
-    for folder in folders {
-        let row = adw::ActionRow::builder()
-            .title(glib::markup_escape_text(&display_name(&folder.path)))
-            .subtitle(glib::markup_escape_text(&folder.path.to_string_lossy()))
-            .subtitle_lines(1)
-            .build();
-        row.set_tooltip_text(Some(&folder.path.to_string_lossy()));
-        row.add_prefix(&gtk::Image::from_icon_name("folder-symbolic"));
-
-        let monitor = gtk::Switch::builder()
-            .active(folder.monitoring)
-            .valign(gtk::Align::Center)
-            .tooltip_text(gettext("Watch for Changes"))
-            .build();
-        monitor.update_property(&[gtk::accessible::Property::Label(&gettext(
-            "Watch for Changes",
-        ))]);
-        let a = app.clone();
-        let p = folder.path.clone();
-        monitor.connect_active_notify(move |s| set_monitoring(&a, &p, s.is_active()));
-        row.add_suffix(&monitor);
-
-        let remove = gtk::Button::builder()
-            .icon_name("list-remove-symbolic")
-            .valign(gtk::Align::Center)
-            .tooltip_text(gettext("Remove Folder"))
-            .css_classes(["flat", "circular"])
-            .build();
-        let a = app.clone();
-        let p = folder.path.clone();
-        remove.connect_clicked(move |_| remove_folder(&a, &p));
-        row.add_suffix(&remove);
-        list.append(&row);
-    }
 }
 
 /// Keep one GIO directory monitor per watched folder. GFileMonitor watches
@@ -179,7 +150,7 @@ fn schedule_rescan(app: &Shared) {
     let id = glib::timeout_add_local_once(Duration::from_millis(1500), move || {
         a.rescan_timer.borrow_mut().take();
         if !a.busy() {
-            super::grid::scan(&a);
+            super::queue::scan(&a);
         }
     });
     *app.rescan_timer.borrow_mut() = Some(id);
