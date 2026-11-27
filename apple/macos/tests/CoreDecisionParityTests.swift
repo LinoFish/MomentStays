@@ -184,6 +184,114 @@ struct CoreDecisionParityTests {
         return digest.value
     }
 
+    // MARK: queue-state
+
+    /// Every scan-row fact the queue state reads (`initialState`, `isConvertible`,
+    /// `ScanRow.isStaticHDR`), each under every result state and cover label, plus a
+    /// cross of cover choices; all of it under every direction, missing-time policy and
+    /// export mode.
+    static func queueCorpus() throws -> (entries: [(row: ScanRow, allowsStaticHDR: Bool, resultState: PhotoState?)],
+                                         settings: [ConversionSettings]) {
+        var labels: [(String, String?)] = []
+        for (label, code) in [("HEIC（原样保留）","heic_preserved"),("Ultra HDR","ultra_hdr"),("Ultra HDR · 保留","ultra_hdr_preserved"),
+                              ("荣耀私有 HDR","honor_private"),("ISO HDR","iso_hdr"),("旧 Apple HDR","apple_legacy"),("HEIC HDR","heic_hdr"),
+                              ("OPPO UHDR（实验）","oppo_uhdr"),("Apple HDR","apple_hdr"),("SDR / 其他","sdr"),("SDR","sdr"),
+                              ("原始图像","sdr"),("原始 JPEG","sdr"),("—","none")] {
+            labels.append((label, code)); labels.append((label, nil))
+        }
+        // Codes the table does not know, codes that disagree with the label, near-miss labels.
+        labels += [("某 HDR 变体", "other"), ("某 HDR 变体", nil), ("未知", "other"), ("", nil), ("Ultra HDR", "other"),
+                   ("Ultra HDR", "bogus"), ("SDR", "ultra_hdr"), ("荣耀私有 HDR", "ULTRA_HDR"), ("ultra hdr", nil), ("Ultra HDR ", nil)]
+        let decoder = JSONDecoder()
+        func frame(_ supported: Bool) throws -> BurstFrame {
+            try decoder.decode(BurstFrame.self, from: Data(#"{"group_id":"g","source_group":"s","index":0,"source_cover":false,"source_sha256":null,"supported":\#(supported),"reason":""}"#.utf8))
+        }
+        let bursts: [BurstFrame?] = [nil, try frame(true), try frame(false)]
+        let results: [PhotoState?] = [nil] + PhotoState.allCases
+        var entries: [(row: ScanRow, allowsStaticHDR: Bool, resultState: PhotoState?)] = []
+        var manualCovers: [String:ManualCoverChoice] = [:], midpoints: [String:Bool] = [:], coverPaths: [String] = []
+        var serial = 0
+        func add(_ label: (String, String?), motion: Bool, burst: BurstFrame?, confirmed: Bool, allows: Bool, cover: String,
+                 result: PhotoState?, manual: Bool, midpoint: Bool?, selected: Bool) {
+            serial += 1
+            let url = URL(fileURLWithPath: "/tmp/momentstays-queue-parity/item-\(serial).jpg")
+            var row = ScanRow(source: url, relative: url.lastPathComponent, isMotion: motion, hdr: label.0, cover: cover,
+                              detail: "parity", confirmedStatic: confirmed)
+            row.burst = burst; row.hdrKind = label.1
+            entries.append((row, allows, result))
+            if manual { manualCovers[url.path] = ManualCoverChoice(source_sha256: "s", source_version: "v", track_index: 0, frame_index: 1) }
+            if let midpoint = midpoint { midpoints[url.path] = midpoint }
+            if selected { coverPaths.append(NativeBatch.normalized(url).path) }
+        }
+        // Part 1: every row fact × result state × the cover labels the category tests.
+        for label in labels { for motion in [false, true] { for burst in bursts { for confirmed in [false, true] { for allows in [false, true] {
+            for cover in ["0.4 秒", "未确定（需选帧）", "未记录"] { for result in results {
+                add(label, motion: motion, burst: burst, confirmed: confirmed, allows: allows, cover: cover, result: result,
+                    manual: false, midpoint: nil, selected: false)
+            } }
+        } } } } }
+        // Part 2: representative rows × more cover labels × every cover choice.
+        let some: [(String, String?)] = [("Ultra HDR","ultra_hdr"),("Ultra HDR",nil),("SDR","sdr"),("—",nil),("Ultra HDR","bogus"),("OPPO UHDR（实验）","oppo_uhdr")]
+        for label in some { for motion in [false, true] { for burst in bursts { for confirmed in [false, true] { for allows in [false, true] {
+            for cover in ["0.4 秒", "未确定（需选帧）", "未记录", "", "—", "未记录 "] { for result in results {
+                for manual in [false, true] { for midpoint in [nil, false, true] as [Bool?] { for selected in [false, true] {
+                    add(label, motion: motion, burst: burst, confirmed: confirmed, allows: allows, cover: cover, result: result,
+                        manual: manual, midpoint: midpoint, selected: selected)
+                } } }
+            } }
+        } } } } }
+        var settingsList: [ConversionSettings] = []
+        for direction in ConversionDirection.allCases { for missing in MissingTimePolicy.allCases { for mode in ExportMode.allCases {
+            var s = ConversionSettings()
+            s.direction = direction; s.missingTime = missing; s.exportMode = mode
+            s.manualCovers = manualCovers; s.manualMidpoints = midpoints
+            s.coverSelections = Dictionary(uniqueKeysWithValues: coverPaths.map { ($0, 1) })
+            settingsList.append(s)
+        } } }
+        // And without any cover choice recorded.
+        var plain = ConversionSettings(); plain.direction = .toApple
+        settingsList.append(plain)
+        return (entries, settingsList)
+    }
+
+    static func queueLine(_ index: Int, _ name: String, _ v: CoreQueueState) -> String {
+        "\(index)|\(name)|\(v.isStaticHDR)|\(v.isConvertible)|\(v.initialState.rawValue)|\(v.category.rawValue)"
+    }
+
+    static func queueState() throws -> String {
+        let (entries, settingsList) = try queueCorpus()
+        let legacyDigest = Digest(), coreDigest = Digest()
+        var compared = 0
+        for (index, settings) in settingsList.enumerated() {
+            let core = PhotoQueueItem.coreQueueStates(entries, settings: settings)
+            if core.count != entries.count { mismatch("queue-state", "settings#\(index): \(core.count) answers for \(entries.count) items"); continue }
+            for (offset, (entry, coreValue)) in zip(entries, core).enumerated() {
+                compared += 1
+                var item = PhotoQueueItem(entry.row, allowsStaticHDR: entry.allowsStaticHDR)
+                item.resultState = entry.resultState
+                let legacy = CoreQueueState(isStaticHDR: item.row.isStaticHDR, isConvertible: item.isConvertible,
+                                            initialState: item.initialState, category: item.category(settings: settings))
+                legacyDigest.add(queueLine(index, item.name, legacy))
+                coreDigest.add(queueLine(index, item.name, coreValue))
+                if legacy != coreValue {
+                    mismatch("queue-state", "settings#\(index) \(settings.direction.rawValue)/\(settings.missingTime.rawValue)/\(settings.exportMode.rawValue) " +
+                             "\(item.name) motion=\(entry.row.isMotion) burst=\(entry.row.burst.map { "\($0.supported)" } ?? "nil") " +
+                             "static=\(entry.row.confirmedStatic) allows=\(entry.allowsStaticHDR) hdr=\(entry.row.hdr.debugDescription)/\(entry.row.hdrKind ?? "nil") " +
+                             "cover=\(entry.row.cover.debugDescription) result=\(entry.resultState?.rawValue ?? "nil"): swift \(legacy) core \(coreValue)")
+                }
+                // The single-item call answers like the batch one.
+                if offset % 997 == 0, PhotoQueueItem.coreQueueStates([entry], settings: settings).first != coreValue {
+                    mismatch("queue-state", "settings#\(index) \(item.name): single and batch answers differ")
+                }
+            }
+        }
+        print("queue-state: \(compared) item×settings cases (\(entries.count) items, \(settingsList.count) settings), " +
+              "legacy Swift digest \(legacyDigest.value), core digest \(coreDigest.value)")
+        let value = coreDigest.value
+        golden("queue-state", value)
+        return value
+    }
+
     // MARK: live-selection
 
     static func liveSelection(root: URL) throws -> String {
@@ -357,6 +465,7 @@ struct CoreDecisionParityTests {
             digests["filename-time"] = filenameTime()
             digests["action-blocking-reason"] = try blockingReason()
             digests["live-selection"] = try liveSelection(root: root)
+            digests["queue-state"] = try queueState()
             let tracks = try trackParity(root: root, repository: repository)
             for line in examples { print("MISMATCH " + line) }
             let data = try JSONSerialization.data(withJSONObject: ["digests": digests, "mismatches": mismatches,
@@ -364,7 +473,7 @@ struct CoreDecisionParityTests {
             print("SUMMARY " + String(decoding: data, as: UTF8.self))
             let failed = mismatches.filter { $0.value > 0 }
             if !failed.isEmpty { fputs("FAIL: core decision parity mismatches \(failed)\n", stderr); exit(1) }
-            print("PASS core decision parity (filename-time, action-blocking-reason, live-selection)")
+            print("PASS core decision parity (filename-time, action-blocking-reason, live-selection, queue-state)")
         } catch {
             fputs("FAIL: \(error.localizedDescription)\n", stderr); exit(1)
         }

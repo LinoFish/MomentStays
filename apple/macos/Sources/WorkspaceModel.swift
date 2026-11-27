@@ -128,6 +128,53 @@ struct PhotoQueueItem: Identifiable {
     }
 }
 
+/// Queue state of one item from the shared Rust decision (`queue-state`,
+/// core/src/engine/decisions/queue.rs).
+struct CoreQueueState: Equatable {
+    let isStaticHDR: Bool
+    let isConvertible: Bool
+    let initialState: PhotoState
+    let category: PhotoState
+    // The bridge could not answer: nothing is offered for conversion and the item is listed for checking.
+    static let unavailable = CoreQueueState(isStaticHDR: false, isConvertible: false, initialState: .inspect, category: .inspect)
+}
+
+extension PhotoQueueItem {
+    /// One bridge call for every entry. `settings` supplies the direction, the missing-time
+    /// policy, the export mode and the per-source cover choices the category reads.
+    static func coreQueueStates(_ entries: [(row: ScanRow, allowsStaticHDR: Bool, resultState: PhotoState?)],
+                                settings: ConversionSettings) -> [CoreQueueState] {
+        guard !entries.isEmpty else { return [] }
+        let options: [String:Any] = ["direction":settings.direction.rawValue,"missing_time":settings.missingTime.rawValue,
+                                     "export_mode":settings.exportMode.rawValue]
+        // coverIndex(for:) resolves symlinks; it can only answer when a cover was chosen.
+        let customCovers = settings.direction == .toApple && settings.coverSelections?.isEmpty == false
+        let rows: [[String:Any]] = entries.map { entry in
+            let row = entry.row, id = row.source.path
+            var v: [String:Any] = ["hdr":row.hdr,"motion":row.isMotion,"static":row.confirmedStatic,
+                "allows_static_hdr":entry.allowsStaticHDR,"cover":row.cover,
+                "manual_cover":settings.manualCovers?[id] != nil,"custom_cover":customCovers && settings.coverIndex(for:row.source) != nil,
+                "manual_midpoint":settings.manualMidpoints?[id] == true]
+            if let kind = row.hdrKind { v["hdr_kind"] = kind }
+            if let burst = row.burst { v["burst_supported"] = burst.supported }
+            if let state = entry.resultState { v["result_state"] = state.rawValue }
+            return v
+        }
+        do {
+            let reply = try RustCore.engine(["mode":"queue-state","settings":options,"items":rows])
+            guard let states = reply["states"] as? [[String:Any]], states.count == entries.count else { throw Failure("Rust engine: invalid queue states") }
+            return try states.map { v in
+                guard let staticHDR = v["static_hdr"] as? Bool, let convertible = v["convertible"] as? Bool,
+                      let initial = (v["initial_state"] as? String).flatMap(PhotoState.init(rawValue:)),
+                      let category = (v["category"] as? String).flatMap(PhotoState.init(rawValue:)) else { throw Failure("Rust engine: invalid queue states") }
+                return CoreQueueState(isStaticHDR: staticHDR, isConvertible: convertible, initialState: initial, category: category)
+            }
+        } catch {
+            return entries.map { _ in .unavailable }
+        }
+    }
+}
+
 struct ReportEntry: Identifiable {
     let id: Int
     let source: String

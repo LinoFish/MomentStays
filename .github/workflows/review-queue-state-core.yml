@@ -1,0 +1,75 @@
+# TEMPORARY review workflow for branch feat/queue-state-core (PhotoQueueItem queue state
+# from the shared Rust core). Remove before merging.
+name: review-queue-state-core (temporary)
+on:
+  push:
+    branches: [feat/queue-state-core]
+  workflow_dispatch:
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --check
+        working-directory: core
+      - run: cargo clippy --release --all-targets -- -D warnings
+        working-directory: core
+      - run: cargo test --release
+        working-directory: core
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: cargo fetch --locked --manifest-path core/Cargo.toml
+      - name: Environment
+        run: sw_vers; xcodebuild -version; swift --version; rustc --version
+      - name: build_app.sh --arm64 --diagnostics
+        run: bash apple/macos/scripts/build_app.sh --arm64 --diagnostics
+      - name: build_gui_tests.sh
+        run: bash apple/macos/scripts/build_gui_tests.sh
+      - name: build_backend.sh
+        run: bash apple/macos/scripts/build_backend.sh
+      - name: Core decision parity (check_core_decisions.py)
+        run: python3 apple/macos/scripts/check_core_decisions.py
+      - name: Swift tests - WorkspaceModelTests (check_workspace.py)
+        if: success() || failure()
+        run: bash apple/macos/scripts/run_checks_with_rust.sh check_workspace.py
+      - name: Swift tests - PhotoTimeRepair
+        if: success() || failure()
+        run: bash apple/macos/scripts/check_photo_time_repair.sh
+      - name: Rust bridge parity (check_rust_core.py)
+        if: success() || failure()
+        run: python3 apple/macos/scripts/check_rust_core.py --swift .build/backend/native-tests
+      - name: Python checks that run without local samples
+        if: success() || failure()
+        run: |
+          bash apple/macos/scripts/run_checks_with_rust.sh check_cover_candidates.py check_existing_output.py \
+            check_extended.py check_honor_orientation.py check_huawei.py check_video_metadata.py
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - name: Select newest Xcode (iOS 26 deployment target)
+        run: |
+          ls -d /Applications/Xcode*.app
+          newest=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$newest" ]; then sudo xcode-select -s "$newest"; fi
+          xcodebuild -version
+      - run: cargo fetch --locked --manifest-path core/Cargo.toml
+      - name: xcodebuild MomentStays (iOS Simulator, no signing)
+        run: |
+          set -o pipefail
+          xcodebuild -project apple/ios/MomentStays.xcodeproj -scheme MomentStays \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -n 150

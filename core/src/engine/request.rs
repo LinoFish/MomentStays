@@ -210,6 +210,20 @@ pub fn handle(
                 .unwrap_or_default();
             Ok(json!({"reasons": reasons}))
         }
+        "queue-state" => {
+            use crate::engine::decisions::queue::{decide, Item, Settings};
+            let settings = Settings::from_json(&req["settings"]);
+            let states: Vec<Value> = req["items"]
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|i| decide(&Item::from_json(i), &settings).json())
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(json!({ "states": states }))
+        }
         "live-selection" => Ok(json!({"still": crate::engine::paths::json(
             &crate::engine::decisions::live_selection(&first()?)?
         )})),
