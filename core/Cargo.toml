@@ -34,6 +34,22 @@ libc = "0.2"
 base64 = "0.22"
 sha2 = "0.10"
 
+# Linux system codec backend (`--features linux-native`). Off by default so
+# default, macOS and Windows builds need no system libraries. libjpeg-turbo
+# (TurboJPEG API), lcms2 and libheif are linked dynamically via plain
+# `extern "C"` declarations (see build.rs); GStreamer through gstreamer-rs.
+[target.'cfg(target_os = "linux")'.dependencies]
+gstreamer = { version = "0.25", optional = true }
+gstreamer-app = { version = "0.25", optional = true }
+gstreamer-video = { version = "0.25", optional = true }
+
+[build-dependencies]
+pkg-config = { version = "0.3", optional = true }
+
+[features]
+default = []
+linux-native = ["dep:gstreamer", "dep:gstreamer-app", "dep:gstreamer-video", "dep:pkg-config"]
+
 [profile.release]
 lto = true
 codegen-units = 1

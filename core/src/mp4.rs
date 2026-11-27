@@ -357,7 +357,7 @@ pub struct TrackSamples {
     pub chunks: Vec<std::ops::Range<usize>>,
 }
 
-fn find_box(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<BoxRef> {
+pub(crate) fn find_box(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<BoxRef> {
     let found: Vec<BoxRef> = boxes(d, parent.payload, parent.end)?
         .into_iter()
         .filter(|b| b.is(t))
@@ -371,7 +371,7 @@ fn find_box(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<BoxRef> {
     Ok(found[0].clone())
 }
 
-fn find_box_opt(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<Option<BoxRef>> {
+pub(crate) fn find_box_opt(d: &[u8], parent: &BoxRef, t: &[u8; 4]) -> Result<Option<BoxRef>> {
     let found: Vec<BoxRef> = boxes(d, parent.payload, parent.end)?
         .into_iter()
         .filter(|b| b.is(t))

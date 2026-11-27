@@ -211,7 +211,7 @@ final class SourceInspectionCache {
     }
     private func rebase(_ row:ScanRow, relative:String, version:SourceVersion) -> ScanRow {
         ScanRow(source:row.source,relative:relative,isMotion:row.isMotion,hdr:row.hdr,cover:row.cover,detail:row.detail,
-            manufacturer:row.manufacturer,manufacturerDetail:row.manufacturerDetail,confirmedStatic:row.confirmedStatic,version:version,burst:row.burst,captureTimeMissing:row.captureTimeMissing,privateHDRSupported:row.privateHDRSupported,privateHDRReason:row.privateHDRReason)
+            manufacturer:row.manufacturer,manufacturerDetail:row.manufacturerDetail,confirmedStatic:row.confirmedStatic,version:version,burst:row.burst,captureTimeMissing:row.captureTimeMissing,privateHDRSupported:row.privateHDRSupported,privateHDRReason:row.privateHDRReason,hdrKind:row.hdrKind)
     }
     private func neutral(_ file:URL, relative:String, entry:Entry, bytes:[UInt8]) throws -> Result<NativeMotionPhoto,Error> {
         if entry.neutralReady {
@@ -289,7 +289,7 @@ final class SourceInspectionCache {
                 entry.captureTimeMissing = SourcePhotoTimeFacts.missing(at:file)
                 entry.timeChecked = true
             }
-            if row.hdr == "荣耀私有 HDR" && !entry.hdrChecked {
+            if row.isHonorPrivateHDR && !entry.hdrChecked {
                 let facts = try? RustCore.engine(["mode":"honor-hdr-preflight","source":file.path])
                 entry.privateHDRSupported = facts?["supported"] as? Bool ?? false
                 entry.privateHDRReason = facts?["reason"] as? String ?? "无法验证荣耀私有 HDR 标定配置"

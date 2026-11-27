@@ -62,6 +62,7 @@ impl ScanRow {
             "relative": self.relative,
             "motion": self.is_motion,
             "hdr": self.hdr,
+            "hdr_kind": super::decisions::hdr_kind::HdrKind::from_label(&self.hdr).code(),
             "cover": self.cover,
             "manufacturer": self.manufacturer,
             "manufacturer_detail": self.manufacturer_detail,

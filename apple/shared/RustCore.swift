@@ -148,6 +148,7 @@ extension RustCore {
         var row = ScanRow(source:URL(fileURLWithPath:source),relative:v["relative"] as? String ?? "",isMotion:v["motion"] as? Bool ?? false,
             hdr:v["hdr"] as? String ?? "—",cover:v["cover"] as? String ?? "—",detail:v["detail"] as? String ?? "",
             manufacturer:v["manufacturer"] as? String ?? "未知",manufacturerDetail:v["manufacturer_detail"] as? String ?? "",confirmedStatic:v["static"] as? Bool ?? false)
+        row.hdrKind = v["hdr_kind"] as? String
         if let burst = v["burst"] as? [String:Any], let data = try? JSONSerialization.data(withJSONObject:burst) { row.burst = try? JSONDecoder().decode(BurstFrame.self,from:data) }
         if let ver = v["version"] as? [String:Any], let modified = (ver["modified_ns"] as? String).flatMap(Int64.init),
            let changed = (ver["changed_ns"] as? String).flatMap(Int64.init), let dev = ver["device"] as? NSNumber,
@@ -161,6 +162,7 @@ extension RustCore {
     static func rowJSON(_ r: ScanRow) -> [String:Any] {
         var v: [String:Any] = ["source":r.source.path,"relative":r.relative,"motion":r.isMotion,"hdr":r.hdr,"cover":r.cover,"detail":r.detail,
             "manufacturer":r.manufacturer,"manufacturer_detail":r.manufacturerDetail,"static":r.confirmedStatic]
+        if let kind = r.hdrKind { v["hdr_kind"] = kind }
         if let burst = r.burst { v["burst"] = transportJSON(burst) }
         if let ver = r.version {
             v["version"] = ["device":UInt32(bitPattern:ver.device),"inode":ver.inode,"size":ver.size,

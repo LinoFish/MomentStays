@@ -171,6 +171,36 @@ pub fn handle(
                 None => Err(Error::new("当前平台缺少原生音频校验能力")),
             }
         }
+        "hdr-kinds" => Ok(crate::engine::decisions::hdr_kind::table_json()),
+        "filename-time" => {
+            let name = req["filename"]
+                .as_str()
+                .ok_or_else(|| Error::new("Missing filename"))?;
+            Ok(
+                json!({"inferred": crate::engine::decisions::filename_time::infer(name)
+                .map(|i| i.json())}),
+            )
+        }
+        "track-info" => Ok(json!({"tracks": crate::engine::decisions::track_info::json(
+            &crate::engine::decisions::track_info::track_info(&read(&first()?)?)?
+        )})),
+        "action-blocking-reason" => {
+            use crate::engine::decisions::workspace::{blocking_reason, Item, Settings};
+            let settings = Settings::from_json(&req["settings"]);
+            let reasons: Vec<Value> = req["items"]
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|i| json!(blocking_reason(&Item::from_json(i), &settings)))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(json!({"reasons": reasons}))
+        }
+        "live-selection" => Ok(json!({"still": crate::engine::paths::json(
+            &crate::engine::decisions::live_selection(&first()?)?
+        )})),
         "burst-filename" => Ok(
             json!({"candidate":crate::engine::burst::filename_candidate(req["filename"].as_str().unwrap_or(""))}),
         ),
