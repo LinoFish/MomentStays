@@ -24,7 +24,7 @@ Move your photos between Android and iPhone, intact. MomentStays converts Androi
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-12%2B-black" alt="macOS 12+">
   <img src="https://img.shields.io/badge/SwiftUI-Native-orange" alt="Native SwiftUI">
-  <img src="https://img.shields.io/badge/License-MIT-blue" alt="License MIT">
+  <img src="https://img.shields.io/badge/License-GPL--3.0--only-blue" alt="License GPL-3.0-only">
 </p>
 
 > **Feedback welcome:** Tried it and something failed or looks wrong? [Open an issue](https://github.com/LinoFish/MomentStays/issues) — tell us the source device and format, the conversion direction and the app version, and strip sensitive information from any sample first. See [Feedback](#feedback) below.
@@ -37,7 +37,7 @@ Move photos between Android and Apple while keeping the moment you chose as the 
 
 [Build & run](#build--run) · [Photos integration](#works-with-your-photos-library) · [Preservation details](#what-stays-with-your-photo) · [Burst migration](#burst-migration-experimental) · [Documentation](docs/README.md)
 
-**License: [MIT](LICENSE)** · Copyright © 2026 Lino
+**License: [GPL-3.0-only](LICENSE)** · Copyright © 2026 Lino · [Trademarks](TRADEMARKS.md)
 
 ## Feedback
 
@@ -257,7 +257,7 @@ Experimental support covers JPEG bursts from Google, Samsung and known Huawei/Ho
 
 ### Is MomentStays free and private?
 
-Yes. MomentStays is MIT-licensed open source, runs entirely on your Mac, and never uploads your photos.
+Yes. MomentStays is open source under GPL-3.0-only, runs entirely on your Mac, and never uploads your photos.
 
 ## Acknowledgements
 
@@ -276,6 +276,8 @@ See the [complete classified third-party notices](THIRD_PARTY_NOTICES.md) for ea
 
 ## License
 
-The original source code, documentation, and artwork are licensed under the **MIT License**. Commercial use is allowed. Include the copyright and permission notices in all copies or substantial portions of the software.
+The original source code and documentation are licensed under the **GNU General Public License v3.0 only (GPL-3.0-only)**. You may use, study, modify and redistribute them; if you distribute a modified or unmodified build, you must do so under GPL-3.0-only and provide the corresponding source. Versions published before this change remain available under the MIT License as originally released.
+
+The names **MomentStays**, **留刻** and **片刻栖所** and the app icon are not licensed under the GPL. Forks must use a different name and icon, and official app-store builds are published only by LinoFish. See [TRADEMARKS.md](TRADEMARKS.md). Contributions are accepted under the [contributor license agreement](CONTRIBUTING.md).
 
 See [LICENSE](LICENSE), [copyright](COPYRIGHT), and [third-party/distribution notes](THIRD_PARTY_NOTICES.md). Personal input media and separately licensed system or third-party components retain their own rights and terms.

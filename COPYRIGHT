@@ -1,13 +1,28 @@
 MomentStays
-Copyright (c) 2026 Lino
+Copyright (C) 2026 Lino
 
-SPDX-License-Identifier: MIT
+SPDX-License-Identifier: GPL-3.0-only
 
 Except for separately identified third-party materials, the original source
-code, documentation, and project artwork in this repository are licensed under
-the MIT License.
+code and documentation in this repository are licensed under the GNU General
+Public License, version 3 only (GPL-3.0-only). The full license text is
+included in LICENSE.
 
-The full license text is included in LICENSE.
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+Earlier releases: versions of MomentStays published before the change to
+GPL-3.0-only were released under the MIT License. Those released versions
+remain available under the MIT License as they were released; this change
+applies to the code from this point forward.
+
+Names and icon: the names "MomentStays", "留刻" and "片刻栖所" and the app
+icon are not licensed under the GPL (GPL-3.0 section 7(e)). See TRADEMARKS.md.
+
+The copyright holder may also distribute this software under other terms,
+including through app stores. Contributions are accepted under the
+contributor license agreement in CONTRIBUTING.md.
 
 This license does not relicense users' input photos, videos, metadata,
 nor separately licensed third-party libraries and system frameworks.

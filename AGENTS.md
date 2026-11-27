@@ -22,3 +22,14 @@
 - 只改动单个平台时，提升补丁版本号，只发布该平台；Release 正文用一句话写明本次涉及的平台。
 - 某平台在本次版本中没有变化时，可以不出新包；Release 里不为它补写说明。
 - Rust 核心 crate 的版本号仅供内部使用，不必与产品版本一致。
+
+# 依赖协议规则
+
+- 本项目自身采用 GPL-3.0-only，版权人为 Lino（LinoFish）；但**任何第三方依赖、复制的代码片段、素材都不得是 GPL**。官方 Mac App Store、Microsoft Store、Flathub 版本由版权人以其他条款发布，混入他人 GPL 代码会让这些版本无法上架。
+- 允许：MIT、Apache-2.0、BSD-2-Clause、BSD-3-Clause、ISC、Zlib、Unlicense、Unicode（Unicode-3.0 / Unicode-DFS-2016）、MPL-2.0、CC0-1.0；字体允许 OFL-1.1。
+- 禁止：GPL（任何版本）、AGPL、SSPL、以捆绑或静态链接方式引入的 LGPL，以及其他会阻碍应用商店分发的 copyleft 协议（含 EUPL、OSL、CC-BY-SA 用于代码等）。不确定的协议一律按禁止处理，先问用户。
+- LGPL 系统库例外：只有由操作系统或 Flatpak 运行时提供、并以动态链接方式使用的 LGPL 库（如 GTK、GStreamer）可以使用；不得把它们打包进 App 或静态链接。
+- HEVC 等专利编解码优先使用操作系统自带的编解码器（AVFoundation / VideoToolbox、Windows Media Foundation、GStreamer 系统插件），不要自带 x265、FFmpeg、libde265 等实现；宽松协议不代表已解决专利授权。
+- 每次新增或升级依赖：核对其及全部传递依赖的协议，Rust crate 须通过 `cargo deny check licenses`（配置见 `core/deny.toml`，CI 的 rust-core 工作流会执行，出现 GPL 等协议会直接失败）；新增依赖须登记到 `THIRD_PARTY_NOTICES.md`（名称、版本、协议、用途）。
+- 不得修改 `core/deny.toml` 的允许列表来放行被禁止的协议；需要例外时先问用户。
+- 外部贡献须同意 `.github/CLA.md`；名称与图标规则见 `TRADEMARKS.md`。

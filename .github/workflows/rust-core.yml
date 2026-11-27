@@ -20,3 +20,11 @@ jobs:
         working-directory: core
       - run: cargo test --release
         working-directory: core
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: core/Cargo.toml
+          command: check licenses
