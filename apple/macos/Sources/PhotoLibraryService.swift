@@ -155,13 +155,26 @@ final class PhotoLibraryService {
         return result
     }
 
+    static func exifOffsetZone(_ text: String) -> TimeZone? {
+        if text.uppercased() == "Z" { return TimeZone(secondsFromGMT: 0) }
+        let digits = text.dropFirst().replacingOccurrences(of: ":", with: "")
+        guard let sign = text.first, sign == "+" || sign == "-", digits.count == 4,
+              let hours = Int(digits.prefix(2)), let minutes = Int(digits.suffix(2)),
+              hours <= 14, minutes < 60 else { return nil }
+        return TimeZone(secondsFromGMT: (sign == "-" ? -1 : 1) * (hours * 3600 + minutes * 60))
+    }
     private static func fileMetadata(_ url: URL) -> (Date?, CLLocation?) {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] else { return (nil, nil) }
         var date: Date?
         if let exif = props[kCGImagePropertyExifDictionary as String] as? [String: Any], let text = exif[kCGImagePropertyExifDateTimeOriginal as String] as? String {
             let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"; date = formatter.date(from: text)
+            formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            // DateTimeOriginal is wall-clock time; OffsetTimeOriginal (e.g. "+08:00")
+            // says where. Without it the importing Mac's zone is the only fallback.
+            let offset = (exif[kCGImagePropertyExifOffsetTimeOriginal as String] as? String)?.trimmingCharacters(in: .whitespaces)
+            if let offset = offset, let zone = Self.exifOffsetZone(offset) { formatter.timeZone = zone }
+            date = formatter.date(from: text.trimmingCharacters(in: .whitespaces))
         }
         var location: CLLocation?
         if let gps = props[kCGImagePropertyGPSDictionary as String] as? [String: Any],

@@ -200,22 +200,26 @@ extension PhotoTimeRepair {
         let source: TimeSource
     }
 
+    // Compiled once: inference runs for every missing-time photo in the plan.
+    private static let calendarPatterns: [NSRegularExpression] = {
+        let suffix = #"(?:\.(\d{1,9}))?(Z|[+-]\d{2}:?\d{2})?(?!\d)"#
+        return [
+            #"(?i)(?<!\d)(\d{4})[-_](\d{2})[-_](\d{2})[T _-](\d{2})[-_:]?(\d{2})[-_:]?(\d{2})"# + suffix,
+            #"(?i)(?<!\d)(\d{4})(\d{2})(\d{2})[T _-]?(\d{2})[-_:]?(\d{2})[-_:]?(\d{2})"# + suffix
+        ].map { try! NSRegularExpression(pattern: $0) }
+    }()
+    private static let unixPattern = try! NSRegularExpression(pattern: #"(?<!\d)(\d{10}|\d{13}|\d{16}|\d{19})(?!\d)"#)
+
     /// Complete date+time or Unix tokens only. Invalid or ambiguous names use the
     /// caller's filename-order fallback, never file modification/creation dates.
     static func inferredTime(filename: String, zone: TimeZone) -> InferredTime? {
         let stem = ((filename as NSString).lastPathComponent as NSString).deletingPathExtension
         let text = stem as NSString
         let range = NSRange(location: 0, length: text.length)
-        let suffix = #"(?:\.(\d{1,9}))?(Z|[+-]\d{2}:?\d{2})?(?!\d)"#
-        let patterns = [
-            #"(?i)(?<!\d)(\d{4})[-_](\d{2})[-_](\d{2})[T _-](\d{2})[-_:]?(\d{2})[-_:]?(\d{2})"# + suffix,
-            #"(?i)(?<!\d)(\d{4})(\d{2})(\d{2})[T _-]?(\d{2})[-_:]?(\d{2})[-_:]?(\d{2})"# + suffix
-        ]
         var candidates: [InferredTime] = []
         var calendarRanges: [NSRange] = []
         var invalidCalendar = false
-        for pattern in patterns {
-            let regex = try! NSRegularExpression(pattern: pattern)
+        for regex in calendarPatterns {
             for match in regex.matches(in: stem, range: range) {
                 calendarRanges.append(match.range)
                 let values = (1...6).map { Int(text.substring(with: match.range(at: $0)))! }
@@ -242,7 +246,7 @@ extension PhotoTimeRepair {
                 candidates.append(InferredTime(date: date.addingTimeInterval(fraction), source: .filenameDateTime))
             }
         }
-        let unix = try! NSRegularExpression(pattern: #"(?<!\d)(\d{10}|\d{13}|\d{16}|\d{19})(?!\d)"#)
+        let unix = unixPattern
         for match in unix.matches(in: stem, range: range) {
             guard !calendarRanges.contains(where: { NSIntersectionRange($0, match.range).length > 0 }) else { continue }
             let token = text.substring(with: match.range(at: 1))

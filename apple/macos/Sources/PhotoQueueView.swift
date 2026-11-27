@@ -33,6 +33,8 @@ struct PhotoQueueView: View {
         return model.items
     }
     private var visibleItems: [PhotoQueueItem] {
+        // Steps 2–3 browse the whole queue: the model's cached filter is the answer.
+        if !reviewsPhotos { return model.visibleMigrationItems(in:scope) }
         let ids = Set(baseItems.map(\.id))
         return model.visibleMigrationItems(in:scope).filter {
             ids.contains($0.id) && (!isResults || matchesResult($0,filter:resultFilter))
@@ -54,11 +56,6 @@ struct PhotoQueueView: View {
                     coverSheet(item,size:geometry.size)
                 }
                 .sheet(isPresented:$model.burstReviewPresented) { BurstReviewSheet(model:model) }
-                .alert(AppText.text("有照片需要手动处理"), isPresented:$model.manualPromptPresented) {
-                    Button(AppText.text("处理")) { model.resolveManualPrompt(process:true) }
-                    Button(AppText.text("本次跳过")) { model.resolveManualPrompt(process:false) }
-                    Button(AppText.text("取消"),role:.cancel) { model.resolveManualPrompt(process:nil) }
-                } message: { Text(AppText.text("封面时间未确定。可先确认封面策略，或仅转换已选的可转换照片；原片与选择会保留。")) }
                 .onAppear { queueWidth = geometry.size.width; configureDiagnostics() }
                 .onChange(of:geometry.size.width) { queueWidth = $0 }
                 .onChange(of:model.migrationFilterKey) { _ in scrollMemory.switching = true }
@@ -82,14 +79,6 @@ struct PhotoQueueView: View {
                 heading(layout)
                 taskFeedback
                 if reviewsPhotos { reviewHint }
-                if model.manualPreparation {
-                    HStack {
-                        Text(AppText.text("确认需要处理的照片，再继续转换；未确认的项目仅在本轮跳过。")).font(.callout)
-                        Spacer()
-                        Button(AppText.text("取消"),action:model.cancelManualPreparation)
-                        Button(AppText.text("继续转换"),action:model.continueManualConversion)
-                    }.padding(12).background(InterfaceStyle.content)
-                }
                 Group {
                     if !model.items.isEmpty && model.previewVisible && layout.width >= 600 {
                         HStack(spacing:0) {
@@ -185,7 +174,7 @@ struct PhotoQueueView: View {
     }
     private func marqueeConfiguration(_ layout: QueueMarqueeLayout) -> QueueMarqueeConfiguration {
         QueueMarqueeConfiguration(layout:layout,
-            sourceRevision:model.items.flatMap { [$0.id,$0.row.version?.manualSignature ?? ""] },sources:model.sources.map(\.path),
+            sourceRevision:model.sourceSignature,sources:model.sources.map(\.path),
             selected:model.selectedIDs,explicit:model.hasExplicitSelection,
             enabled:editsSelection && !model.isBusy && !model.sharing && !model.settingsPresented && !model.migrationReviewPresented &&
                 !model.burstReviewPresented && coverEditor == nil && !layout.ids.isEmpty)
@@ -222,13 +211,16 @@ struct PhotoQueueView: View {
     private func burstThumbnail(_ item: PhotoQueueItem, group: BurstGroup, layout: QueueMarqueeLayout) -> some View {
         VStack(alignment:.leading,spacing:3) {
             Button { showPreview(item) } label: {
-                PhotoThumbnail(source:item.source,isPreview:model.isPreview).frame(height:64).clipped().cornerRadius(4)
-            }.buttonStyle(.plain)
+                PhotoThumbnail(source:item.source,isPreview:model.isPreview,revision:item.row.version?.manualSignature ?? "").frame(height:64).clipped().cornerRadius(4)
+            }.buttonStyle(.plain).accessibilityLabel(AppText.text("预览 ") + item.name)
             HStack(spacing:3) {
                 if !reviewsPhotos, let member = group.members.first(where:{$0.source == item.id}) {
+                    let checked = !model.hasExplicitSelection || model.selectedIDs.contains(item.id)
                     Button { model.setBurstMember(member,selected:!model.selectedIDs.contains(item.id) && model.hasExplicitSelection) } label: {
-                        Image(systemName:!model.hasExplicitSelection || model.selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                        Image(systemName:checked ? "checkmark.circle.fill" : "circle")
                     }.buttonStyle(.plain).disabled(model.isBusy || model.sharing)
+                        .accessibilityLabel(AppText.text((checked ? "取消勾选「" : "勾选「") + item.name + "」"))
+                        .accessibilityAddTraits(checked ? .isSelected : [])
                 }
                 Text(item.name).font(.caption2).lineLimit(1).truncationMode(.middle)
             }
@@ -242,7 +234,7 @@ struct PhotoQueueView: View {
                 HStack(spacing:5) {
                     ForEach(group.members.filter { visible.contains($0.source) },id:\.source) { member in
                         Button { model.selection = member.source } label: {
-                        PhotoThumbnail(source:URL(fileURLWithPath:member.source),isPreview:model.isPreview)
+                        PhotoThumbnail(source:URL(fileURLWithPath:member.source),isPreview:model.isPreview,revision:member.version ?? "")
                             .frame(width:56,height:44).clipped().cornerRadius(4)
                             .overlay(RoundedRectangle(cornerRadius:4).stroke(member.source == item.id ? InterfaceStyle.accent : .clear,lineWidth:2))
                         }.buttonStyle(.plain)
@@ -320,7 +312,7 @@ struct PhotoQueueView: View {
         return VStack(spacing:0) {
             ZStack(alignment:.topLeading) {
                 Button { showPreview(representative) } label: {
-                    PhotoThumbnail(source:representative.source,isPreview:model.isPreview).frame(height:cardImageHeight).clipped()
+                    PhotoThumbnail(source:representative.source,isPreview:model.isPreview,revision:representative.row.version?.manualSignature ?? "").frame(height:cardImageHeight).clipped()
                 }.buttonStyle(.plain).accessibilityLabel(AppText.text("预览连拍，共 \(group.members.count) 张"))
                 cardBadges(representative).padding(6)
             }
@@ -378,7 +370,7 @@ struct PhotoQueueView: View {
             }.background(QueueMarqueeFrameReader(id:"control:burst-header:" + group.id,layout:marqueeLayout))
             if !expanded, isGrid, let representative = representative {
                 Button { showPreview(representative) } label: {
-                    PhotoThumbnail(source:representative.source,isPreview:model.isPreview)
+                    PhotoThumbnail(source:representative.source,isPreview:model.isPreview,revision:representative.row.version?.manualSignature ?? "")
                         .frame(height:cardImageHeight).clipped().cornerRadius(6)
                 }.buttonStyle(.plain).accessibilityLabel(AppText.text("预览连拍代表照片"))
                 if members.contains(where:{ $0.row.captureTimeMissing == true }) {
@@ -426,7 +418,7 @@ struct PhotoQueueView: View {
                 else { model.toggleSelection(item) }
             } label: { PhotoSelectionMark(selected:selected).padding(4) }
                 .buttonStyle(.plain).disabled(model.isBusy || model.sharing)
-                .accessibilityLabel(AppText.text(selected ? "取消勾选「" : "勾选「") + item.name + "」")
+                .accessibilityLabel(AppText.text((selected ? "取消勾选「" : "勾选「") + item.name + "」"))
             }
             row(item,layout:layout).contentShape(Rectangle())
                 .onTapGesture { click(item) }
@@ -473,7 +465,7 @@ struct PhotoQueueView: View {
                     chooseCover:{ model.selectCover($0,for:item.source,expectedVersion:item.row.version) },
                     allowsCoverSelection:!isResults && !model.isBusy && !model.sharing && model.settings.exportMode != .auxiliaryOnly,
                     showsCandidateStatus:true).id(item.id)
-            } else { PhotoThumbnail(source:item.source,isPreview:model.isPreview).frame(height:200) }
+            } else { PhotoThumbnail(source:item.source,isPreview:model.isPreview,revision:item.row.version?.manualSignature ?? "").frame(height:200) }
             if reviewsPhotos { reviewLabel(item) }
             else { statusLabel(item) }
         }
@@ -604,8 +596,9 @@ struct PhotoQueueView: View {
                     Text(AppText.text("显示 \(visibleItems.count) / \(baseItems.count)")).foregroundColor(.secondary).lineLimit(1).monospacedDigit()
                 }
                 if !reviewsPhotos {
-                    Button(AppText.text("查看计划…")) { model.migrationReviewPresented = true }.disabled(!model.canReviewMigration)
-                        .help(AppText.text("查看就绪项、需人工处理和不能转换的照片"))
+                    // Same destination and wording as the step-3 primary action.
+                    Button(AppText.text("预览导出…")) { model.migrationReviewPresented = true }.disabled(!model.canReviewMigration)
+                        .help(AppText.text(model.canReviewMigration ? "查看就绪项、需人工处理和不能转换的照片" : model.items.isEmpty ? "添加照片后可预览导出" : "照片识别完成且至少选择一张后可预览导出"))
                 }
             }.font(.caption).padding(.horizontal,12).padding(.vertical,4)
         }.background(InterfaceStyle.content).recordLayout("queue-status-bar")
@@ -666,9 +659,9 @@ struct PhotoQueueView: View {
                 .recordLayout("queue-view-toggle")
             if !reviewsPhotos {
             Menu {
-                Button(AppText.text("选择当前筛选结果")) { for item in visibleItems where !model.selectedIDs.contains(item.id) { model.toggleSelection(item) } }
+                Button(AppText.text("选择当前筛选结果")) { model.setExplicitSelection(model.selectedIDs.union(visibleItems.map(\.id))) }
                     .disabled(model.isBusy || model.sharing || visibleItems.isEmpty)
-                Button(AppText.text("取消全部勾选")) { for item in model.items where model.selectedIDs.contains(item.id) { model.toggleSelection(item) } }
+                Button(AppText.text("取消全部勾选")) { model.setExplicitSelection([]) }
                     .disabled(model.selectedIDs.isEmpty || model.isBusy || model.sharing)
                 Button(AppText.text("恢复默认处理范围"),action:model.clearSelection).disabled(!model.hasExplicitSelection || model.isBusy || model.sharing)
                 Divider()
@@ -728,7 +721,7 @@ struct PhotoQueueView: View {
         // Sibling buttons keep opening the editor independent of card selection.
         VStack(spacing:0) {
           ZStack(alignment:.topTrailing) {
-            PhotoThumbnail(source:item.source,isPreview:model.isPreview)
+            PhotoThumbnail(source:item.source,isPreview:model.isPreview,revision:item.row.version?.manualSignature ?? "")
                 .frame(height:cardImageHeight).clipped().contentShape(Rectangle())
                 .onTapGesture { click(item) }
                 .recordLayout("photo-image-" + item.id)
@@ -788,11 +781,16 @@ struct PhotoQueueView: View {
                         .allowsHitTesting(false).recordLayout("photo-burst-" + item.id)
                 }
                 if item.isMotion {
-                    Label(AppText.text("实况"),systemImage:"livephoto")
-                        .font(.system(size:11,weight:.medium)).fixedSize()
-                        .padding(.horizontal,6).padding(.vertical,4)
+                    // Icon only, at the HDR badge's 11pt font and 22pt height; tooltip and VoiceOver name it.
+                    Text(Image(systemName:"livephoto"))
+                        .font(.system(size:11,weight:.medium)).lineLimit(1).fixedSize()
+                        .frame(height:14).padding(.horizontal,6).padding(.vertical,4)
                         .foregroundColor(.white).background(Color.black.opacity(0.68)).cornerRadius(5)
-                        .allowsHitTesting(false).accessibilityLabel(AppText.text("实况照片"))
+                        .contentShape(Rectangle()).onTapGesture { click(item) }
+                        .help(AppText.text("实况照片"))
+                        .accessibilityElement(children:.ignore)
+                        .accessibilityLabel(AppText.text("实况照片"))
+                        .accessibilityIdentifier("photo-live-" + item.id)
                         .recordLayout("photo-live-" + item.id)
                 }
                 if item.hdr.localizedCaseInsensitiveContains("HDR") {
@@ -1131,8 +1129,9 @@ private struct PhotoHDRBadge: View {
     let sourceID: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
-    @FocusState private var focused: Bool
-    private var expanded: Bool { hovering || focused }
+    // Not focusable: as the first focusable view it took initial key focus (focus
+    // ring + forced expansion on the first card). VoiceOver reads the full name.
+    private var expanded: Bool { hovering }
     private var shortTitle: String { details.contains("私有") ? "私有 HDR" : "HDR" }
     private var usesReducedMotion: Bool {
         #if UI_DIAGNOSTICS
@@ -1152,9 +1151,7 @@ private struct PhotoHDRBadge: View {
         .foregroundColor(.white).background(Color.black.opacity(0.68)).cornerRadius(5)
         .background(HDRBadgeHoverArea(identifier:"photo-hdr-hover-" + sourceID,change:{ hovering = $0 }))
         .animation(usesReducedMotion ? nil : .easeInOut(duration:0.16),value:expanded)
-        .focusable().focused($focused)
         .help(AppText.text(details)).accessibilityLabel(AppText.text("HDR 格式：" + details))
-        .accessibilityHint(AppText.text("悬停或键盘聚焦可展开格式名称"))
         .recordLayout("photo-hdr-" + sourceID)
         .onAppear { recordDiagnostics() }
         .onChange(of:expanded) { _ in recordDiagnostics() }
@@ -1198,6 +1195,8 @@ struct PhotoThumbnail: View {
     let source: URL
     let isPreview: Bool
     var fitsImage = false
+    /// Scanned file version; an in-place edit followed by a rescan reloads the image.
+    var revision = ""
     @State private var thumbnail: CGImage?
 
     var body: some View {
@@ -1218,7 +1217,7 @@ struct PhotoThumbnail: View {
             }.frame(width: geometry.size.width, height: geometry.size.height)
         }
         .accessibilityHidden(true)
-        .task(id: source) {
+        .task(id: source.path + "|" + revision) {
             thumbnail = nil
             guard !isPreview else { return }
             let image = await ThumbnailStore.load(source)
@@ -1229,8 +1228,10 @@ struct PhotoThumbnail: View {
 }
 
 private enum ThumbnailStore {
-    static let cache: NSCache<NSURL, CGImage> = {
-        let cache = NSCache<NSURL, CGImage>()
+    // Keyed by path + size + modification time, so an original edited in place
+    // never shows the thumbnail decoded from its previous content.
+    static let cache: NSCache<NSString, CGImage> = {
+        let cache = NSCache<NSString, CGImage>()
         cache.countLimit = 96
         cache.totalCostLimit = 32 * 1024 * 1024
         return cache
@@ -1256,7 +1257,11 @@ private enum ThumbnailStore {
     private static func decode(_ url: URL, cancellation: Cancellation) async -> CGImage? {
         await withCheckedContinuation { continuation in
             queue.async {
-                if let cached = cache.object(forKey: url as NSURL) {
+                let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+                let size = (attributes?[.size] as? NSNumber)?.int64Value ?? -1
+                let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+                let key = "\(url.path)|\(size)|\(modified)" as NSString
+                if let cached = cache.object(forKey: key) {
                     continuation.resume(returning: cached)
                     return
                 }
@@ -1272,7 +1277,7 @@ private enum ThumbnailStore {
                     continuation.resume(returning: nil)
                     return
                 }
-                cache.setObject(image, forKey: url as NSURL, cost: image.bytesPerRow * image.height)
+                cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
                 continuation.resume(returning: image)
             }
         }

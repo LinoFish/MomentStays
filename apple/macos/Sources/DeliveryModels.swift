@@ -372,9 +372,12 @@ final class DeliveryStore {
             guard token?.isCancelled != true else { throw Failure("共享准备已停止；文件保留") }
             let source = URL(fileURLWithPath: file), ext = source.pathExtension
             var stem = source.deletingPathExtension().lastPathComponent
-            if stem.hasSuffix(".MP") { stem.removeLast(3) }
+            // Keep the Motion Photo ".MP" marker only on names that had it; a plain
+            // JPEG/HEIC duplicate must not be relabelled as a Motion Photo.
+            let motionMarker = stem.hasSuffix(".MP")
+            if motionMarker { stem.removeLast(3) }
             var index = 1, name = source.lastPathComponent
-            while names.contains(name.lowercased()) { index += 1; name = stem + " (\(index)).MP." + ext }
+            while names.contains(name.lowercased()) { index += 1; name = stem + " (\(index))" + (motionMarker ? ".MP." : ".") + ext }
             names.insert(name.lowercased())
             let target = folder.appendingPathComponent(name)
             let expected = try NativeBatch.hashFile(source)

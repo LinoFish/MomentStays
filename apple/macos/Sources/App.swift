@@ -4,11 +4,32 @@ import SwiftUI
 final class WorkspaceWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    // The workspace headers sit under the transparent title bar. Where the
+    // system title bar view would take a press meant for a header control
+    // (seen with toolbars on macOS 15), hand the press to that control; empty
+    // space and the traffic lights keep the system behaviour.
+    override func sendEvent(_ event: NSEvent) {
+        if [.leftMouseDown, .rightMouseDown].contains(event.type), let control = titlebarControl(at: event.locationInWindow) {
+            if event.type == .leftMouseDown { control.mouseDown(with: event) } else { control.rightMouseDown(with: event) }
+            return
+        }
+        super.sendEvent(event)
+    }
+    func titlebarControl(at point: NSPoint) -> NSView? {
+        guard attachedSheet == nil, let content = contentView, let frame = content.superview,
+              point.y >= contentLayoutRect.maxY, let chrome = frame.hitTest(point),
+              !chrome.isDescendant(of: content), !(chrome is NSButton) else { return nil }
+        guard let hit = content.hitTest(content.superview?.convert(point, from: nil) ?? point),
+              hit is NSControl, !(hit is WindowDragView) else { return nil }
+        return hit
+    }
 }
 
 // macOS host: shared UI and task state live in SwiftUI/model files.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation, NSMenuDelegate {
     let model = WorkspaceModel()
+    let chrome = WindowChrome()
     private(set) var window: NSWindow!
     private lazy var platform = MacPlatformServices(model: model)
     private var pendingOpen: [URL] = []
@@ -28,17 +49,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         for kind: NSWindow.ButtonType in [.closeButton,.miniaturizeButton,.zoomButton] {
             window.standardWindowButton(kind)?.isHidden = false
         }
+        // Content runs under a transparent title bar (the AppKit equivalent of
+        // SwiftUI's hidden title bar style): the canvas and workflow headers
+        // share the traffic lights' row instead of sitting below an empty strip.
+        // No toolbar: on macOS 15 an empty NSToolbar view swallows clicks on
+        // controls drawn beneath it.
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        let brand = NSTitlebarAccessoryViewController()
-        brand.view = NSHostingView(rootView:MomentStaysBrandIcon().frame(width:20,height:20).accessibilityHidden(true))
-        brand.view.frame = NSRect(x:0,y:0,width:28,height:24)
-        brand.layoutAttribute = .right
-        window.addTitlebarAccessoryViewController(brand)
+        window.titlebarSeparatorStyle = .none
+        window.collectionBehavior.insert(.fullScreenPrimary)
         window.isMovableByWindowBackground = true
         window.title = AppText.text(AppName.display); window.isReleasedWhenClosed = false
         window.delegate = self; platform.window = window
-        var root = WorkspaceView(model: model, actions: platform.actions)
+        var root = WorkspaceView(model: model, actions: platform.actions, chrome: chrome)
         #if UI_DIAGNOSTICS
         let diagnostics = UISnapshotSupport(model: model, window: window)
         self.diagnostics = diagnostics
@@ -47,7 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         #endif
         window.contentView = NSHostingView(rootView:root.frame(minWidth:WindowSizing.workspace.width,minHeight:WindowSizing.workspace.height))
         window.contentMinSize = WindowSizing.workspace
-        window.center(); window.makeKeyAndOrderFront(nil)
+        window.center()
+        // Restore the user's last window size/position; diagnostics keep fixed geometry.
+        if startupArgument("--ui-snapshot") == nil { window.setFrameAutosaveName("MomentStaysWorkspace") }
+        window.makeKeyAndOrderFront(nil)
+        chrome.update(window)
         NSApp.activate(ignoringOtherApps: true)
         #if UI_DIAGNOSTICS
         diagnostics.start()
@@ -90,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         command(file, "停止图库自动监测", #selector(stopMonitoring))
         file.addItem(.separator())
         command(file, "打开输出文件夹", #selector(openOutput))
-        command(file, "查看转换报告", #selector(showReport))
+        command(file, "查看处理报告", #selector(showReport))
         file.addItem(.separator())
         file.addItem(withTitle: AppText.text("关闭窗口"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         let edit = section("编辑")
@@ -121,7 +148,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
-        case #selector(start): return model.canApproveMigration && !model.sharing && window?.attachedSheet == nil
+        // ⌘Return mirrors the primary button: on the preview it starts, earlier it opens the preview.
+        case #selector(start): return !model.sharing && window?.attachedSheet == nil &&
+            (model.workspaceStep == .preview ? model.canApproveMigration
+                : [.importPhotos,.conversion].contains(model.workspaceStep) && model.canReviewMigration)
+        case #selector(NSText.selectAll(_:)): return model.canSelectAllPhotos && window?.attachedSheet == nil
         case #selector(stop): return model.canStop
         case #selector(rescan): return model.canRescan
         case #selector(importPhotos): return model.settings.direction != .androidToAndroid && model.settings.direction != .honorToGoogle && !model.isBusy && !model.sharing && !model.isPreview && window?.attachedSheet == nil
@@ -138,6 +169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
 
+    // Reached through the responder chain only when no text field or table takes ⌘A.
+    @objc func selectAll(_ sender: Any?) { model.selectAllVisiblePhotos() }
     @objc private func exportResults() { platform.exportResults() }
     @objc private func shareResults() { platform.shareResults() }
     @objc private func recentResults() { platform.showRecentTasks() }
@@ -189,6 +222,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if model.sharing { model.errorMessage = "共享应用仍在读取文件，请完成或取消共享后退出。"; return .terminateCancel }
         return .terminateNow
     }
+    func windowDidResize(_ notification: Notification) { chrome.update(window) }
+    func windowWillEnterFullScreen(_ notification: Notification) { chrome.update(window, fullScreen: true) }
+    func windowDidEnterFullScreen(_ notification: Notification) { chrome.update(window, fullScreen: true) }
+    func windowWillExitFullScreen(_ notification: Notification) { chrome.update(window, fullScreen: false) }
+    func windowDidExitFullScreen(_ notification: Notification) { chrome.update(window) }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if model.isBusy { model.stop(); return false }
         if model.sharing { return false }

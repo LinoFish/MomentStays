@@ -510,6 +510,58 @@ struct WorkspaceModelTests {
         check(sourceBytes == bytes,"export leaves original source bytes intact")
     }
 
+    // Five-step state that the UI review (2026-11-27) fixed in the model.
+    static func workflowStateChecks(root: URL) throws {
+        let folder = root.appendingPathComponent("workflow-state")
+        try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        let urls = ["a-live.jpg","b-live.jpg"].map { folder.appendingPathComponent($0) }
+        for (i,url) in urls.enumerated() { try Data([UInt8(i),2,3]).write(to:url) }
+        func rows() -> [ScanRow] {
+            urls.map { ScanRow(source:$0,relative:$0.lastPathComponent,isMotion:true,hdr:"SDR",cover:"0.4 秒",detail:"",version:SourceVersion.read($0)) }
+        }
+        let output = root.appendingPathComponent("workflow-state-output")
+        try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
+        let service = ControlledService(), m = WorkspaceModel(service:service)
+        m.selectMigrationTarget(.apple); m.chooseSources(urls)
+        service.scans[0].completion(.success(rows()))
+        m.setOutput(output)
+        check(m.migrationReadyItems.count == 2,"both live photos are ready")
+        m.toggleSelection(m.items[0])
+        check(m.migrationReadyItems.map(\.id) == [urls[0].path],"cached plan follows a selection change")
+        m.clearSelection()
+        check(m.migrationReadyItems.count == 2,"cached plan follows restoring the default scope")
+        m.workspaceStep = .importPhotos
+        m.migrationSearch = "b-live"
+        m.selectAllVisiblePhotos()
+        check(m.hasExplicitSelection && m.selectedIDs == [urls[1].path],"select all adds exactly the photos the filters show")
+        m.migrationSearch = ""; m.clearSelection()
+        m.unconvertedExport = .separateLocation; m.setUnconvertedOutput(root.appendingPathComponent("workflow-state-originals"))
+        m.updateSettings { $0.direction = .toAndroid }
+        check(m.unconvertedExport == .none && m.unconvertedOutput == nil,"a new route never inherits the previous original-export plan")
+        service.scans.last!.completion(.success(rows()))
+        m.updateSettings { $0.direction = .toApple }
+        service.scans.last!.completion(.success(rows()))
+        m.setOutput(output)
+        m.approveMigrationReview()
+        guard let review = m.reviewedMigration else { throw Failure("missing reviewed plan") }
+        m.reviewedMigration = nil; m.workspaceStep = .results
+        let scansBefore = service.scans.count
+        try Data([9,9,9,9]).write(to:urls[0])
+        check(!m.validateReviewedMigration(review),"changed source invalidates the frozen plan")
+        m.recoverFromUnstartedReview()
+        check(m.workspaceStep == .importPhotos && service.scans.count == scansBefore + 1 && m.isBusy,"an unstartable plan returns to import and rechecks the changed source")
+        service.scans.last!.completion(.success(rows()))
+        check(m.notice == "本轮来源发生变化，请重新检查迁移计划" && !m.isBusy && m.resultScopeIDs == nil,"the reason survives the automatic recheck")
+        m.unconvertedExport = .sameLocation
+        m.clearSources()
+        check(m.unconvertedExport == .none && m.unconvertedOutput == nil,"clearing sources resets the original-export choice")
+        check(PhotoLibraryService.exifOffsetZone("+08:00")?.secondsFromGMT() == 28800 &&
+              PhotoLibraryService.exifOffsetZone("-0530")?.secondsFromGMT() == -19800 &&
+              PhotoLibraryService.exifOffsetZone("Z")?.secondsFromGMT() == 0 &&
+              PhotoLibraryService.exifOffsetZone("+25:00") == nil && PhotoLibraryService.exifOffsetZone("   ") == nil,
+              "EXIF OffsetTimeOriginal parsing")
+    }
+
     static func migrationWorkbenchChecks(root: URL) throws {
         var honorSettings = ConversionSettings()
         honorSettings.direction = .honorToGoogle
@@ -862,6 +914,7 @@ struct WorkspaceModelTests {
         let source = root.appendingPathComponent("input/test.jpg")
         try Data([0]).write(to: source)
         try appendAndClearChecks(source:source,root:root)
+        try workflowStateChecks(root:root)
         let row = ScanRow(source: source, relative: "test.jpg", isMotion: true, hdr: "Ultra HDR", cover: "0.4 秒", detail: "ready")
         let staticRow = ScanRow(source:source,relative:"test.jpg",isMotion:false,hdr:"SDR",cover:"—",detail:"static",confirmedStatic:true)
         check(PhotoQueueItem(staticRow).category(settings:ConversionSettings()) == .static,"confirmed static has its own category")
@@ -1024,7 +1077,7 @@ struct WorkspaceModelTests {
         model.toggleSelection(item); model.start(); model.resolveManualPrompt(process:nil)
         check(model.settings.manualCovers == nil && model.report == nil,"cancelled legacy preflight confirms nothing")
         model.selectQueueScope(.ready); model.start(); model.resolveManualPrompt(process:true)
-        model.confirmManualFrame(choice,for:item)
+        model.confirmManualFrame(choice,for:item); pump(until:{ model.settings.manualCovers?[item.id] != nil })
         check(model.manualItems.isEmpty && model.settings.manualCovers?[item.id] == choice && model.selectedIDs == [item.id],"explicit main-frame confirmation retains global selection")
         model.continueManualConversion(); pump(until:{ !model.isBusy })
         if model.report?.counts["converted"] != 1 {
@@ -1049,7 +1102,7 @@ struct WorkspaceModelTests {
         try (Data(contentsOf:copy) + Data([0])).write(to:copy)
         model.rescan(); pump(until:{ !model.isBusy })
         check(model.settings.manualCovers?[item.id] == nil && model.selectedIDs.isEmpty,"changed legacy source drops manual frame and conversion selection")
-        model.confirmManualFrame(choice,for:item)
+        model.confirmManualFrame(choice,for:item); RunLoop.current.run(until:Date(timeIntervalSinceNow:0.2))
         check(model.settings.manualCovers?[item.id] == nil,"stale frame callback cannot restore a selection")
     }
 

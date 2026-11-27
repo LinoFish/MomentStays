@@ -120,6 +120,24 @@ final class MacPlatformServices: NSObject {
         autoStartPending = false
         pendingSources = []
         model.clearSources()
+        purgeUnreferencedPhotoCopies()
+    }
+
+    // Library originals are read into private temp folders. Once the list is
+    // cleared they are no longer needed, except by a recorded original export
+    // that can still be continued from Recent Results in this session.
+    private func purgeUnreferencedPhotoCopies() {
+        guard !ownedPhotoCopies.isEmpty else { return }
+        let requests = deliveryStore.tasks().compactMap { task -> String? in
+            guard let data = task.originalExport?.request else { return nil }
+            return String(decoding:data,as:UTF8.self).replacingOccurrences(of:"\\/",with:"/")
+        }
+        ownedPhotoCopies = ownedPhotoCopies.filter { root in
+            let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+            if requests.contains(where:{ $0.contains(prefix) }) { return true }
+            try? FileManager.default.removeItem(at:root)
+            return false
+        }
     }
 
     func chooseSources(foldersOnly: Bool = false) {
@@ -214,7 +232,7 @@ final class MacPlatformServices: NSObject {
         consumingMigration = true
         model.reviewedMigration = nil
         defer { consumingMigration = false }
-        guard model.validateReviewedMigration(review) else { return }
+        guard model.validateReviewedMigration(review) else { model.recoverFromUnstartedReview(); return }
         batchDecision = nil
         do {
             pendingOriginalExport = nil
@@ -227,6 +245,7 @@ final class MacPlatformServices: NSObject {
             if !review.readyIDs.isEmpty {
                 model.startReviewedMigration(review,outputOverride:model.output ?? deliveryStore.root)
                 pendingOriginalExport = nil
+                if !model.isBusy { model.recoverFromUnstartedReview() }
             } else if let record = pendingOriginalExport {
                 pendingOriginalExport = nil
                 var task = DeliveryTask(settings:review.settings,output:model.output?.path ?? deliveryStore.root.path)
@@ -238,7 +257,7 @@ final class MacPlatformServices: NSObject {
                 try deliveryStore.save(task)
                 finishTaskFiles(task)
             }
-        } catch { pendingOriginalExport = nil; model.errorMessage = error.localizedDescription }
+        } catch { pendingOriginalExport = nil; model.errorMessage = error.localizedDescription; model.recoverFromUnstartedReview() }
     }
 
     func chooseUnconvertedOutput() {
@@ -847,21 +866,25 @@ struct RecentTasksView: View {
 
     private func taskActions(_ task: DeliveryTask) -> some View {
         HStack(spacing:12) {
+            // Export is secondary (also in the result and File menus); keeping it in
+            // "More" stops the action row truncating at the sheet's minimum width.
             Menu(AppText.text("更多")) {
+                Button(AppText.text("导出转换结果…")) { export(task) }
+                    .disabled(task.results.isEmpty || model.isBusy || model.sharing)
+                Divider()
                 Button(AppText.text("移除记录与缓存…"),role:.destructive) { cleanupPresented = true }
                     .disabled(model.isBusy || model.sharing)
             }.fixedSize()
             Spacer(minLength:0)
             Button(AppText.text("查看文件")) { NSWorkspace.shared.activateFileViewerSelecting(existingFiles(task)) }
-                .disabled(existingFiles(task).isEmpty)
-            Button(AppText.text("导出转换结果…")) { export(task) }
-                .disabled(task.results.isEmpty || model.isBusy || model.sharing)
+                .disabled(existingFiles(task).isEmpty).fixedSize()
             if task.originalExport != nil {
-                Button(AppText.text("继续原样导出")) { originals(task) }.disabled(model.isBusy || model.sharing)
+                Button(AppText.text("继续原样导出")) { originals(task) }.disabled(model.isBusy || model.sharing).fixedSize()
             }
             if canRedeliver(task) {
                 Button(AppText.text(task.settings.direction.exportsAndroid ? "再次共享…" : "再次导入图库…")) { retry(task) }
-                    .disabled(!filesAvailable(task) || model.isBusy || model.sharing)
+                    .disabled(!filesAvailable(task) || model.isBusy || model.sharing).fixedSize()
+                    .help(AppText.text(filesAvailable(task) ? "使用已校验的结果再次交付，不重新转换" : "部分文件已移走或清理，请重新转换后重试。"))
             }
         }.padding(16).recordLayout("recent-actions")
     }
