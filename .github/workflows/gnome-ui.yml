@@ -1,0 +1,89 @@
+name: gnome-ui
+on:
+  push:
+    branches: [feat/gnome-ui, main]
+    paths: ["linux/**", "core/**", ".github/workflows/gnome-ui.yml"]
+  workflow_dispatch:
+concurrency:
+  group: gnome-ui-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  # fmt, clippy and unit tests inside the GNOME 50 SDK, so GTK and
+  # libadwaita match the runtime the Flatpak ships on.
+  sdk-check:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Rust SDK extension
+        run: |
+          flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y --noninteractive flathub org.freedesktop.Sdk.Extension.rust-stable//25.08
+          flatpak info org.gnome.Sdk//50 | head -n 8
+      - name: Versions in the SDK
+        run: |
+          flatpak run --command=sh org.gnome.Sdk//50 -c \
+            'pkg-config --modversion gtk4 libadwaita-1 glib-2.0; . /usr/lib/sdk/rust-stable/enable.sh; rustc --version; cargo clippy --version'
+      - name: fmt, clippy, test (GNOME 50 SDK)
+        run: |
+          ws="$GITHUB_WORKSPACE"
+          flatpak run --share=network --filesystem="$ws" \
+            --env=CARGO_HOME="$ws/.cargo-home" --env=CARGO_TARGET_DIR="$ws/linux/target" \
+            --command=sh org.gnome.Sdk//50 -c "
+              set -e
+              . /usr/lib/sdk/rust-stable/enable.sh
+              cd '$ws/linux'
+              cargo fmt --check
+              cargo clippy --locked --all-targets -- -D warnings
+              cargo test --locked
+            "
+      - name: Validate desktop file, metainfo and translations (GNOME 50 SDK)
+        run: |
+          ws="$GITHUB_WORKSPACE"
+          flatpak run --filesystem="$ws" --command=sh org.gnome.Sdk//50 -c "
+            set -e
+            cd '$ws/linux'
+            desktop-file-validate data/com.linofish.MomentStays.desktop
+            appstreamcli validate --no-net --explain data/com.linofish.MomentStays.metainfo.xml
+            for po in po/*.po; do msgfmt --check -o /dev/null \"\$po\"; done
+          "
+
+  # Build the Flatpak bundle from the draft manifest.
+  flatpak:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: MomentStays-gnome.flatpak
+          manifest-path: linux/flatpak/com.linofish.MomentStays.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+
+  # Dependency license policy (AGENTS.md): the same deny.toml as rust-core.
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: linux/Cargo.toml
+          command: check
+          command-arguments: --config core/deny.toml licenses
+
+  # Every UI string extracted and translated (zh_CN = zh-Hans, zh_TW = zh-Hant).
+  i18n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -q && sudo apt-get install -yq gettext
+      - name: Catalogs are current and complete
+        working-directory: linux
+        run: |
+          python3 po/update.py
+          git diff --exit-code -- po
+          for po in po/*.po; do msgfmt --check -o /dev/null "$po"; done

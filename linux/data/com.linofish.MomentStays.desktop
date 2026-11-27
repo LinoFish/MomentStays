@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=MomentStays
+Name[zh_CN]=留刻
+Name[zh_TW]=留刻
+Comment=Convert Android Motion Photos and Apple Live Photos
+Comment[zh_CN]=在安卓动态照片与苹果实况照片之间转换
+Comment[zh_TW]=在 Android 動態照片與 Apple 原況照片之間轉換
+Icon=com.linofish.MomentStays
+Exec=momentstays
+Terminal=false
+Categories=Graphics;Photography;GTK;GNOME;
+Keywords=Live Photo;Motion Photo;HDR;Burst;Android;iPhone;
+Keywords[zh_CN]=实况;动态照片;HDR;连拍;安卓;苹果;
+Keywords[zh_TW]=原況;動態照片;HDR;連拍;Android;Apple;
+StartupNotify=true
+DBusActivatable=true

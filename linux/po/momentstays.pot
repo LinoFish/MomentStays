@@ -1,0 +1,529 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: momentstays\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/main.rs:15 src/ui/window.rs:43 src/ui/window.rs:607
+msgid "MomentStays"
+msgstr ""
+
+#: src/model/claims.rs:13
+msgid "Android Motion Photos become Apple Live Photos. Supported static HDR photos are exported as stills."
+msgstr ""
+
+#: src/model/claims.rs:16
+msgid "Apple Live Photos become Motion Photos for the chosen Android brand. JPEG for every brand; HEIC for Samsung only. Bursts are not converted in this direction."
+msgstr ""
+
+#: src/model/claims.rs:19
+msgid "Bursts (experimental): Android → Apple only, JPEG only. Google, Samsung and known Huawei/Honor burst formats."
+msgstr ""
+
+#: src/model/claims.rs:22
+msgid "Try Converting Private HDR"
+msgstr ""
+
+#: src/model/claims.rs:23
+msgid "Experimental and off by default. Only supported configurations are tried; results are limited and the original display effect is not guaranteed. Standard HDR is handled as usual."
+msgstr ""
+
+#: src/model/claims.rs:27
+msgid "Source files are only read. Results are written to the output folder; keep a backup of your originals."
+msgstr ""
+
+#: src/model/claims.rs:28
+msgid "This build has no Linux codec backend: static HDR checks, burst checks and image re-encoding are unavailable."
+msgstr ""
+
+#: src/ui/grid.rs:37
+msgid "The scan stopped unexpectedly."
+msgstr ""
+
+#: src/ui/grid.rs:100 src/ui/inspector.rs:54 src/ui/window.rs:33
+msgid "Live"
+msgstr ""
+
+#: src/ui/grid.rs:101 src/ui/inspector.rs:91 src/ui/window.rs:34
+msgid "HDR"
+msgstr ""
+
+#: src/ui/grid.rs:103
+msgid "Burst · Google"
+msgstr ""
+
+#: src/ui/grid.rs:104
+msgid "Burst · Samsung"
+msgstr ""
+
+#: src/ui/grid.rs:105
+msgid "Burst · Huawei"
+msgstr ""
+
+#: src/ui/grid.rs:106
+msgid "Burst · Honor"
+msgstr ""
+
+#: src/ui/grid.rs:108
+msgid "Not Convertible"
+msgstr ""
+
+#: src/ui/grid.rs:146
+msgid "Include in This Conversion"
+msgstr ""
+
+#: src/ui/inspector.rs:53
+msgid "Live / Motion Photo"
+msgstr ""
+
+#: src/ui/inspector.rs:55
+msgid "Static HDR photo"
+msgstr ""
+
+#: src/ui/inspector.rs:56
+msgid "Burst member (experimental)"
+msgstr ""
+
+#: src/ui/inspector.rs:57
+msgid "Not convertible in this direction"
+msgstr ""
+
+#: src/ui/inspector.rs:63
+msgid "Yes"
+msgstr ""
+
+#: src/ui/inspector.rs:65
+msgid "No"
+msgstr ""
+
+#: src/ui/inspector.rs:78
+msgid "Photo"
+msgstr ""
+
+#: src/ui/inspector.rs:81
+msgid "Scan"
+msgstr ""
+
+#: src/ui/inspector.rs:82
+msgid "Reported by the conversion engine."
+msgstr ""
+
+#: src/ui/inspector.rs:86
+msgid "File"
+msgstr ""
+
+#: src/ui/inspector.rs:87
+msgid "Location"
+msgstr ""
+
+#: src/ui/inspector.rs:88
+msgid "Type"
+msgstr ""
+
+#: src/ui/inspector.rs:89
+msgid "Included"
+msgstr ""
+
+#: src/ui/inspector.rs:90
+msgid "Device"
+msgstr ""
+
+#: src/ui/inspector.rs:92
+msgid "Cover"
+msgstr ""
+
+#: src/ui/inspector.rs:93
+msgid "Engine Note"
+msgstr ""
+
+#: src/ui/inspector.rs:100 src/ui/window.rs:35
+msgid "Burst"
+msgstr ""
+
+#: src/ui/inspector.rs:104
+msgid "Format"
+msgstr ""
+
+#: src/ui/inspector.rs:105
+msgid "Group"
+msgstr ""
+
+#: src/ui/inspector.rs:106
+msgid "Frame"
+msgstr ""
+
+#: src/ui/inspector.rs:107
+msgid "Original Cover Frame"
+msgstr ""
+
+#: src/ui/inspector.rs:108
+msgid "Support"
+msgstr ""
+
+#: src/ui/inspector.rs:132
+msgid "No Photo Selected"
+msgstr ""
+
+#: src/ui/inspector.rs:133
+msgid "Select a photo to see what the scan found."
+msgstr ""
+
+#: src/ui/inspector.rs:188 src/ui/prefs.rs:13
+msgid "Samsung"
+msgstr ""
+
+#: src/ui/inspector.rs:189 src/ui/prefs.rs:14
+msgid "Huawei"
+msgstr ""
+
+#: src/ui/inspector.rs:190
+msgid "Honor"
+msgstr ""
+
+#: src/ui/inspector.rs:197
+msgid "Supported (experimental)"
+msgstr ""
+
+#: src/ui/prefs.rs:11
+msgid "Google / Generic (recommended for newer Honor)"
+msgstr ""
+
+#: src/ui/prefs.rs:12
+msgid "Xiaomi"
+msgstr ""
+
+#: src/ui/prefs.rs:15
+msgid "Honor (fallback)"
+msgstr ""
+
+#: src/ui/prefs.rs:29
+msgid "Verify and Resume"
+msgstr ""
+
+#: src/ui/prefs.rs:30
+msgid "Skip"
+msgstr ""
+
+#: src/ui/prefs.rs:31
+msgid "Overwrite"
+msgstr ""
+
+#: src/ui/prefs.rs:48
+msgid "Export"
+msgstr ""
+
+#: src/ui/prefs.rs:54
+msgid "Android Target"
+msgstr ""
+
+#: src/ui/prefs.rs:55
+msgid "Used for Apple → Android. Change the direction in the header bar."
+msgstr ""
+
+#: src/ui/prefs.rs:61
+msgid "Brand"
+msgstr ""
+
+#: src/ui/prefs.rs:66
+msgid "Photo Format"
+msgstr ""
+
+#: src/ui/prefs.rs:70
+msgid "HEIC is available for Samsung only."
+msgstr ""
+
+#: src/ui/prefs.rs:76
+msgid "Keep Original JPEG Encoding"
+msgstr ""
+
+#: src/ui/prefs.rs:77
+msgid "The main image is not recompressed when kept."
+msgstr ""
+
+#: src/ui/prefs.rs:87
+msgid "Output"
+msgstr ""
+
+#: src/ui/prefs.rs:91
+msgid "When a Result Exists"
+msgstr ""
+
+#: src/ui/prefs.rs:98
+msgid "Verify and Resume keeps verified results and redoes incomplete ones."
+msgstr ""
+
+#: src/ui/prefs.rs:102
+msgid "Write Report Files"
+msgstr ""
+
+#: src/ui/prefs.rs:103
+msgid "Save the manifest and JSON report next to the results."
+msgstr ""
+
+#: src/ui/prefs.rs:109
+msgid "Use EXIF Time for File Dates"
+msgstr ""
+
+#: src/ui/prefs.rs:110
+msgid "Off by default. Otherwise output files keep the source file's modification time."
+msgstr ""
+
+#: src/ui/prefs.rs:121
+msgid "Bursts"
+msgstr ""
+
+#: src/ui/prefs.rs:127
+msgid "Experimental"
+msgstr ""
+
+#: src/ui/prefs.rs:141 src/ui/window.rs:148 src/ui/window.rs:581
+msgid "Export Settings"
+msgstr ""
+
+#: src/ui/run.rs:22 src/ui/window.rs:146
+msgid "Choose Output Folder"
+msgstr ""
+
+#: src/ui/run.rs:23
+msgid "_Select"
+msgstr ""
+
+#: src/ui/run.rs:33 src/ui/sidebar.rs:25
+msgid "This folder cannot be opened as a local folder."
+msgstr ""
+
+#: src/ui/run.rs:37 src/ui/run.rs:66
+msgid "Choose an output folder outside the source folders."
+msgstr ""
+
+#: src/ui/run.rs:73
+msgid "No photos are included."
+msgstr ""
+
+#: src/ui/run.rs:89
+#, python-brace-format
+msgid "Converting {done} of {total}…"
+msgstr ""
+
+#: src/ui/run.rs:103
+msgid "The conversion stopped unexpectedly."
+msgstr ""
+
+#: src/ui/run.rs:119
+msgid "Stopping safely…"
+msgstr ""
+
+#: src/ui/run.rs:151
+msgid "Conversion Stopped"
+msgstr ""
+
+#: src/ui/run.rs:153
+msgid "Conversion Finished"
+msgstr ""
+
+#: src/ui/run.rs:155
+msgid "Finished with Problems"
+msgstr ""
+
+#: src/ui/run.rs:158
+#, python-brace-format
+msgid "Converted: {converted}\nVerified existing: {resumed}\nCopied unchanged: {copied}\nSkipped: {skipped}\nFailed: {failed}"
+msgstr ""
+
+#: src/ui/run.rs:176
+msgid "See the report in the output folder for every photo."
+msgstr ""
+
+#: src/ui/run.rs:181
+msgid "_Close"
+msgstr ""
+
+#: src/ui/run.rs:182
+msgid "_Open Output Folder"
+msgstr ""
+
+#: src/ui/run.rs:203
+#, python-brace-format
+msgid "Results are in “{folder}”."
+msgstr ""
+
+#: src/ui/sidebar.rs:17 src/ui/window.rs:51 src/ui/window.rs:578
+msgid "Add Source Folder"
+msgstr ""
+
+#: src/ui/sidebar.rs:18
+msgid "_Add"
+msgstr ""
+
+#: src/ui/sidebar.rs:37
+msgid "Folders inside the new folder were merged into it."
+msgstr ""
+
+#: src/ui/sidebar.rs:43
+#, python-brace-format
+msgid "Already included in “{folder}”."
+msgstr ""
+
+#: src/ui/sidebar.rs:98 src/ui/sidebar.rs:100
+msgid "Watch for Changes"
+msgstr ""
+
+#: src/ui/sidebar.rs:111
+msgid "Remove Folder"
+msgstr ""
+
+#: src/ui/sidebar.rs:167
+#, python-brace-format
+msgid "Cannot watch “{folder}”: {error}"
+msgstr ""
+
+#: src/ui/window.rs:23
+msgid "_Export Settings"
+msgstr ""
+
+#: src/ui/window.rs:24
+msgid "_Keyboard Shortcuts"
+msgstr ""
+
+#: src/ui/window.rs:25
+msgid "_About MomentStays"
+msgstr ""
+
+#: src/ui/window.rs:32
+msgid "All"
+msgstr ""
+
+#: src/ui/window.rs:36
+msgid "Needs Attention"
+msgstr ""
+
+#: src/ui/window.rs:56
+msgid "Main Menu"
+msgstr ""
+
+#: src/ui/window.rs:62
+msgid "Sources"
+msgstr ""
+
+#: src/ui/window.rs:69
+msgid "No Source Folders"
+msgstr ""
+
+#: src/ui/window.rs:70
+msgid "Add the folders that hold your photos. Subfolders are included."
+msgstr ""
+
+#: src/ui/window.rs:75
+msgid "_Add Folder…"
+msgstr ""
+
+#: src/ui/window.rs:108
+msgid "Android → Apple"
+msgstr ""
+
+#: src/ui/window.rs:109
+msgid "Apple → Android"
+msgstr ""
+
+#: src/ui/window.rs:112
+msgid "Convert Android Motion Photos to Apple Live Photos"
+msgstr ""
+
+#: src/ui/window.rs:115
+msgid "Convert Apple Live Photos to Android Motion Photos"
+msgstr ""
+
+#: src/ui/window.rs:125
+msgid "Toggle Sources"
+msgstr ""
+
+#: src/ui/window.rs:129 src/ui/window.rs:579
+msgid "Search Photos"
+msgstr ""
+
+#: src/ui/window.rs:131
+msgid "_Start"
+msgstr ""
+
+#: src/ui/window.rs:134
+msgid "Convert the included photos"
+msgstr ""
+
+#: src/ui/window.rs:136
+msgid "Output Folder…"
+msgstr ""
+
+#: src/ui/window.rs:152
+msgid "Toggle Details"
+msgstr ""
+
+#: src/ui/window.rs:164
+msgid "Search file names, folders or devices"
+msgstr ""
+
+#: src/ui/window.rs:207
+msgid "Include All Shown"
+msgstr ""
+
+#: src/ui/window.rs:211
+msgid "Exclude All Shown"
+msgstr ""
+
+#: src/ui/window.rs:217
+msgid "Include or Exclude"
+msgstr ""
+
+#: src/ui/window.rs:233
+msgid "Add Photos to Convert"
+msgstr ""
+
+#: src/ui/window.rs:237
+msgid "Scanning Photos…"
+msgstr ""
+
+#: src/ui/window.rs:242
+msgid "No Matching Photos"
+msgstr ""
+
+#: src/ui/window.rs:243
+msgid "Try another filter or search."
+msgstr ""
+
+#: src/ui/window.rs:277
+msgid "Sto_p"
+msgstr ""
+
+#: src/ui/window.rs:304
+msgid "Details"
+msgstr ""
+
+#: src/ui/window.rs:538
+#, python-brace-format
+msgid "{included} of {all} photo included"
+msgid_plural "{included} of {all} photos included"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/ui/window.rs:575
+msgid "General"
+msgstr ""
+
+#: src/ui/window.rs:580
+msgid "Start Conversion"
+msgstr ""
+
+#: src/ui/window.rs:582
+msgid "Keyboard Shortcuts"
+msgstr ""
+
+#: src/ui/window.rs:583
+msgid "Quit"
+msgstr ""
+
+#: src/ui/window.rs:615
+msgid "Convert Android Motion Photos and Apple Live Photos, keeping the moment."
+msgstr ""
+
+#: src/ui/window.rs:618
+msgid "translator-credits"
+msgstr ""

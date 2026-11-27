@@ -1,0 +1,68 @@
+/* MomentStays brand accent. The app keeps its own accent and does not
+ * follow the system accent colour.
+ *
+ * Source: docs/branding/README.md, brand amber 琥珀 (light #F0A43C, dark
+ * #F4B860) and brand ink 线条/墨色 #1F2933, which the macOS app also uses
+ * as the text colour on accent fills (InterfaceSupport.swift,
+ * nativeAccentForeground).
+ *
+ * Contrast (WCAG 2.x):
+ *   light fill #F0A43C with ink #1F2933 ............ 7.08:1
+ *   dark  fill #F4B860 with ink #1F2933 ............ 8.34:1
+ *   light accent text #935A0B on #FFFFFF / #FAFAFB / #F6F5F4 / #EBEBED
+ *     ................................ 5.66 / 5.43 / 5.20 / 4.76:1
+ *   dark  accent text #F4B860 on #222226 / #1D1D20 / #2E2E32 / #36363A
+ *     ................................ 8.96 / 9.51 / 7.64 / 6.80:1
+ * #935A0B is the brand amber hue (HLS) darkened until it clears 4.5:1 on
+ * every light libadwaita surface; amber itself is only 2.1:1 on white.
+ */
+
+/* libadwaita >= 1.6 */
+:root {
+  --accent-bg-color: #F0A43C;
+  --accent-fg-color: #1F2933;
+  --accent-color: #935A0B;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent-bg-color: #F4B860;
+    --accent-fg-color: #1F2933;
+    --accent-color: #F4B860;
+  }
+}
+
+/* Named-colour fallback (older stylesheets); dark values in style-dark.css. */
+@define-color accent_bg_color #F0A43C;
+@define-color accent_fg_color #1F2933;
+@define-color accent_color #935A0B;
+
+/* Photo grid */
+gridview.photo-grid > child {
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.photo-thumb {
+  border-radius: 8px;
+  background-color: alpha(currentColor, 0.06);
+}
+
+.photo-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: smaller;
+  font-weight: bold;
+  background-color: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+}
+
+.filter-chip {
+  border-radius: 999px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.inspector-preview {
+  border-radius: 8px;
+}
