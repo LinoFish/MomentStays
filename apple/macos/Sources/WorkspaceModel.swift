@@ -242,6 +242,8 @@ final class WorkspaceModel: ObservableObject {
         var readiness: [String:Bool] = [:]
         var timeCandidates: [String:Bool] = [:]
         var availableLive: Bool?
+        // actionBlockingReason for every queue item, from one core call.
+        var blocking: [String:String?]?
         var visible: [PhotoQueueScope:[PhotoQueueItem]] = [:]
         var sourceSignature: Int?
     }
@@ -250,7 +252,7 @@ final class WorkspaceModel: ObservableObject {
         if derivedPlan.revision != derivedRevision {
             derivedPlan.revision = derivedRevision
             derivedPlan.scope = nil; derivedPlan.ready = nil; derivedPlan.readiness = [:]; derivedPlan.timeCandidates = [:]
-            derivedPlan.availableLive = nil; derivedPlan.visible = [:]; derivedPlan.sourceSignature = nil
+            derivedPlan.availableLive = nil; derivedPlan.blocking = nil; derivedPlan.visible = [:]; derivedPlan.sourceSignature = nil
         }
         return derivedPlan
     }
@@ -1150,27 +1152,38 @@ extension WorkspaceModel {
     var availableTime: Bool { migrationScopeItems.contains { ($0.row.confirmedStatic && !$0.row.isStaticHDR && !$0.isMotion && $0.row.burst == nil) || isMigrationReady($0) } }
     var availableMetadataTime: Bool { settings.direction == .toApple || migrationScopeItems.contains { !$0.isMotion && $0.row.burst == nil } }
     func actionBlockingReason(_ item: PhotoQueueItem) -> String? {
-        if item.hdr == "荣耀私有 HDR" && !item.isMotion && item.row.burst == nil && item.row.privateHDRSupported != true {
-            return item.row.privateHDRReason ?? "荣耀私有 HDR 未通过配置检查，不能转换"
+        if plan.blocking == nil {
+            let value = Self.coreActionBlockingReasons(items, settings: settings, availableLive: availableLive)
+            plan.blocking = Dictionary(zip(items.map(\.id), value), uniquingKeysWith: { first, _ in first })
         }
-        if item.row.isStaticHDR && !item.isMotion && item.row.burst == nil && availableLive && settings.liveConversion != false && (settings.exportMode != .livePhoto || settings.track != .primary) {
-            return "本轮实况附加输出选项与静态 HDR 的组合尚未支持；请调整实况选项或分批处理"
+        if let reason = plan.blocking?[item.id] { return reason }
+        return Self.coreActionBlockingReasons([item], settings: settings, availableLive: availableLive)[0]
+    }
+    /// Shared Rust decision (`action-blocking-reason`,
+    /// core/src/engine/decisions/workspace.rs), one bridge call for all items.
+    static func coreActionBlockingReasons(_ items: [PhotoQueueItem], settings: ConversionSettings, availableLive: Bool) -> [String?] {
+        guard !items.isEmpty else { return [] }
+        var options: [String:Any] = ["legacy_hdr":settings.legacyHDR,"direction":settings.direction.rawValue,
+            "container":settings.container.rawValue,"export_mode":settings.exportMode.rawValue,
+            "track":settings.track.rawValue,"available_live":availableLive]
+        if let value = settings.burstConversion { options["burst_conversion"] = value }
+        if let value = settings.liveConversion { options["live_conversion"] = value }
+        let rows: [[String:Any]] = items.map { item in
+            var v: [String:Any] = ["hdr":item.hdr,"motion":item.isMotion,"has_burst":item.row.burst != nil,
+                "static":item.row.confirmedStatic,"extension":item.source.pathExtension.lowercased(),
+                "custom_cover":settings.coverIndex(for:item.source) != nil]
+            if let kind = item.row.hdrKind { v["hdr_kind"] = kind }
+            if let value = item.row.privateHDRSupported { v["private_hdr_supported"] = value }
+            if let value = item.row.privateHDRReason { v["private_hdr_reason"] = value }
+            return v
         }
-        if !settings.legacyHDR && settings.direction == .toAndroid && settings.container == .jpeg && ["heic","heif"].contains(item.source.pathExtension.lowercased()) && item.hdr.contains("HDR") {
-            return "目标 JPEG 需要 HDR 重建，未选择 HDR 时不能安全保留；请调整格式或特性"
+        do {
+            let reply = try RustCore.engine(["mode":"action-blocking-reason","settings":options,"items":rows])
+            guard let reasons = reply["reasons"] as? [Any], reasons.count == items.count else { throw Failure("Rust engine: invalid blocking reasons") }
+            return reasons.map { $0 as? String }
+        } catch {
+            return items.map { _ in "无法判断是否可以转换：" + error.localizedDescription }
         }
-        if item.row.burst != nil {
-            if settings.burstConversion == false { return settings.legacyHDR ? "仅 HDR 尚不能安全保留原连拍封装；请启用连拍或原样输出" : "未选择连拍转换；原连拍资源保持不变" }
-        } else if item.isMotion {
-            if settings.liveConversion == false { return settings.legacyHDR ? "仅 HDR 尚不能安全保留此原动态封装；请启用实况或原样输出" : "未选择实况转换；原动态资源保持不变" }
-        } else if item.row.isStaticHDR && !settings.legacyHDR { return "未选择 HDR 转换；原 HDR 资源保持不变" }
-        if settings.legacyHDR && item.hdr == "荣耀私有 HDR" && item.row.privateHDRSupported != true {
-            if !item.isMotion && item.row.burst == nil { return item.row.privateHDRReason ?? "当前荣耀私有 HDR 不在已验证配置内，不能转换 HDR" }
-        }
-        if !settings.legacyHDR && item.hdr.contains("HDR") && settings.coverIndex(for:item.source) != nil {
-            return "自选封面不能保留未选择转换的 HDR；请恢复原封面或调整特性"
-        }
-        return nil
     }
     func previewRisk(_ item: PhotoQueueItem) -> Bool {
         isMigrationReady(item) && (settings.photoTimeRepair == true || settings.legacyHDR && item.hdr.contains("HDR") || item.hdr == "荣耀私有 HDR")

@@ -5,8 +5,13 @@
 //! Swift reads compressed packets through AVAssetReader; here the sample
 //! tables are read directly. Timestamps are given both in the media
 //! timeline and mapped through the track's edit list (AVAssetTrack
-//! `segments`), so a host can use either; parity with AVAssetReader's
-//! output timeline is not yet verified on real files (see LINUX_NATIVE.md).
+//! `segments`), so a host can use either. Checked against AVFoundation by
+//! `apple/macos/scripts/check_core_decisions.py`: sizes, durations, hashes
+//! and media timestamps match on every track; the mapped timeline matches
+//! on video tracks but not on AAC tracks (AVFoundation applies a priming
+//! segment this mapping does not see) or after an empty edit that is not a
+//! whole number of track ticks (truncated here). The Apple app therefore
+//! does not use this request yet (core/ENGINE.md).
 use crate::mp4::{self, Movie};
 use crate::{fail, Result};
 use serde_json::{json, Value};
