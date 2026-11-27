@@ -35,6 +35,12 @@ version used to reuse it in `batch` via `scan_rows`), `android-pair`
 the motion preview, replacing `sourceCoverTiming` there), `still-check`
 (the import guard on stills), plus `movie` and `export-auxiliary`.
 
+Shared UI decisions (`engine::decisions`, for macOS and the GNOME app):
+`hdr-kinds` (stable `hdr_kind` codes, also in every scan row), `filename-time`
+(capture time from an original filename), `track-info` (per-track sample
+facts from MP4/MOV bytes), `action-blocking-reason` (per-item conversion
+blocker) and `live-selection` (still paired with a selected Live movie).
+
 ## Platform backend and host events
 
 `platform::SystemNative` implements ImageIO and AVFoundation directly in Rust
@@ -42,7 +48,9 @@ on Apple: complete image checks, sRGB ICC, gray JPEG decode/encode, JPEG
 re-encoding with source properties, HEIC gain-map reading (the existing
 `heic_gain` module), and transformed video-frame JPEG extraction. Core
 container, timing, HDR decisions and batch work remain platform independent.
-Other platforms explicitly refuse codec operations until a backend is supplied.
+On Linux, `--features linux-native` supplies the same backend through
+libjpeg-turbo, lcms2, libheif and GStreamer (see `LINUX_NATIVE.md`); other
+platforms (and default Linux builds) explicitly refuse codec operations.
 The `Native` trait and optional `MsNative` codec callbacks allow another backend
 without changing the engine. The macOS app supplies **no codec callbacks**.
 
@@ -99,8 +107,8 @@ git in `.build/rust-engine-integration/handoff.md`.
 - **Timelines.** Times are matched exactly (integer ticks); a cover exactly
   halfway between two frames is refused rather than resolved to the first.
 - **Scheduling.** The macOS host supplies its thermal/CPU worker limit. Rust
-  admits weighted work under physical memory / 8 (at least 256 MiB); other
-  hosts use a 1 GiB fallback budget.
+  admits weighted work under physical memory / 8 (at least 256 MiB; Linux
+  reads `/proc/meminfo`); other hosts use a 1 GiB fallback budget.
 - **Folder walk.** Finder ordering (`localizedStandardCompare`) and package
   detection (`.skipsPackageDescendants`) are approximated: case-insensitive
   natural sort, and a fixed list of package extensions.

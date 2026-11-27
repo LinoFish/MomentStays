@@ -432,7 +432,7 @@ fn heic_maker(d: &[u8], layout: &Layout) -> Result<Option<Maker>> {
     Ok(parse_note(note)?.map(|(m, _)| m))
 }
 
-fn child<'a>(list: &'a [BoxRef], t: &[u8; 4]) -> Option<&'a BoxRef> {
+pub(crate) fn child<'a>(list: &'a [BoxRef], t: &[u8; 4]) -> Option<&'a BoxRef> {
     list.iter().find(|b| b.is(t))
 }
 
@@ -523,7 +523,7 @@ fn aux_type(d: &[u8], p: &BoxRef) -> String {
 }
 
 /// `ipma`: item id -> 1-based property indices.
-fn associations(d: &[u8], parts: &[BoxRef]) -> Result<HashMap<usize, Vec<usize>>> {
+pub(crate) fn associations(d: &[u8], parts: &[BoxRef]) -> Result<HashMap<usize, Vec<usize>>> {
     let mut out: HashMap<usize, Vec<usize>> = HashMap::new();
     for ipma in parts.iter().filter(|b| b.is(b"ipma")) {
         let mut p = ipma.payload;

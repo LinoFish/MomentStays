@@ -161,3 +161,15 @@ synthetic fixtures plus two regression tests derived from them
   (LONG8/IFD8 sizes added). Limitation: Commons has the still only,
   no paired MOV, so the ContentIdentifier cannot be cross-checked
   against video-side content.identifier.
+
+## Linux codec backend (`tests/linux_native.rs`)
+
+Same osxphotos source (MIT) as above, downloaded by CI and SHA-256 checked,
+never committed (`MOMENTSTAYS_PUBLIC_SAMPLES` points at the folder):
+
+- `tests/Test-Live-15.7.2.photoslibrary/originals/C/C3090F66-942C-41D3-BEC7-4F2B4876A109.heic`
+  (1,379,953 bytes, SHA-256 `abcc6aeb1031596b62297d4302b532edbd6d6ad4f9fdd76b783d7a83b954b5ac`):
+  Apple HDR gain map (version 131072, headroom 4.946382, 2016×1512 L008), irot 270, Display P3 ICC.
+- `..._3.mov` (SHA-256 `0f3a840e…b5fd`, listed above): HEVC frame decode and LPCM audio decode.
+
+All other media in that test is synthetic (ffmpeg `lavfi`, `heif-enc`).

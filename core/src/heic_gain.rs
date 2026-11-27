@@ -32,7 +32,18 @@ pub fn read(data: &[u8]) -> Result<Option<GainMap>> {
     {
         apple::read(data)
     }
-    #[cfg(not(target_vendor = "apple"))]
+    #[cfg(all(
+        not(target_vendor = "apple"),
+        feature = "linux-native",
+        target_os = "linux"
+    ))]
+    {
+        crate::platform::linux::heic_gain(data)
+    }
+    #[cfg(not(any(
+        target_vendor = "apple",
+        all(feature = "linux-native", target_os = "linux")
+    )))]
     {
         fail("HEIC gain-map pixel backend is unavailable on this platform")
     }

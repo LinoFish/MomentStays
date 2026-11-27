@@ -28,3 +28,40 @@ jobs:
         with:
           manifest-path: core/Cargo.toml
           command: check licenses
+  linux-native:
+    # Linux system codec backend (`--features linux-native`) against the
+    # distro builds of the GNOME-runtime libraries; synthetic media is made
+    # with ffmpeg/heif-enc, plus the public osxphotos iPhone pair (MIT,
+    # tests/SOURCES.md), downloaded and SHA-256 checked, never committed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: System libraries (dynamically linked, LGPL ones included)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config \
+            libturbojpeg0-dev liblcms2-dev libheif-dev libheif-examples \
+            libheif-plugin-libde265 libheif-plugin-x265 \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav ffmpeg
+      - name: Public samples
+        run: |
+          mkdir -p "$RUNNER_TEMP/samples" && cd "$RUNNER_TEMP/samples"
+          base=https://raw.githubusercontent.com/RhetTbull/osxphotos/main/tests/Test-Live-15.7.2.photoslibrary/originals/C
+          curl -sSfLO "$base/C3090F66-942C-41D3-BEC7-4F2B4876A109.heic"
+          curl -sSfLO "$base/C3090F66-942C-41D3-BEC7-4F2B4876A109_3.mov"
+          printf '%s  %s\n' \
+            abcc6aeb1031596b62297d4302b532edbd6d6ad4f9fdd76b783d7a83b954b5ac C3090F66-942C-41D3-BEC7-4F2B4876A109.heic \
+            0f3a840ee174c127a463ad59b55123a88d66392202dcc3be0e6aca9f2f56b5fd C3090F66-942C-41D3-BEC7-4F2B4876A109_3.mov \
+            | sha256sum -c
+      - run: cargo clippy --release --all-targets --features linux-native -- -D warnings
+        working-directory: core
+      - run: cargo test --release --features linux-native
+        working-directory: core
+        env:
+          MOMENTSTAYS_PUBLIC_SAMPLES: ${{ runner.temp }}/samples
+          MOMENTSTAYS_REQUIRE_MEDIA_TOOLS: "1"

@@ -23,6 +23,7 @@ pub mod burst;
 pub mod cabi;
 pub mod candidates;
 pub mod contracts;
+pub mod decisions;
 pub mod export;
 pub mod hdr;
 pub mod honor;
