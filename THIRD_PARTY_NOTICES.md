@@ -258,7 +258,7 @@ DEALINGS IN THE SOFTWARE.
 
 The GNOME app ships only as a Flatpak on `org.gnome.Platform//50`. GTK 4, libadwaita, GLib/GIO, GdkPixbuf, Pango, Cairo, Graphene and the C library's gettext (`bindtextdomain`, `g_dgettext`) are LGPL system libraries supplied by the GNOME runtime and linked dynamically; none of them is bundled or statically linked. HEVC/AAC decoding, when the Linux codec backend is enabled, comes from Flathub's `org.freedesktop.Platform.codecs-extra` runtime extension, not from the app. The app icon is the project's own `docs/branding/icon-light.svg` (see [TRADEMARKS.md](TRADEMARKS.md)).
 
-`linux/Cargo.lock` locks the core's crates (section 2) plus 60 further crates (3 direct, the rest transitive or build-time); `momentstays-core` and `serde_json` are reused from the core. All are MIT / Apache-2.0 (one `Apache-2.0 WITH LLVM-exception`) and are checked with `cargo deny check --config core/deny.toml licenses` in the `gnome-ui` workflow.
+`linux/Cargo.lock` locks the core's crates (section 2) plus 60 further crates (3 direct, the rest transitive or build-time); `momentstays-core` and `serde_json` are reused from the core. All are MIT / Apache-2.0 (one `Apache-2.0 WITH LLVM-exception`) and are checked with `cargo deny check licenses` with `core/deny.toml` in the `gnome-ui` workflow.
 
 ### Direct dependencies
 

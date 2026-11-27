@@ -1,5 +1,12 @@
-/* Dark-mode named-colour fallback; libadwaita >= 1.6 uses the
- * prefers-color-scheme block in style.css. See style.css for sources. */
+/* MomentStays brand accent, dark mode. AdwApplication loads this file on
+ * top of style.css when the dark style is active. Sources and contrast
+ * ratios: see style.css. */
+:root {
+  --accent-bg-color: #F4B860;
+  --accent-fg-color: #1F2933;
+  --accent-color: #F4B860;
+}
+
 @define-color accent_bg_color #F4B860;
 @define-color accent_fg_color #1F2933;
 @define-color accent_color #F4B860;

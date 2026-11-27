@@ -1,2 +1,4 @@
 /target/
 po/__pycache__/
+# Copied from core/deny.toml by CI; the policy lives there.
+/deny.toml

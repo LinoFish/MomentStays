@@ -9,6 +9,11 @@ mod ui;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
+fn window(app: &adw::Application) -> gtk::Window {
+    app.active_window()
+        .unwrap_or_else(|| ui::build(app).upcast())
+}
+
 fn main() -> glib::ExitCode {
     i18n::init();
     gio::resources_register_include!("momentstays.gresource").expect("bundled GResource registers");
@@ -17,6 +22,7 @@ fn main() -> glib::ExitCode {
     let app = adw::Application::builder()
         .application_id(config::APP_ID)
         .resource_base_path(config::RESOURCE_BASE)
+        .flags(gio::ApplicationFlags::HANDLES_OPEN)
         .build();
     // The brand accent replaces the system accent (style.css / style-dark.css).
     app.connect_startup(|app| {
@@ -34,11 +40,18 @@ fn main() -> glib::ExitCode {
         app.add_action(&about);
     });
     app.connect_activate(|app| {
-        if let Some(window) = app.active_window() {
-            window.present();
-            return;
+        window(app).present();
+    });
+    // `momentstays FOLDER…` (or a file manager "Open With") adds source folders.
+    app.connect_open(|app, files, _| {
+        let window = window(app);
+        for file in files {
+            if let Some(path) = file.path().filter(|p| p.is_dir()) {
+                let arg = path.to_string_lossy().to_variant();
+                WidgetExt::activate_action(&window, "win.add-folder-path", Some(&arg)).ok();
+            }
         }
-        ui::build(app).present();
+        window.present();
     });
     app.run()
 }

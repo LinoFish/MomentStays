@@ -156,6 +156,7 @@ pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
     content_header.pack_start(&sidebar_toggle);
     content_header.pack_start(&search_toggle);
     content_header.set_title_widget(Some(&direction));
+    content_header.pack_end(&inspector_toggle);
     content_header.pack_end(&start_button);
     content_header.pack_end(&output_button);
     content_header.pack_end(&settings_button);
@@ -305,7 +306,6 @@ pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
     let inspector_view = adw::ToolbarView::new();
     inspector_view.add_top_bar(&inspector_header);
     inspector_view.set_content(Some(&inspector.root));
-    content_header.pack_end(&inspector_toggle);
 
     // ---- Split views and breakpoints -----------------------------------
     let inner = adw::OverlaySplitView::builder()
@@ -471,6 +471,14 @@ fn install_actions(app: &Shared) {
     };
     let a = app.clone();
     add("add-folder", Box::new(move || sidebar::choose_folder(&a)));
+    let add_path = gio::SimpleAction::new("add-folder-path", Some(glib::VariantTy::STRING));
+    let a = app.clone();
+    add_path.connect_activate(move |_, arg| {
+        if let Some(path) = arg.and_then(|v| v.get::<String>()) {
+            sidebar::add_folder(&a, path.into());
+        }
+    });
+    window.add_action(&add_path);
     let a = app.clone();
     add(
         "choose-output",

@@ -29,6 +29,9 @@ jobs:
       - name: fmt, clippy, test (GNOME 50 SDK)
         run: |
           ws="$GITHUB_WORKSPACE"
+          # The checkout belongs to the runner user; the sandbox only writes
+          # where the container user owns the files.
+          chown -R "$(id -u):$(id -g)" "$ws"
           flatpak run --share=network --filesystem="$ws" \
             --env=CARGO_HOME="$ws/.cargo-home" --env=CARGO_TARGET_DIR="$ws/linux/target" \
             --command=sh org.gnome.Sdk//50 -c "
@@ -50,7 +53,10 @@ jobs:
             for po in po/*.po; do msgfmt --check -o /dev/null \"\$po\"; done
           "
 
-  # Build the Flatpak bundle from the draft manifest.
+  # Build the Flatpak bundle from the draft manifest. flatpak-builder runs
+  # directly (not through flatpak-github-actions) so it does not try to
+  # update the runtimes preinstalled in the image, which fails on the
+  # runner's overlay filesystem ("Invalid cross-device link").
   flatpak:
     runs-on: ubuntu-latest
     container:
@@ -58,22 +64,33 @@ jobs:
       options: --privileged
     steps:
       - uses: actions/checkout@v4
-      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+      - name: Install the Rust SDK extension
+        run: |
+          flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y --noninteractive flathub org.freedesktop.Sdk.Extension.rust-stable//25.08
+      - name: Build
+        run: |
+          flatpak-builder --disable-rofiles-fuse --force-clean --repo=repo \
+            build-dir linux/flatpak/com.linofish.MomentStays.yml
+          flatpak build-bundle repo MomentStays-gnome.flatpak com.linofish.MomentStays
+      - uses: actions/upload-artifact@v4
         with:
-          bundle: MomentStays-gnome.flatpak
-          manifest-path: linux/flatpak/com.linofish.MomentStays.yml
-          cache-key: flatpak-builder-${{ github.sha }}
+          name: MomentStays-gnome-flatpak
+          path: MomentStays-gnome.flatpak
+          retention-days: 14
 
   # Dependency license policy (AGENTS.md): the same deny.toml as rust-core.
   licenses:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Use the core's policy file unchanged (cargo-deny reads deny.toml
+      # next to the manifest).
+      - run: cp core/deny.toml linux/deny.toml
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: linux/Cargo.toml
-          command: check
-          command-arguments: --config core/deny.toml licenses
+          command: check licenses
 
   # Every UI string extracted and translated (zh_CN = zh-Hans, zh_TW = zh-Hant).
   i18n:
