@@ -12,10 +12,11 @@ This program is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-Earlier releases: versions of MomentStays published before the change to
-GPL-3.0-only were released under the MIT License. Those released versions
-remain available under the MIT License as they were released; this change
-applies to the code from this point forward.
+License history: all tagged releases (v1.0 through v2.0.0) were published
+under GPL-3.0-only. From 2026-11-18 to 2026-11-27 the main branch was
+licensed under the MIT License (commits 6b42628 through 5ec6f8f); code as
+published in that period remains available under MIT. Everything from the
+return to GPL-3.0-only onward is licensed under GPL-3.0-only.
 
 Names and icon: the names "MomentStays", "留刻" and "片刻栖所" and the app
 icon are not licensed under the GPL (GPL-3.0 section 7(e)). See TRADEMARKS.md.

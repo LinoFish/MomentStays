@@ -272,7 +272,7 @@ Versions, licenses and the full license texts of shipped components are in [THIR
 
 ## License
 
-The original source code and documentation are licensed under the **GNU General Public License v3.0 only (GPL-3.0-only)**. You may use, study, modify and redistribute them; if you distribute a modified or unmodified build, you must do so under GPL-3.0-only and provide the corresponding source. Versions published before this change remain available under the MIT License as originally released.
+The original source code and documentation are licensed under the **GNU General Public License v3.0 only (GPL-3.0-only)**. You may use, study, modify and redistribute them; if you distribute a modified or unmodified build, you must do so under GPL-3.0-only and provide the corresponding source. All tagged releases were published under GPL-3.0-only; source published on the main branch between 2026-11-18 and 2026-11-27, while it was briefly MIT-licensed, remains available under MIT as published.
 
 The names **MomentStays**, **留刻** and **片刻栖所** and the app icon are not licensed under the GPL. Forks must use a different name and icon, and official app-store builds are published only by LinoFish. See [TRADEMARKS.md](TRADEMARKS.md). Contributions are accepted under the [contributor license agreement](CONTRIBUTING.md).
 
