@@ -781,11 +781,16 @@ struct PhotoQueueView: View {
                         .allowsHitTesting(false).recordLayout("photo-burst-" + item.id)
                 }
                 if item.isMotion {
-                    Label(AppText.text("实况"),systemImage:"livephoto")
-                        .font(.system(size:11,weight:.medium)).fixedSize()
+                    // Icon only; Text(Image) keeps the HDR badge's 11pt line height.
+                    Text(Image(systemName:"livephoto"))
+                        .font(.system(size:11,weight:.medium)).lineLimit(1).fixedSize()
                         .padding(.horizontal,6).padding(.vertical,4)
                         .foregroundColor(.white).background(Color.black.opacity(0.68)).cornerRadius(5)
-                        .allowsHitTesting(false).accessibilityLabel(AppText.text("实况照片"))
+                        .contentShape(Rectangle()).onTapGesture { click(item) }
+                        .help(AppText.text("实况照片"))
+                        .accessibilityElement(children:.ignore)
+                        .accessibilityLabel(AppText.text("实况照片"))
+                        .accessibilityIdentifier("photo-live-" + item.id)
                         .recordLayout("photo-live-" + item.id)
                 }
                 if item.hdr.localizedCaseInsensitiveContains("HDR") {
