@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -5,6 +6,8 @@ struct WorkspaceView: View {
     @Environment(\.locale) private var locale
     @ObservedObject var model: WorkspaceModel
     let actions: WorkspaceActions
+    // Title-bar geometry measured from the host window; the header row shares it.
+    @ObservedObject var chrome = WindowChrome()
     var layoutObserver: ([String: CGRect]) -> Void = { _ in }
     @State private var showingError = false
     @State private var showingOutputChoices = false
@@ -37,7 +40,7 @@ struct WorkspaceView: View {
                     .frame(width:geometry.size.width < 900 ? 264 : 300)
                     .frame(maxHeight:.infinity)
             }
-            .padding(.top,28).background(InterfaceStyle.canvas)
+            .background(InterfaceStyle.canvas)
             .coordinateSpace(name:"workspace").recordLayout("workspace")
             .onPreferenceChange(LayoutFramesKey.self,perform:layoutObserver)
         }
@@ -88,10 +91,15 @@ struct WorkspaceView: View {
                     Text(AppText.text(model.workspaceStep.title)).font(.headline).fixedSize()
                     Text(AppText.text(model.workspaceStep.detail)).font(.caption).foregroundColor(.secondary)
                         .lineLimit(1).truncationMode(.tail).help(AppText.text(model.workspaceStep.detail))
-                }
+                }.recordLayout("canvas-title")
                 Spacer(minLength:0)
                 resultMenu
-            }.padding(.horizontal,12).padding(.vertical,6)
+            }
+            // The header shares the title-bar row: start after the traffic lights
+            // and match the bar's height so the title centres on them.
+            .padding(.leading,chrome.leadingInset).padding(.trailing,12)
+            .frame(height:chrome.barHeight).frame(maxWidth:.infinity)
+            .background(WindowDragArea()).recordLayout("canvas-header")
             Divider()
             // Keep the browser mounted across steps so marquee, preview and scroll state survive.
             ZStack {
@@ -111,13 +119,16 @@ struct WorkspaceView: View {
 
     private func workflowSidebar(compact: Bool) -> some View {
         VStack(spacing:0) {
+            HStack(alignment:.firstTextBaseline) {
+                Text(AppText.text("操作步骤")).font(.headline)
+                Spacer(minLength:0)
+                Text(AppText.text("第 \(model.workspaceStep.rawValue) 步 / 共 \(WorkspaceStep.allCases.count) 步"))
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            .padding(.horizontal,12).frame(height:chrome.barHeight).frame(maxWidth:.infinity)
+            .background(WindowDragArea()).recordLayout("sidebar-header")
+            Divider()
             VStack(alignment:.leading,spacing:10) {
-                HStack {
-                    Text(AppText.text("操作步骤")).font(.headline)
-                    Spacer(minLength:0)
-                    Text(AppText.text("第 \(model.workspaceStep.rawValue) 步 / 共 \(WorkspaceStep.allCases.count) 步"))
-                        .font(.caption).foregroundColor(.secondary)
-                }
                 VStack(spacing:3) {
                     ForEach(WorkspaceStep.allCases) { step in workflowStep(step,compact:compact) }
                 }.accessibilityElement(children:.contain)
@@ -646,5 +657,56 @@ private struct WorkspaceTaskFeedback: View {
         .frame(height:6).tint(InterfaceStyle.accent)
         .accessibilityLabel(AppText.text("任务进度"))
         .recordLayout("task-progress")
+    }
+}
+
+// MARK: - Window chrome
+// The window draws its content under a transparent title bar. The canvas and
+// sidebar headers take the title bar's row, so they need its height and the
+// space the traffic lights occupy, measured from the live window.
+final class WindowChrome: ObservableObject {
+    static let fallbackHeight: CGFloat = 28
+    @Published private(set) var barHeight: CGFloat = fallbackHeight
+    @Published private(set) var leadingInset: CGFloat = 78
+    private var windowedLeading: CGFloat = 78
+
+    func update(_ window: NSWindow, fullScreen: Bool? = nil) {
+        let full = fullScreen ?? window.styleMask.contains(.fullScreen)
+        // Title bar plus any (empty) toolbar, in points, as the window lays it out.
+        let titlebar = window.frame.height - window.contentLayoutRect.height
+        if !full, titlebar > 1 { set(\.barHeight, max(Self.fallbackHeight, titlebar.rounded())) }
+        if let zoom = window.standardWindowButton(.zoomButton), !zoom.isHidden, zoom.superview != nil, !full {
+            let frame = zoom.convert(zoom.bounds, to: nil)
+            if frame.maxX > 0 { windowedLeading = (frame.maxX + 14).rounded() }
+        }
+        // Full screen hides the traffic lights; the header keeps its row height.
+        set(\.leadingInset, full ? 12 : windowedLeading)
+    }
+    private func set(_ key: ReferenceWritableKeyPath<WindowChrome, CGFloat>, _ value: CGFloat) {
+        if self[keyPath: key] != value { self[keyPath: key] = value }
+    }
+}
+
+// Empty header space behaves like a title bar: drag moves the window and a
+// double-click follows the system "double-click a window's title bar" setting.
+struct WindowDragArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { WindowDragView() }
+    func updateNSView(_ view: NSView, context: Context) {}
+}
+
+final class WindowDragView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return super.mouseDown(with: event) }
+        if event.clickCount == 2 {
+            switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+            case "Minimize": window.performMiniaturize(nil)
+            case "None": break
+            default: window.performZoom(nil)
+            }
+            return
+        }
+        window.performDrag(with: event)
     }
 }

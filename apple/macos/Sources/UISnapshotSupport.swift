@@ -70,7 +70,10 @@ final class UISnapshotSupport {
         let width = Double(argument("--ui-width") ?? "1120") ?? 1120
         let height = Double(argument("--ui-height") ?? "700") ?? 700
         resize(width: width, height: height)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+        // Full screen hides the traffic lights; the header must fall back to its own margin.
+        let fullScreen = CommandLine.arguments.contains("--ui-fullscreen")
+        if fullScreen { window.toggleFullScreen(nil) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (fullScreen ? 2.5 : 0.7)) {
             if CommandLine.arguments.contains("--ui-inspect-first-burst"), let item = self.model.items.first(where:{$0.row.burst != nil}) {
                 self.model.selection = item.id; self.model.previewVisible = true
             }
@@ -238,8 +241,13 @@ final class UISnapshotSupport {
             "source_menu_opened": SourceMenuDiagnostics.opened,
             "source_menu_titles": SourceMenuDiagnostics.titles,
             "queue_scope": frames.keys.first(where: { $0.hasPrefix("queue-scope-") })?.replacingOccurrences(of:"queue-scope-",with:"") ?? "",
-            "titlebar_brand_visible": window.titlebarAccessoryViewControllers.contains { !$0.view.isHidden },
             "titlebar_absent": !window.styleMask.contains(.titled),
+            "full_screen": window.styleMask.contains(.fullScreen),
+            "window_title": window.title, "title_hidden": window.titleVisibility == .hidden,
+            "titlebar_height": window.frame.height - window.contentLayoutRect.height,
+            "toolbar_style": window.toolbarStyle.rawValue,
+            "traffic_lights": trafficLights(),
+            "titlebar_hits": titlebarHits(),
             "frame_width": window.frame.width, "frame_height": window.frame.height,
             "minimum_width": window.minSize.width, "minimum_height": window.minSize.height,
             "content_height": bounds.height, "queue_height": queue.height,
@@ -272,6 +280,40 @@ final class UISnapshotSupport {
                 "visible_rows": $0.rows(in: $0.visibleRect).length,
                 "horizontal_overflow": $0.bounds.width > ($0.enclosingScrollView?.contentSize.width ?? $0.bounds.width) + 1] as [String: Any] },
             "frames": frames.filter { !$0.key.isEmpty }.mapValues { ["x": $0.minX, "y": $0.minY, "width": $0.width, "height": $0.height] }]
+    }
+    // Traffic-light frames in the same top-left "workspace" space as `frames`.
+    private func trafficLights() -> [String: [String: Double]] {
+        guard let content = window.contentView else { return [:] }
+        var result: [String: [String: Double]] = [:]
+        for (name, kind) in [("close", NSWindow.ButtonType.closeButton), ("minimize", .miniaturizeButton), ("zoom", .zoomButton)] {
+            guard let button = window.standardWindowButton(kind), button.superview != nil else { continue }
+            var rect = content.convert(button.convert(button.bounds, to: nil), from: nil)
+            if !content.isFlipped { rect.origin.y = content.bounds.height - rect.maxY }
+            result[name] = ["x": rect.minX, "y": rect.minY, "width": rect.width, "height": rect.height,
+                            "visible": button.isHidden || button.window == nil ? 0 : 1]
+        }
+        return result
+    }
+    // What a click in the shared title-bar row reaches: header controls must get
+    // their own NSView (inside the content view); empty space must reach a view
+    // that moves the window (our drag area or the system title bar).
+    private func titlebarHits() -> [String: String] {
+        guard let content = window.contentView, let theme = content.superview else { return [:] }
+        func hit(_ x: CGFloat, _ y: CGFloat) -> String {
+            let local = NSPoint(x: x, y: content.isFlipped ? y : content.bounds.height - y)
+            let point = content.convert(local, to: nil)
+            guard let view = theme.hitTest(point) else { return "nil" }
+            return String(describing: type(of: view)) + (view.isDescendant(of: content) ? "@content" : "@chrome")
+                + (view.mouseDownCanMoveWindow ? "+drag" : "")
+        }
+        var result: [String: String] = [:]
+        if let menu = frames["workspace-more-menu"] { result["result_menu"] = hit(menu.midX, menu.midY) }
+        if let header = frames["canvas-header"], let title = frames["canvas-title"] {
+            result["canvas_gap"] = hit((title.maxX + (frames["workspace-more-menu"]?.minX ?? header.maxX)) / 2, header.midY)
+            result["canvas_title"] = hit(title.minX + 4, header.midY)
+        }
+        if let header = frames["sidebar-header"] { result["sidebar_gap"] = hit(header.midX, header.midY) }
+        return result
     }
     private func descendants(_ view: NSView) -> [NSView] {
         [view] + view.subviews.flatMap { descendants($0) }

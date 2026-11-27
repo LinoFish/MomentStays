@@ -9,6 +9,7 @@ final class WorkspaceWindow: NSWindow {
 // macOS host: shared UI and task state live in SwiftUI/model files.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation, NSMenuDelegate {
     let model = WorkspaceModel()
+    let chrome = WindowChrome()
     private(set) var window: NSWindow!
     private lazy var platform = MacPlatformServices(model: model)
     private var pendingOpen: [URL] = []
@@ -28,17 +29,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         for kind: NSWindow.ButtonType in [.closeButton,.miniaturizeButton,.zoomButton] {
             window.standardWindowButton(kind)?.isHidden = false
         }
+        // Content runs under a transparent title bar: the canvas and workflow
+        // headers share the traffic lights' row instead of sitting below an
+        // empty strip. An empty, fixed compact toolbar gives that row a native
+        // height with the traffic lights centred on it (macOS 11+).
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        let brand = NSTitlebarAccessoryViewController()
-        brand.view = NSHostingView(rootView:MomentStaysBrandIcon().frame(width:20,height:20).accessibilityHidden(true))
-        brand.view.frame = NSRect(x:0,y:0,width:28,height:24)
-        brand.layoutAttribute = .right
-        window.addTitlebarAccessoryViewController(brand)
+        window.titlebarSeparatorStyle = .none
+        let toolbar = NSToolbar(identifier:"MomentStaysWorkspace")
+        toolbar.allowsUserCustomization = false; toolbar.displayMode = .iconOnly
+        window.toolbar = toolbar
+        window.toolbarStyle = .unifiedCompact
+        window.collectionBehavior.insert(.fullScreenPrimary)
         window.isMovableByWindowBackground = true
         window.title = AppText.text(AppName.display); window.isReleasedWhenClosed = false
         window.delegate = self; platform.window = window
-        var root = WorkspaceView(model: model, actions: platform.actions)
+        var root = WorkspaceView(model: model, actions: platform.actions, chrome: chrome)
         #if UI_DIAGNOSTICS
         let diagnostics = UISnapshotSupport(model: model, window: window)
         self.diagnostics = diagnostics
@@ -51,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         // Restore the user's last window size/position; diagnostics keep fixed geometry.
         if startupArgument("--ui-snapshot") == nil { window.setFrameAutosaveName("MomentStaysWorkspace") }
         window.makeKeyAndOrderFront(nil)
+        chrome.update(window)
         NSApp.activate(ignoringOtherApps: true)
         #if UI_DIAGNOSTICS
         diagnostics.start()
@@ -198,6 +205,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if model.sharing { model.errorMessage = "共享应用仍在读取文件，请完成或取消共享后退出。"; return .terminateCancel }
         return .terminateNow
     }
+    func windowDidResize(_ notification: Notification) { chrome.update(window) }
+    func windowWillEnterFullScreen(_ notification: Notification) { chrome.update(window, fullScreen: true) }
+    func windowDidEnterFullScreen(_ notification: Notification) { chrome.update(window, fullScreen: true) }
+    func windowWillExitFullScreen(_ notification: Notification) { chrome.update(window, fullScreen: false) }
+    func windowDidExitFullScreen(_ notification: Notification) { chrome.update(window) }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if model.isBusy { model.stop(); return false }
         if model.sharing { return false }
