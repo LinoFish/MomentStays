@@ -128,12 +128,9 @@ struct ScanRow {
     // `hdr` stays display text. Rows built in Swift (placeholders, errors) have no code and
     // fall back to the label, so both paths give the same answer.
     var hdrKind: String? = nil
-    static let staticHDRKinds: Set<String> = ["ultra_hdr","iso_hdr","apple_legacy","honor_private","heic_hdr","oppo_uhdr"]
-    static let staticHDRLabels: Set<String> = ["Ultra HDR","ISO HDR","旧 Apple HDR","荣耀私有 HDR","HEIC HDR","OPPO UHDR（实验）"]
+    // Static HDR, convertibility and queue state come from the core (`queue-state`,
+    // PhotoQueueItem.coreQueueStates).
     var isHonorPrivateHDR: Bool { hdrKind.map { $0 == "honor_private" } ?? (hdr == "荣耀私有 HDR") }
-    var isStaticHDR: Bool { confirmedStatic && (hdrKind.map { Self.staticHDRKinds.contains($0) } ?? Self.staticHDRLabels.contains(hdr)) }
-    var isConvertible: Bool { burst.map { $0.supported } ?? (isMotion || isStaticHDR) }
-    var needsInspection: Bool { burst.map { !$0.supported } ?? (!isMotion && !confirmedStatic) }
 }
 
 // A batch-local reuse check, including inode and change time. Never persisted as
