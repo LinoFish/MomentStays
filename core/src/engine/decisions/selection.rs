@@ -1051,11 +1051,15 @@ mod tests {
         assert_eq!(last_path_component("/a/é/"), "é");
     }
 
+    // `PortableFs` speaks '/'-separated paths; Windows paths are not its domain.
+    #[cfg(unix)]
     #[test]
     fn portable_matches_engine_paths() {
         let root = std::env::temp_dir().join(format!("ms-selection-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("x/y")).unwrap();
+        // The engine resolves symlinks (macOS: /var -> /private/var); start from the resolved path.
+        let root = std::fs::canonicalize(&root).unwrap();
         for n in ["x/a.jpg", "x/B.JPG", "x/y/c.heic", "x/.d.jpg", "x/e.txt"] {
             std::fs::write(root.join(n), b"").unwrap();
         }
