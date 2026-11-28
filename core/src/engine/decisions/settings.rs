@@ -534,8 +534,11 @@ pub fn decide_json(req: &Value) -> Value {
     let zone = req["current_zone"].as_str().unwrap_or("UTC");
     let mut normalized = settings.clone();
     normalized.normalize();
+    let mut normalized_json = normalized.json();
+    // Whether the stored title becomes the default (the normalized title no longer is blank).
+    normalized_json["album_title_blank"] = json!(settings.album_title_blank());
     json!({
-        "normalized": normalized.json(),
+        "normalized": normalized_json,
         "options": settings.options(zone).json(),
         "private_hdr_available": settings.private_hdr_available(),
         "private_hdr_enabled": settings.private_hdr_enabled(),
@@ -627,6 +630,17 @@ mod tests {
             (x.track.as_str(), x.album_title.as_str()),
             ("secondary", DEFAULT_ALBUM)
         );
+    }
+
+    #[test]
+    fn decide_reports_the_blank_title_of_the_input() {
+        let v = decide_json(
+            &json!({"settings": {"album_title": "\u{3000}\n", "image_quality": "0.9500000000000001"}}),
+        );
+        assert_eq!(v["normalized"]["album_title_blank"], true);
+        assert_eq!(v["normalized"]["image_quality"], "0.9500000000000001");
+        let v = decide_json(&json!({"settings": {"album_title": "\u{FEFF}"}}));
+        assert_eq!(v["normalized"]["album_title_blank"], false);
     }
 
     #[test]
