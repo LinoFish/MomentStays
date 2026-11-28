@@ -1,0 +1,71 @@
+# Flatpak manifest (draft) for the GNOME app. Build from the repository root:
+#   flatpak-builder --force-clean --user --install build-dir \
+#     linux/flatpak/com.linofish.MomentStays.yml
+#
+# Runtime: GNOME 50. GTK 4, libadwaita, GLib/GIO, GdkPixbuf and the C
+# library's gettext (all LGPL) come from org.gnome.Platform and are linked
+# dynamically; nothing LGPL is bundled (AGENTS.md, dependency rules).
+#
+# Codecs: the core's Linux backend (`linux-native`) uses libjpeg-turbo,
+# lcms2, libheif and GStreamer from the runtime. HEVC/H.264/AAC decoding
+# comes from the org.freedesktop.Platform.codecs-extra extension that
+# Flathub installs with the runtime (FFmpeg decoders, libheif HEVC plugin);
+# nothing is bundled. Without it (disabled or offline installs) the core
+# degrades: image checks report "unknown", frame extraction / re-encoding
+# return Unsupported, the audio check is "unavailable" (docs/linux/FLATPAK_PLAN.md).
+#
+# TODO before Flathub: replace `--share=network` in the build with
+# offline crate sources (flatpak-cargo-generator -> cargo-sources.json),
+# point `sources` at a tagged git checkout, and add screenshots/releases
+# to the metainfo.
+id: com.linofish.MomentStays
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: momentstays
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # No --filesystem: source and output folders are granted per folder
+  # through the FileChooser portal (GtkFileDialog), as document-portal paths.
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/momentstays/cargo
+    MOMENTSTAYS_LOCALEDIR: /app/share/locale
+modules:
+  - name: momentstays
+    buildsystem: simple
+    build-options:
+      # Draft only: lets cargo fetch crates. Flathub requires offline sources.
+      build-args:
+        - --share=network
+    build-commands:
+      # Default features include `linux-native` (the core's system codec backend).
+      - cargo build --release --locked --features linux-native --manifest-path linux/Cargo.toml
+      - install -Dm755 linux/target/release/momentstays /app/bin/momentstays
+      - |
+        for lang in $(cat linux/po/LINGUAS); do
+          install -d /app/share/locale/$lang/LC_MESSAGES
+          msgfmt --check -o /app/share/locale/$lang/LC_MESSAGES/momentstays.mo linux/po/$lang.po
+        done
+        # zh_HK readers get the Traditional Chinese catalog.
+        install -d /app/share/locale/zh_HK/LC_MESSAGES
+        cp /app/share/locale/zh_TW/LC_MESSAGES/momentstays.mo /app/share/locale/zh_HK/LC_MESSAGES/
+      # DBusActivatable=true in the desktop file needs the session service.
+      - install -Dm644 linux/data/com.linofish.MomentStays.service /app/share/dbus-1/services/com.linofish.MomentStays.service
+      - install -Dm644 linux/data/com.linofish.MomentStays.desktop /app/share/applications/com.linofish.MomentStays.desktop
+      - install -Dm644 linux/data/com.linofish.MomentStays.metainfo.xml /app/share/metainfo/com.linofish.MomentStays.metainfo.xml
+      - install -Dm644 linux/data/icons/hicolor/scalable/apps/com.linofish.MomentStays.svg /app/share/icons/hicolor/scalable/apps/com.linofish.MomentStays.svg
+    sources:
+      # The app crate depends on ../core by path, so the whole tree is the source.
+      - type: dir
+        path: ../..
+        skip:
+          - linux/target
+          - core/target
+          - .git

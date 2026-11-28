@@ -253,3 +253,49 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
+
+## 6. GNOME (Linux) app: `linux/` (`momentstays-gnome`)
+
+The GNOME app ships only as a Flatpak on `org.gnome.Platform//50` and is built with the core's `linux-native` backend (section 1). GTK 4, libadwaita, GLib/GIO, GdkPixbuf, Pango, Cairo, Graphene and the C library's gettext (`bindtextdomain`, `g_dgettext`) are LGPL system libraries supplied by the GNOME runtime and linked dynamically; none of them is bundled or statically linked. HEVC/H.264/AAC decoding comes from Flathub's `org.freedesktop.Platform.codecs-extra` runtime extension, not from the app. The app icon is the project's own `docs/branding/icon-light.svg` (see [TRADEMARKS.md](TRADEMARKS.md)).
+
+`linux/Cargo.lock` locks the core's crates with `linux-native` (section 2) plus 30 further crates or versions (3 direct, the rest transitive or build-time); `momentstays-core` and `serde_json` are reused from the core. License expressions: `MIT`, `MIT OR Apache-2.0`. They are checked with `cargo deny check licenses` against `core/deny.toml` in the `gnome-ui` workflow.
+
+### Direct dependencies
+
+| Crate | Locked version | License expression | Use |
+| --- | --- | --- | --- |
+| [glib-build-tools](https://github.com/gtk-rs/gtk-rs-core) | 0.22.8 | `MIT` | Build time: compiles the GResource bundle (CSS, icon) with the SDK’s glib-compile-resources |
+| [gtk4](https://github.com/gtk-rs/gtk4-rs) | 0.11.5 | `MIT` | GTK 4 bindings (UI) |
+| [libadwaita](https://gitlab.gnome.org/World/Rust/libadwaita-rs) | 0.9.2 | `MIT` | libadwaita bindings (UI) |
+
+### Transitive and build dependencies
+
+| Crate | Locked version | License expression |
+| --- | --- | --- |
+| [cairo-rs](https://github.com/gtk-rs/gtk-rs-core) | 0.22.11 | `MIT` |
+| [cairo-sys-rs](https://github.com/gtk-rs/gtk-rs-core) | 0.22.9 | `MIT` |
+| [field-offset](https://github.com/Diggsey/rust-field-offset) | 0.3.6 | `MIT OR Apache-2.0` |
+| [futures-io](https://github.com/rust-lang/futures-rs) | 0.3.34 | `MIT OR Apache-2.0` |
+| [gdk-pixbuf-sys](https://github.com/gtk-rs/gtk-rs-core) | 0.22.9 | `MIT` |
+| [gdk-pixbuf](https://github.com/gtk-rs/gtk-rs-core) | 0.22.11 | `MIT` |
+| [gdk4-sys](https://github.com/gtk-rs/gtk4-rs) | 0.11.5 | `MIT` |
+| [gdk4](https://github.com/gtk-rs/gtk4-rs) | 0.11.5 | `MIT` |
+| [gio](https://github.com/gtk-rs/gtk-rs-core) | 0.22.11 | `MIT` |
+| [graphene-rs](https://github.com/gtk-rs/gtk-rs-core) | 0.22.8 | `MIT` |
+| [graphene-sys](https://github.com/gtk-rs/gtk-rs-core) | 0.22.9 | `MIT` |
+| [gsk4-sys](https://github.com/gtk-rs/gtk4-rs) | 0.11.5 | `MIT` |
+| [gsk4](https://github.com/gtk-rs/gtk4-rs) | 0.11.5 | `MIT` |
+| [gtk4-macros](https://github.com/gtk-rs/gtk4-rs) | 0.11.5 | `MIT` |
+| [gtk4-sys](https://github.com/gtk-rs/gtk4-rs) | 0.11.5 | `MIT` |
+| [hashbrown](https://github.com/rust-lang/hashbrown) | 0.17.2 | `MIT OR Apache-2.0` (newer lock than core) |
+| [itoa](https://github.com/dtolnay/itoa) | 1.0.19 | `MIT OR Apache-2.0` (newer lock than core) |
+| [libadwaita-sys](https://gitlab.gnome.org/World/Rust/libadwaita-rs) | 0.9.2 | `MIT` |
+| [memoffset](https://github.com/Gilnaa/memoffset) | 0.9.1 | `MIT` |
+| [pango-sys](https://github.com/gtk-rs/gtk-rs-core) | 0.22.11 | `MIT` |
+| [pango](https://github.com/gtk-rs/gtk-rs-core) | 0.22.9 | `MIT` |
+| [proc-macro-crate](https://github.com/bkchr/proc-macro-crate) | 3.5.0 | `MIT OR Apache-2.0` |
+| [rustc_version](https://github.com/djc/rustc-version-rs) | 0.4.1 | `MIT OR Apache-2.0` |
+| [semver](https://github.com/dtolnay/semver) | 1.0.28 | `MIT OR Apache-2.0` |
+| [syn](https://github.com/dtolnay/syn) | 3.0.10 | `MIT OR Apache-2.0` (newer lock than core) |
+| [system-deps](https://github.com/gdesmott/system-deps) | 7.0.8 | `MIT OR Apache-2.0` (newer lock than core) |
+| [toml_edit](https://github.com/toml-rs/toml) | 0.25.21+spec-1.1.0 | `MIT OR Apache-2.0` |
