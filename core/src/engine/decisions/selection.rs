@@ -1051,8 +1051,10 @@ mod tests {
         assert_eq!(last_path_component("/a/é/"), "é");
     }
 
-    // `PortableFs` speaks '/'-separated paths; Windows paths are not its domain.
-    #[cfg(unix)]
+    // `PortableFs` is the non-Apple backend and speaks '/'-separated paths. On
+    // Apple it would also apply Foundation's "/private" stripping, which
+    // `engine::paths` does not, and Windows paths are not its domain.
+    #[cfg(all(unix, not(target_vendor = "apple")))]
     #[test]
     fn portable_matches_engine_paths() {
         let root = std::env::temp_dir().join(format!("ms-selection-{}", std::process::id()));
