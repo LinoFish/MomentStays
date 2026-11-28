@@ -73,7 +73,6 @@ extern "C" {
         locale: Ref,
     ) -> isize;
     fn CFLocaleCopyCurrent() -> Ref;
-    fn CFStringCompare(a: Ref, b: Ref, options: usize) -> isize;
     fn CFURLCreateWithFileSystemPath(a: Ref, path: Ref, style: isize, dir: u8) -> Ref;
     fn CFURLCopyFileSystemPath(url: Ref, style: isize) -> Ref;
     fn CFURLCopyResourcePropertyForKey(url: Ref, key: Ref, value: *mut Ref, error: *mut Ref) -> u8;
@@ -305,17 +304,12 @@ unsafe fn compare_cf(a: Ref, b: Ref, locale: Ref) -> Ordering {
         location: 0,
         length: CFStringGetLength(a),
     };
-    let order = |r: isize| r.cmp(&0);
-    match order(CFStringCompareWithOptionsAndLocale(
+    CFStringCompareWithOptionsAndLocale(
         a,
         b,
         range,
         CASE_INSENSITIVE | NUMERICALLY | WIDTH_INSENSITIVE | FORCED_ORDERING,
         locale,
-    )) {
-        // NSString's forced ordering of canonically equivalent strings
-        // (NFC vs NFD) falls back to their UTF-16 code units.
-        Ordering::Equal => order(CFStringCompare(a, b, 0)),
-        o => o,
-    }
+    )
+    .cmp(&0)
 }

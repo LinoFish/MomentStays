@@ -2,8 +2,8 @@
 //! output folder may be used for it, as the Apple apps decide it (formerly
 //! Swift `NativeBatch.files` / `selection` / `validateOutput` and
 //! `AndroidExport.selection`, apple/shared). Request modes `input-files`,
-//! `input-selection`, `validate-output`, `normalized-paths` and
-//! `standard-order`.
+//! `input-selection`, `validate-output`, `normalized-paths`,
+//! `standard-order` and `standard-compare`.
 //!
 //! The rules live here; the file-system facts and the Foundation path
 //! semantics they rest on come from an [`Fs`]:
@@ -825,6 +825,29 @@ pub fn order_request(fs: &dyn Fs, req: &Value) -> Result<Value> {
         .unwrap_or_default();
     names.sort_by(|a, b| fs.compare(a, b));
     Ok(json!({ "names": names }))
+}
+
+/// `standard-compare`: {"pairs": [[a, b]]} → {"order": [-1 | 0 | 1]}, the
+/// comparison of each pair in its own argument order.
+pub fn compare_request(fs: &dyn Fs, req: &Value) -> Result<Value> {
+    let order: Vec<i64> = req["pairs"]
+        .as_array()
+        .map(|pairs| {
+            pairs
+                .iter()
+                .map(|p| {
+                    let a = p[0].as_str().unwrap_or("");
+                    let b = p[1].as_str().unwrap_or("");
+                    match fs.compare(a, b) {
+                        Ordering::Less => -1,
+                        Ordering::Equal => 0,
+                        Ordering::Greater => 1,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(json!({ "order": order }))
 }
 
 #[cfg(test)]

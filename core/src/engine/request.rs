@@ -240,6 +240,10 @@ pub fn handle(
             let fs = crate::engine::decisions::selection::system();
             crate::engine::decisions::selection::normalized_request(fs, req)
         }
+        "standard-compare" => {
+            let fs = crate::engine::decisions::selection::system();
+            crate::engine::decisions::selection::compare_request(fs, req)
+        }
         "standard-order" => {
             let fs = crate::engine::decisions::selection::system();
             crate::engine::decisions::selection::order_request(fs, req)

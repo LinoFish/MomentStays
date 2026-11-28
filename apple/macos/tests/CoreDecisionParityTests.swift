@@ -524,13 +524,17 @@ struct CoreDecisionParityTests {
         let legacyOrder = names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
         let coreOrder = (try? RustCore.engine(["mode":"standard-order","names":names]))?["names"] as? [String] ?? []
         check("order", "\(names.count) names", legacy: legacyOrder.joined(separator: "|"), core: coreOrder.joined(separator: "|"))
-        for i in 0..<names.count { for j in (i + 1)..<names.count {
-            let a = names[i], b = names[j]
-            // A stable sort keeps an equal pair in place, so "=" reads as "<".
-            let legacy = a.localizedStandardCompare(b) == .orderedDescending ? ">" : "<"
-            let pair = (try? RustCore.engine(["mode":"standard-order","names":[a, b]]))?["names"] as? [String] ?? []
-            check("compare", a.debugDescription + " " + b.debugDescription, legacy: legacy, core: pair == [a, b] ? "<" : ">")
-        } }
+        // The comparator itself, pair by pair in the same argument order. (On
+        // canonically equivalent names, NFC vs NFD, Finder ordering is not
+        // antisymmetric; such names are one file on APFS, so a listing never holds both.)
+        var pairs: [[String]] = []
+        for i in 0..<names.count { for j in 0..<names.count where i != j { pairs.append([names[i], names[j]]) } }
+        let coreSigns = (try? RustCore.engine(["mode":"standard-compare","pairs":pairs]))?["order"] as? [Int] ?? []
+        for (index, pair) in pairs.enumerated() {
+            let legacy = pair[0].localizedStandardCompare(pair[1]).rawValue
+            check("compare", pair[0].debugDescription + " " + pair[1].debugDescription, legacy: String(legacy),
+                  core: index < coreSigns.count ? String(coreSigns[index]) : "missing")
+        }
         // files
         for url in inputs {
             func run(_ work: () throws -> [URL]) -> String {
