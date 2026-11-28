@@ -55,7 +55,22 @@ flags, `getattrlist(ATTR_CMN_FULLPATH)` plus swift-foundation path
 standardization for `standardizedFileURL.resolvingSymlinksInPath()`),
 elsewhere `std::fs` (`PortableFs`). `normalized-paths` and `standard-order`
 expose the normalization and ordering for the parity check.
-The Apple app calls five of them: `WorkspaceModel.actionBlockingReason`
+The conversion settings model (`decisions::settings`) answers
+`conversion-settings-tables` (defaults of a new settings value; which routes
+export to Android, which vendor writes HEIC (Samsung only), which
+destinations import into Photos, share or use a cache folder; the direction
+and vendor of each target preset and the preset of each direction/vendor)
+and `conversion-settings` (one settings value: `normalized` (the constraints
+between options: Android routes never ask or import into Photos, Apple
+routes never share, auxiliary-only never imports, candidates or chosen
+covers force the primary track, a blank album title becomes `MomentStays`,
+HEIC only for Samsung, qualities clamped to 0.01...1 with 0.95 for a value
+JSON cannot carry), `options` (the engine option fields, with `carry` naming
+the per-source maps that reach the engine; qualities pass through),
+`private_hdr_available` / `private_hdr_enabled` (the experiment is off by
+default and unavailable for Google → HONOR and auxiliary-only Apple output),
+`destinations`, `action` and `preset`).
+The Apple app calls six of them: `WorkspaceModel.actionBlockingReason`
 (one `action-blocking-reason` call per plan revision for the whole queue),
 `PhotoQueueItem` (`queue-state`: one call per scan batch for `initialState`,
 `isConvertible` and `isStaticHDR`, and one per plan revision for
@@ -65,7 +80,11 @@ The Apple app calls five of them: `WorkspaceModel.actionBlockingReason`
 by Foundation) and `CoreInputSelection` (`input-files`, `input-selection`,
 `validate-output`; formerly `NativeBatch.files` / `selection` /
 `validateOutput` and `AndroidExport.selection`, whose movie branch is
-`live-selection`). Parity with the removed Swift code is checked by
+`live-selection`) and `ConversionSettings` (`conversion-settings-tables` once
+for defaults and choice facts, `conversion-settings` for `normalize()`,
+`options`, the private HDR experiment, `destinations` and `actionTitle`;
+titles, `summary`, `coverIndex(for:)` and the Codable form stay in Swift).
+Parity with the removed Swift code is checked by
 `apple/macos/scripts/check_core_decisions.py`. `track-info` is not used by
 the Apple app: on that corpus video tracks match AVAssetReader plus
 `AVAssetTrack.segments`, but AAC tracks (AVFoundation maps them through a

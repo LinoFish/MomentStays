@@ -678,6 +678,129 @@ struct CoreDecisionParityTests {
 
     static func readerInfo(_ asset: AVAsset, _ track: AVAssetTrack) throws -> TrackInfo { try trackInfo(asset, track) }
 
+    // MARK: conversion-settings
+
+    /// One settings value as the app sees it: normalized fields, engine options (their JSON as sent to the
+    /// engine and stored in manifests, plus the fields that stay in Swift), the private HDR experiment,
+    /// the offered destinations, the action title and the current target preset.
+    static func settingsLine(normalized n: ConversionSettings, options o: ConversionOptions,
+                             hdr: (Bool, Bool), destinations: [OutputDestination], action: String, preset: MigrationTargetPreset) -> String {
+        // JSONSerialization raises (it does not throw) on NaN and infinity, so check first.
+        func text(_ value: Any?) -> String {
+            guard let value = value else { return "nil" }
+            guard JSONSerialization.isValidJSONObject(value), let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else { return "unserializable" }
+            return String(decoding: data, as: UTF8.self)
+        }
+        let json = text(o.json), photoTime = text(o.photoTime), android = text(o.android.json)
+        return ["n:\(n.destination.rawValue),\(n.track.rawValue),\(n.albumTitle.debugDescription),\(n.container.rawValue),\(n.imageQuality),\(n.gainQuality)",
+                "o:\(o.direction),\(o.legacyHDR),\(o.missingTime),\(o.timeDomain),\(o.videoTrack),\(o.outputMode),\(o.repairAuxiliaryDuration),\(o.exportDataFiles),\(o.exifFileTimes),\(o.candidateDelivery)",
+                "android:\(android)", "photo_time:\(photoTime)",
+                "maps:\(o.coverSelections.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }),\(o.manualCovers.keys.sorted()),\(o.burstChoices.keys.sorted())",
+                "json:\(json)", "hdr:\(hdr.0),\(hdr.1)", "dest:\(destinations.map(\.rawValue))", "action:\(action)", "preset:\(preset.rawValue)"].joined(separator: "|")
+    }
+
+    static func settingsCorpus() -> [ConversionSettings] {
+        var rng = Rng(state: 0xc0_5e77_1265)
+        let qualities: [Double] = [0.95, 0, -0.0, -1, 0.01, 0.009, 0.0100000001, 1, 1.0000001, 2, 0.5, 0.123456789, 0.1, 0.3,
+                                   1e-300, 5e-324, 1e300, .nan, .infinity, -.infinity, 0.9500000000000001, 0.7777777777777777]
+        let albums = ["MomentStays", "", " ", "\n\t", "\u{3000}", "\u{200B}", "\u{85}", "\u{A0}", "\u{FEFF}", "相册", " a ", "\u{2028}",
+                      "\u{1680}", "\u{180E}", "\u{2029}\u{202F}\u{205F}", "\u{B}\u{C}\r", "\u{1C}", "e\u{301}", " \u{301}", "📷", "\u{0}"]
+        let zones: [String?] = [nil, "UTC", "Asia/Shanghai", "America/New_York", ""]
+        let references: [Double?] = [nil, 0, 1.7e9, 1700000000.123, -1, 1e15]
+        let bools: [Bool?] = [nil, false, true]
+        let deliveries: [CandidateDelivery?] = [nil, .staticPhotos, .livePhotos]
+        let covers: [[String:Int]?] = [nil, [:], ["/a/IMG_1.jpg": 2, "/b/c.jpg": 0]]
+        let manual = ManualCoverChoice(source_sha256: "ab", source_version: "v1", track_index: 0, frame_index: 3)
+        let manuals: [[String:ManualCoverChoice]?] = [nil, [:], ["/a/IMG_1.jpg": manual]]
+        let bursts: [[String:BurstChoice]?] = [nil, [:], ["g1": BurstChoice(signature: "s", representative: "r", independent: true)]]
+        func randomize(_ s: inout ConversionSettings) {
+            s.albumTitle = rng.pick(albums); s.imageQuality = rng.int(3) == 0 ? Double(rng.int(1_000_001)) / 1_000_000 : rng.pick(qualities)
+            s.gainQuality = rng.int(3) == 0 ? Double(rng.int(2_000_001)) / 1_000_000 - 0.5 : rng.pick(qualities)
+            s.preserveJPEG = rng.int(2) == 0; s.exportDataFiles = rng.int(2) == 0; s.repairAuxiliaryDuration = rng.int(2) == 0
+            s.missingTime = rng.pick(MissingTimePolicy.allCases); s.timeDomain = rng.pick(CoverTimeDomain.allCases)
+            s.exifFileTimes = rng.pick(bools); s.photoTimeRepair = rng.pick(bools); s.photoTimeSynthetic = rng.pick(bools)
+            s.photoTimeZone = rng.pick(zones); s.photoTimeReference = rng.pick(references)
+            s.manualCovers = rng.pick(manuals); s.burstChoices = rng.pick(bursts)
+            s.outputConfirmed = rng.pick(bools); s.liveConversion = rng.pick(bools); s.burstConversion = rng.pick(bools)
+            s.timeOptionsEnabled = rng.pick(bools); s.libraryVersion = rng.pick(LibraryVersion.allCases)
+        }
+        var list: [ConversionSettings] = [ConversionSettings()]
+        // Every combination of the choices the rules branch on; the other fields at random.
+        for direction in ConversionDirection.allCases { for destination in OutputDestination.allCases { for mode in ExportMode.allCases {
+        for vendor in AndroidVendor.allCases { for container in PhotoContainer.allCases { for track in VideoTrack.allCases {
+        for cover in covers { for hdr in [false, true] { for delivery in deliveries {
+            var s = ConversionSettings()
+            s.direction = direction; s.destination = destination; s.exportMode = mode; s.vendor = vendor; s.container = container
+            s.track = track; s.coverSelections = cover; s.legacyHDR = hdr; s.candidateDelivery = delivery
+            randomize(&s)
+            list.append(s)
+        } } } } } } } } }
+        // Fully random values.
+        for _ in 0..<60_000 {
+            var s = ConversionSettings()
+            s.direction = rng.pick(ConversionDirection.allCases); s.destination = rng.pick(OutputDestination.allCases)
+            s.exportMode = rng.pick(ExportMode.allCases); s.vendor = rng.pick(AndroidVendor.allCases)
+            s.container = rng.pick(PhotoContainer.allCases); s.track = rng.pick(VideoTrack.allCases)
+            s.coverSelections = rng.pick(covers); s.legacyHDR = rng.int(2) == 0; s.candidateDelivery = rng.pick(deliveries)
+            randomize(&s)
+            list.append(s)
+        }
+        // Normalizing twice changes nothing more: feed normalized values back in.
+        for index in stride(from: 1, to: list.count, by: 7) { var s = list[index]; s.normalize(); list.append(s) }
+        return list
+    }
+
+    static func describe(_ s: ConversionSettings) -> String {
+        "\(s.direction.rawValue) \(s.destination.rawValue) \(s.exportMode.rawValue) \(s.vendor.rawValue) \(s.container.rawValue) \(s.track.rawValue) " +
+        "cover=\(s.coverSelections.map { "\($0.count)" } ?? "nil") hdr=\(s.legacyHDR) delivery=\(s.candidateDelivery?.rawValue ?? "nil") " +
+        "album=\(s.albumTitle.debugDescription) q=\(s.imageQuality),\(s.gainQuality) jpeg=\(s.preserveJPEG) data=\(s.exportDataFiles) " +
+        "repair=\(s.repairAuxiliaryDuration) missing=\(s.missingTime.rawValue) domain=\(s.timeDomain.rawValue) exif=\(String(describing: s.exifFileTimes)) " +
+        "pt=\(String(describing: s.photoTimeRepair)),\(String(describing: s.photoTimeSynthetic)),\(String(describing: s.photoTimeZone)),\(String(describing: s.photoTimeReference)) " +
+        "manual=\(s.manualCovers.map { "\($0.count)" } ?? "nil") burst=\(s.burstChoices.map { "\($0.count)" } ?? "nil")"
+    }
+
+    static func conversionSettings() -> String {
+        let digest = Digest()
+        var cases = 0
+        func check(_ label: String, legacy: String, core: String) {
+            cases += 1
+            digest.add(label + "|" + legacy)
+            if legacy != core { mismatch("conversion-settings", "\(label): swift \(legacy) core \(core)") }
+        }
+        // Defaults of a new value.
+        let d = ConversionSettings()
+        check("defaults", legacy: LegacySettingsRules.defaults,
+              core: "direction=\(d.direction.rawValue) destination=\(d.destination.rawValue) album=\(d.albumTitle) vendor=\(d.vendor.rawValue) container=\(d.container.rawValue) image=\(d.imageQuality) gain=\(d.gainQuality) preserve=\(d.preserveJPEG) hdr=\(d.legacyHDR) data=\(d.exportDataFiles) track=\(d.track.rawValue) mode=\(d.exportMode.rawValue) missing=\(d.missingTime.rawValue) domain=\(d.timeDomain.rawValue) repair=\(d.repairAuxiliaryDuration)")
+        // Fixed facts of each choice.
+        for v in ConversionDirection.allCases { check("direction " + v.rawValue, legacy: "\(LegacySettingsRules.exportsAndroid(v))", core: "\(v.exportsAndroid)") }
+        for v in AndroidVendor.allCases { check("vendor " + v.rawValue, legacy: "\(LegacySettingsRules.supportsHEIC(v))", core: "\(v.supportsHEIC)") }
+        for v in OutputDestination.allCases {
+            check("destination " + v.rawValue, legacy: "\(LegacySettingsRules.usesCache(v)),\(LegacySettingsRules.importsPhotos(v)),\(LegacySettingsRules.shares(v))",
+                  core: "\(v.usesCache),\(v.importsPhotos),\(v.shares)")
+        }
+        for v in MigrationTargetPreset.allCases {
+            check("preset " + v.rawValue, legacy: "\(LegacySettingsRules.presetDirection(v).rawValue),\(LegacySettingsRules.presetVendor(v).rawValue)",
+                  core: "\(v.direction.rawValue),\(v.vendor.rawValue)")
+        }
+        let zone = TimeZone.current.identifier
+        let corpus = settingsCorpus()
+        for s in corpus {
+            var ln = s; LegacySettingsRules.normalize(&ln)
+            let legacy = settingsLine(normalized: ln, options: LegacySettingsRules.options(s, zone: zone),
+                hdr: (LegacySettingsRules.privateHDRExperimentAvailable(s), LegacySettingsRules.privateHDRExperimentEnabled(s)),
+                destinations: LegacySettingsRules.destinations(s), action: LegacySettingsRules.actionTitle(s), preset: LegacySettingsRules.current(s))
+            var cn = s; cn.normalize()
+            let core = settingsLine(normalized: cn, options: s.options, hdr: (s.privateHDRExperimentAvailable, s.privateHDRExperimentEnabled),
+                destinations: s.destinations, action: s.actionTitle, preset: MigrationTargetPreset.current(s))
+            check(describe(s), legacy: legacy, core: core)
+        }
+        print("conversion-settings: \(cases) cases (\(corpus.count) settings values), digest \(digest.value), mismatches \(mismatches["conversion-settings", default: 0])")
+        golden("conversion-settings", digest.value)
+        return digest.value
+    }
+
+    // MARK: main
+
     static func main() {
         let repository = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : FileManager.default.currentDirectoryPath)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("MomentStays-core-parity-" + UUID().uuidString)
@@ -690,6 +813,7 @@ struct CoreDecisionParityTests {
             digests["live-selection"] = try liveSelection(root: root)
             digests["input-selection"] = try inputSelection(root: root)
             digests["queue-state"] = try queueState()
+            digests["conversion-settings"] = conversionSettings()
             let tracks = try trackParity(root: root, repository: repository)
             for line in examples { print("MISMATCH " + line) }
             let data = try JSONSerialization.data(withJSONObject: ["digests": digests, "mismatches": mismatches,
@@ -697,12 +821,95 @@ struct CoreDecisionParityTests {
             print("SUMMARY " + String(decoding: data, as: UTF8.self))
             let failed = mismatches.filter { $0.value > 0 }
             if !failed.isEmpty { fputs("FAIL: core decision parity mismatches \(failed)\n", stderr); exit(1) }
-            print("PASS core decision parity (filename-time, action-blocking-reason, live-selection, input-selection, queue-state)")
+            print("PASS core decision parity (filename-time, action-blocking-reason, live-selection, input-selection, queue-state, conversion-settings)")
         } catch {
             fputs("FAIL: \(error.localizedDescription)\n", stderr); exit(1)
         }
     }
 }
+
+// LEGACY-SETTINGS-BEGIN: the removed Swift rules of ConversionSettings.swift, verbatim apart from
+// being free functions, kept only until their digest is recorded.
+enum LegacySettingsRules {
+    static func exportsAndroid(_ d: ConversionDirection) -> Bool { d != .toApple }
+    static func supportsHEIC(_ v: AndroidVendor) -> Bool { v == .samsung }
+    static func usesCache(_ d: OutputDestination) -> Bool { d == .photos || d == .share }
+    static func importsPhotos(_ d: OutputDestination) -> Bool { d == .photos || d == .folderAndPhotos }
+    static func shares(_ d: OutputDestination) -> Bool { d == .share || d == .folderAndShare }
+    static func presetDirection(_ p: MigrationTargetPreset) -> ConversionDirection { p == .apple ? .toApple : p == .googleToHonor ? .androidToAndroid : p == .honorToGoogle ? .honorToGoogle : .toAndroid }
+    static func presetVendor(_ p: MigrationTargetPreset) -> AndroidVendor {
+        switch p {
+        case .xiaomi: return .xiaomi
+        case .samsung: return .samsung
+        case .huawei: return .huawei
+        case .honor: return .honor
+        case .oppo: return .oppo
+        case .vivo: return .vivo
+        default: return .google
+        }
+    }
+    static func current(_ settings: ConversionSettings) -> MigrationTargetPreset {
+        if settings.direction == .toApple { return .apple }
+        if settings.direction == .androidToAndroid { return .googleToHonor }
+        if settings.direction == .honorToGoogle { return .honorToGoogle }
+        return MigrationTargetPreset(rawValue:settings.vendor.rawValue) ?? .google
+    }
+    static let defaults = "direction=to-apple destination=ask album=MomentStays vendor=google container=jpeg image=0.95 gain=0.95 preserve=true hdr=false data=false track=primary mode=livephoto missing=error domain=auto repair=false"
+    static func privateHDRExperimentAvailable(_ s: ConversionSettings) -> Bool {
+        s.direction != .androidToAndroid && !(s.direction == .toApple && s.exportMode == .auxiliaryOnly)
+    }
+    static func privateHDRExperimentEnabled(_ s: ConversionSettings) -> Bool { s.legacyHDR && privateHDRExperimentAvailable(s) }
+    static func normalize(_ s: inout ConversionSettings) {
+        if exportsAndroid(s.direction) && s.destination == .ask { s.destination = .folder }
+        if exportsAndroid(s.direction) && importsPhotos(s.destination) { s.destination = .folder }
+        if s.direction == .toApple && shares(s.destination) { s.destination = .folder }
+        if s.exportMode == .auxiliaryOnly && s.direction == .toApple && importsPhotos(s.destination) { s.destination = .folder }
+        if s.exportMode == .withCandidates || !(s.coverSelections ?? [:]).isEmpty { s.track = .primary }
+        if s.albumTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { s.albumTitle = "MomentStays" }
+        if !supportsHEIC(s.vendor) { s.container = .jpeg }
+        s.imageQuality = min(1, max(0.01, s.imageQuality.isFinite ? s.imageQuality : 0.95))
+        s.gainQuality = min(1, max(0.01, s.gainQuality.isFinite ? s.gainQuality : 0.95))
+    }
+    static func options(_ s: ConversionSettings, zone: String) -> ConversionOptions {
+        if s.direction == .androidToAndroid || s.direction == .honorToGoogle {
+            var result = ConversionOptions(legacyHDR: s.legacyHDR)
+            result.direction = s.direction.rawValue
+            result.exportDataFiles = s.exportDataFiles
+            result.exifFileTimes = s.exifFileTimes ?? false
+            result.photoTime = photoTimeOptions(s, zone: zone)
+            return result
+        }
+        var result = ConversionOptions(legacyHDR: s.legacyHDR, missingTime: s.missingTime.rawValue,
+            timeDomain: s.timeDomain.rawValue, videoTrack: s.track.rawValue, outputMode: s.exportMode.rawValue,
+            repairAuxiliaryDuration: s.repairAuxiliaryDuration, exportDataFiles: s.exportDataFiles,
+            exifFileTimes: s.exifFileTimes ?? false)
+        result.direction = s.direction.rawValue
+        result.photoTime = photoTimeOptions(s, zone: zone)
+        result.burstChoices = s.burstChoices ?? [:]
+        result.manualCovers = s.direction == .toApple ? s.manualCovers ?? [:] : [:]
+        result.coverSelections = s.exportMode == .auxiliaryOnly ? [:] : s.coverSelections ?? [:]
+        result.candidateDelivery = (s.candidateDelivery ?? .staticPhotos).rawValue
+        result.android = AndroidOptions(vendor: s.vendor.rawValue, container: s.container.rawValue,
+            hdr: s.container == .heic ? "preserve" : "ultra", imageQuality: s.imageQuality,
+            gainQuality: s.gainQuality, preserveJPEG: s.preserveJPEG)
+        return result
+    }
+    static func photoTimeOptions(_ s: ConversionSettings, zone: String) -> [String:Any]? {
+        guard s.photoTimeRepair == true, !(s.direction == .toApple && s.exportMode == .auxiliaryOnly) else { return nil }
+        return ["policy":"phototime-1","synthetic":s.photoTimeSynthetic ?? false,
+                "zone":s.photoTimeZone ?? zone,"epoch":s.photoTimeReference ?? 0,
+                "file_times":s.exifFileTimes ?? false]
+    }
+    static func destinations(_ s: ConversionSettings) -> [OutputDestination] {
+        exportsAndroid(s.direction) ? [.folder, .share, .folderAndShare] : s.exportMode == .auxiliaryOnly ? [.ask,.folder] : [.ask,.photos,.folder,.folderAndPhotos]
+    }
+    static func actionTitle(_ s: ConversionSettings) -> String {
+        if importsPhotos(s.destination) { return "转换并导入图库" }
+        if shares(s.destination) { return "转换并共享" }
+        return exportsAndroid(s.direction) ? "导出到安卓" : s.exportMode == .auxiliaryOnly ? "导出辅助轨" : "开始转换"
+    }
+}
+// LEGACY-SETTINGS-END
 
 /// Per-track sample facts read from the MP4/MOV sample tables by the shared
 /// Rust core (`track-info`, core/src/engine/decisions/track_info.rs). Test-only:

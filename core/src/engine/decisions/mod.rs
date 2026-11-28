@@ -9,10 +9,13 @@
 //! * [`live_selection`]: the still paired with a selected Live Photo movie.
 //! * [`selection`]: the photos a selection of files and folders stands for,
 //!   and whether an output folder may be used for it.
+//! * [`settings`]: the conversion settings model (defaults, constraints
+//!   between options, engine options, offered destinations).
 pub mod filename_time;
 pub mod hdr_kind;
 pub mod queue;
 pub mod selection;
+pub mod settings;
 pub mod track_info;
 pub mod workspace;
 

@@ -224,6 +224,8 @@ pub fn handle(
                 .unwrap_or_default();
             Ok(json!({ "states": states }))
         }
+        "conversion-settings-tables" => Ok(crate::engine::decisions::settings::tables_json()),
+        "conversion-settings" => Ok(crate::engine::decisions::settings::decide_json(req)),
         "input-files" => {
             let fs = crate::engine::decisions::selection::system();
             crate::engine::decisions::selection::files_request(fs, req)
