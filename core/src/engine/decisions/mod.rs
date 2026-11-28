@@ -7,9 +7,12 @@
 //! * [`workspace`]: the per-item conversion blocking reason.
 //! * [`queue`]: a queue item's initial state, convertibility and scope.
 //! * [`live_selection`]: the still paired with a selected Live Photo movie.
+//! * [`selection`]: the photos a selection of files and folders stands for,
+//!   and whether an output folder may be used for it.
 pub mod filename_time;
 pub mod hdr_kind;
 pub mod queue;
+pub mod selection;
 pub mod track_info;
 pub mod workspace;
 

@@ -28,17 +28,6 @@ enum AndroidExport {
         return URL(fileURLWithPath:still)
     }
 
-    static func selection(_ sources: [URL]) throws -> (base:URL,entries:[URL]) {
-        var images: [URL] = []
-        for source in sources {
-            if ["mov","mp4"].contains(source.pathExtension.lowercased()) {
-                images.append(try liveStill(source))
-            } else { images += try NativeBatch.files(source) }
-        }
-        guard !images.isEmpty else { throw Failure("未找到完整实况照片") }
-        return try NativeBatch.selection(images)
-    }
-
     static func scanFile(_ url:URL, relative:String) -> ScanRow {
         return RustCore.scanFile(url,relative:relative,direction:"to-android")
     }

@@ -219,52 +219,11 @@ enum NativeBatch {
     static func root(_ url: URL) -> URL {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true ? url : url.deletingLastPathComponent()
     }
-    static func files(_ source: URL) throws -> [URL] {
-        let props = try source.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-        if props.isRegularFile == true {
-            guard ["jpg","jpeg","heic","heif"].contains(source.pathExtension.lowercased()) else { throw Failure("请选择 Android 动态照片 JPEG/HEIC 或照片文件夹") }
-            return [source]
-        }
-        guard props.isDirectory == true else { throw Failure("输入不是可读取的文件或文件夹") }
-        var errors: [Error] = []
-        guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isRegularFileKey,.isSymbolicLinkKey],
-            options: [.skipsHiddenFiles,.skipsPackageDescendants], errorHandler: { _,error in errors.append(error); return true }) else { throw Failure("无法读取照片文件夹") }
-        var found: [URL] = []
-        for case let file as URL in enumerator {
-            let info = try file.resourceValues(forKeys: [.isRegularFileKey,.isSymbolicLinkKey])
-            if info.isRegularFile == true && info.isSymbolicLink != true && ["jpg","jpeg","heic","heif"].contains(file.pathExtension.lowercased()) { found.append(file) }
-        }
-        if let error = errors.first { throw Failure("部分目录不可读取：\(error.localizedDescription)") }
-        return found.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
-    }
-    static func selection(_ sources: [URL]) throws -> (base: URL, entries: [URL]) {
-        guard let first = sources.first else { throw Failure("请选择照片或文件夹") }
-        var base = root(normalized(first))
-        var selected: Set<URL> = []
-        for source in sources.map({ normalized($0) }) {
-            let parent = root(source)
-            while parent != base && !parent.path.hasPrefix(base.path == "/" ? "/" : base.path + "/") {
-                let next = base.deletingLastPathComponent()
-                guard next != base else { break }
-                base = next
-            }
-            for file in try files(source) { selected.insert(normalized(file)) }
-        }
-        return (base, selected.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending })
-    }
-    static func validateOutput(sources: [URL], output: URL) throws {
-        for source in sources { try validateOutput(source: source, output: output) }
-    }
     static func relative(_ source: URL, root: URL) throws -> String {
         let sourcePath = normalized(source).path, rootPath = normalized(root).path
         let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
         guard sourcePath.hasPrefix(prefix) else { throw Failure("输入文件位于所选目录之外：\(sourcePath) / \(rootPath)") }
         return String(sourcePath.dropFirst(prefix.count))
-    }
-    static func validateOutput(source: URL, output: URL) throws {
-        let input = normalized(root(source)), output = normalized(output)
-        let prefix = input.path.hasSuffix("/") ? input.path : input.path + "/"
-        guard output != input && !output.path.hasPrefix(prefix) else { throw Failure("请选择原片文件夹之外的输出位置") }
     }
     static func scan(source: URL, token: StopToken, progress: @escaping (Int,Int)->Void) throws -> [ScanRow] {
         try scan(sources: [source], token: token, progress: progress)
@@ -317,6 +276,29 @@ enum NativeBatch {
     }
 }
 
+
+/// Input selection and output validation decided by the shared Rust core
+/// (core/src/engine/decisions/selection.rs: request modes `input-files`,
+/// `input-selection`, `validate-output`). A URL travels as its path plus
+/// `hasDirectoryPath`, which Swift URL equality depends on.
+enum CoreInputSelection {
+    static func json(_ url: URL) -> [String:Any] { ["path":url.path,"dir":url.hasDirectoryPath] }
+    static func files(_ source: URL) throws -> [URL] {
+        let v = try RustCore.engine(["mode":"input-files","input":json(source)])
+        guard let files = v["files"] as? [String] else { throw Failure("Rust engine: invalid input files") }
+        return files.map { URL(fileURLWithPath:$0,isDirectory:false) }
+    }
+    static func selection(_ sources: [URL], android: Bool = false) throws -> (base: URL, entries: [URL]) {
+        let v = try RustCore.engine(["mode":"input-selection","inputs":sources.map { json($0) },"android":android])
+        guard let base = v["base"] as? [String:Any], let path = base["path"] as? String,
+              let entries = v["entries"] as? [String] else { throw Failure("Rust engine: invalid input selection") }
+        return (URL(fileURLWithPath:path,isDirectory:base["dir"] as? Bool ?? true),
+                entries.map { URL(fileURLWithPath:$0,isDirectory:false) })
+    }
+    static func validateOutput(sources: [URL], output: URL) throws {
+        _ = try RustCore.engine(["mode":"validate-output","inputs":sources.map { json($0) },"output":json(output)])
+    }
+}
 
 extension SourceVersion {
     var manualSignature: String {

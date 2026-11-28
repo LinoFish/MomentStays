@@ -176,7 +176,7 @@ final class SourceInspectionCache {
             .map { Stamp(url:NativeBatch.normalized($0),version:SourceVersion.read($0)) }
     }
     private func sourceFiles(_ source:URL, token:StopToken) throws -> [URL] {
-        guard let rootVersion = SourceVersion.readDirectory(source) else { return try NativeBatch.files(source) }
+        guard let rootVersion = SourceVersion.readDirectory(source) else { return try CoreInputSelection.files(source) }
         if let previous = inventories[source], previous.directories.allSatisfy({ $0.version != nil && SourceVersion.readDirectory($0.url) == $0.version }) { return previous.files }
         enumerationCount += 1
         var directories = [Stamp(url:source,version:rootVersion)], files: [URL] = [], errors: [Error] = []
@@ -201,13 +201,13 @@ final class SourceInspectionCache {
                 let versions = try siblings(source,images:true)
                 if let previous = movieSelections[source], previous.versions == versions { images += previous.images }
                 else {
-                    let selected = try AndroidExport.selection([source]).entries
+                    let selected = try CoreInputSelection.selection([source],android:true).entries
                     movieSelections[source] = (versions,selected); images += selected
                 }
             } else { images += try sourceFiles(source,token:token) }
         }
         if images.isEmpty { return (sources.first.map { NativeBatch.root($0) } ?? folder,[]) }
-        return try NativeBatch.selection(images)
+        return try CoreInputSelection.selection(images)
     }
     private func rebase(_ row:ScanRow, relative:String, version:SourceVersion) -> ScanRow {
         ScanRow(source:row.source,relative:relative,isMotion:row.isMotion,hdr:row.hdr,cover:row.cover,detail:row.detail,
@@ -348,7 +348,7 @@ enum PhotoTimeOutputProcessor {
         let base = Date(timeIntervalSince1970:reference)
         let originalNames = options.photoTimeOriginalNames
         let originalName: (URL) -> String = { originalNames[$0.standardizedFileURL.path] ?? $0.lastPathComponent }
-        let files = try NativeBatch.selection(sources).entries.sorted {
+        let files = try CoreInputSelection.selection(sources).entries.sorted {
             let order = originalName($0).compare(originalName($1),options:[.numeric,.caseInsensitive],locale:Locale(identifier:"en_US_POSIX"))
             return order == .orderedSame ? $0.path < $1.path : order == .orderedAscending
         }
