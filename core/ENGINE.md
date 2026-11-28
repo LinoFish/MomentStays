@@ -40,17 +40,32 @@ Shared UI decisions (`engine::decisions`, for macOS and the GNOME app):
 (capture time from an original filename), `track-info` (per-track sample
 facts from MP4/MOV bytes), `action-blocking-reason` (per-item conversion
 blocker), `queue-state` (a queue item's static HDR flag, convertibility,
-initial state and queue category) and `live-selection` (still paired with a
-selected Live movie).
-The Apple app calls four of them: `WorkspaceModel.actionBlockingReason`
+initial state and queue category), `live-selection` (still paired with a
+selected Live movie) and the input selection (`decisions::selection`):
+`input-files` (photos under a file or folder: hidden entries, symlinks and
+package contents skipped, an unreadable folder fails the selection),
+`input-selection` (inputs expanded, deduplicated, Finder-ordered, with their
+common base folder; `"android": true` lets a chosen movie stand for its
+still) and `validate-output` (the output folder must not be or lie inside a
+source folder). URLs travel as `{"path", "dir"}` because Swift URL equality
+depends on `hasDirectoryPath`. Their file-system facts and Foundation path
+semantics come from an `Fs`: on Apple platforms `platform/apple_fs.rs`
+(CFURL resource values and directory enumerator, `localizedStandardCompare`
+flags, `getattrlist(ATTR_CMN_FULLPATH)` plus swift-foundation path
+standardization for `standardizedFileURL.resolvingSymlinksInPath()`),
+elsewhere `std::fs` (`PortableFs`). `normalized-paths` and `standard-order`
+expose the normalization and ordering for the parity check.
+The Apple app calls five of them: `WorkspaceModel.actionBlockingReason`
 (one `action-blocking-reason` call per plan revision for the whole queue),
 `PhotoQueueItem` (`queue-state`: one call per scan batch for `initialState`,
 `isConvertible` and `isStaticHDR`, and one per plan revision for
 `WorkspaceModel.category`),
 `PhotoTimeRepair.inferredTime` (`filename-time` with Foundation's own stems,
 `"stems": true`; wall-clock tokens are still resolved in the chosen time zone
-by Foundation) and `AndroidExport.selection` (`live-selection` for a selected
-movie). Parity with the removed Swift code is checked by
+by Foundation) and `CoreInputSelection` (`input-files`, `input-selection`,
+`validate-output`; formerly `NativeBatch.files` / `selection` /
+`validateOutput` and `AndroidExport.selection`, whose movie branch is
+`live-selection`). Parity with the removed Swift code is checked by
 `apple/macos/scripts/check_core_decisions.py`. `track-info` is not used by
 the Apple app: on that corpus video tracks match AVAssetReader plus
 `AVAssetTrack.segments`, but AAC tracks (AVFoundation maps them through a

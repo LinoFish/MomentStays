@@ -13,6 +13,9 @@ import CryptoKit
 //   run 46057504970 (filename-time legacy == core per case in run 46059778452).
 //   queue-state: legacy Swift digest from run 46066645615 (legacy == core on all
 //   4,324,320 cases there, 0 mismatches).
+//   input-selection: legacy Swift digest from run 46148748808 (legacy == core on every
+//   case there, 0 mismatches); normalized paths and Finder ordering stay live checks
+//   against Foundation.
 @main
 struct CoreDecisionParityTests {
     static let legacySwiftDigests = [
@@ -20,6 +23,7 @@ struct CoreDecisionParityTests {
         "live-selection": "4859f98b15ef2ba1784bd0928c4f17d00e7fb5d7257c105b600c658d62dd7eea",
         "filename-time": "f74b464e2a909efa69bf714106935f1697adccfc6535120ee0380b1d98d7e21b",
         "queue-state": "d25639bae39519462904fcc61f63b0860333e96d891587d639518125e35b94aa",
+        "input-selection": "36b159bdbfb1beb54a6f676af5c970d3d8d91be73d35e68b5b411891c8cd5685",
     ]
     static func golden(_ area: String, _ digest: String) {
         guard let expected = legacySwiftDigests[area] else { return }
@@ -353,7 +357,7 @@ struct CoreDecisionParityTests {
             catch { return "error:" + error.localizedDescription }
         }
         for (name, url) in cases {
-            let core = result { try AndroidExport.selection([url]).entries }
+            let core = result { try CoreInputSelection.selection([url], android: true).entries }
             print("  live-selection \(name): \(core)")
             digest.add(name + "|" + core)
         }
@@ -496,11 +500,14 @@ struct CoreDecisionParityTests {
         defer {
             for url in corpus.locked { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
         }
-        let legacyDigest = Digest(), coreDigest = Digest()
+        let digest = Digest()
         var counts: [String: Int] = [:], kindMismatches: [String: Int] = [:]
-        func check(_ kind: String, _ label: String, legacy: String, core: String) {
+        func record(_ kind: String, _ label: String, _ core: String) {
             counts[kind, default: 0] += 1
-            legacyDigest.add(kind + "|" + label + "|" + legacy); coreDigest.add(kind + "|" + label + "|" + core)
+            digest.add(kind + "|" + label + "|" + core)
+        }
+        func check(_ kind: String, _ label: String, legacy: String, core: String) {
+            record(kind, label, core)
             if legacy != core {
                 kindMismatches[kind, default: 0] += 1
                 mismatch("input-selection", "\(kind) \(label): swift \(legacy) core \(core)")
@@ -541,7 +548,7 @@ struct CoreDecisionParityTests {
                 do { return "ok " + (try work()).map { showURL($0, corpus) }.joined(separator: ",") }
                 catch { return "error:" + selectionText(error.localizedDescription, corpus) }
             }
-            check("files", label([url]), legacy: run { try NativeBatch.files(url) }, core: run { try CoreInputSelection.files(url) })
+            record("files", label([url]), run { try CoreInputSelection.files(url) })
         }
         // selection: every input, every ordered pair, and random triples
         var sets: [[URL]] = [[]] + inputs.map { [$0] }
@@ -549,8 +556,7 @@ struct CoreDecisionParityTests {
         var rng = Rng(state: 0x5e1e_c710)
         for _ in 0..<1500 { sets.append([rng.pick(inputs), rng.pick(inputs), rng.pick(inputs)]) }
         for set in sets {
-            check("selection", label(set), legacy: selectionOutcome(corpus) { try NativeBatch.selection(set) },
-                  core: selectionOutcome(corpus) { try CoreInputSelection.selection(set) })
+            record("selection", label(set), selectionOutcome(corpus) { try CoreInputSelection.selection(set) })
         }
         // Android export selection: movies stand for their stills
         let androidPool = corpus.movies + [root.appendingPathComponent("pair"), root.appendingPathComponent("pair/IMG_0001.jpg"),
@@ -559,8 +565,7 @@ struct CoreDecisionParityTests {
         for a in androidPool { for b in androidPool { androidSets.append([a, b]) } }
         for _ in 0..<300 { androidSets.append([rng.pick(androidPool), rng.pick(androidPool), rng.pick(androidPool)]) }
         for set in androidSets {
-            check("android-selection", label(set), legacy: selectionOutcome(corpus) { try AndroidExport.selection(set) },
-                  core: selectionOutcome(corpus) { try CoreInputSelection.selection(set, android: true) })
+            record("android-selection", label(set), selectionOutcome(corpus) { try CoreInputSelection.selection(set, android: true) })
         }
         // output validation: every input and 300 random pairs, against every output
         var sourceSets: [[URL]] = [[]] + inputs.map { [$0] }
@@ -569,14 +574,13 @@ struct CoreDecisionParityTests {
             func run(_ work: () throws -> Void) -> String {
                 do { try work(); return "ok" } catch { return "error:" + selectionText(error.localizedDescription, corpus) }
             }
-            check("validate-output", label(sources) + " -> " + showURL(output, corpus),
-                  legacy: run { try NativeBatch.validateOutput(sources: sources, output: output) },
-                  core: run { try CoreInputSelection.validateOutput(sources: sources, output: output) })
+            record("validate-output", label(sources) + " -> " + showURL(output, corpus),
+                   run { try CoreInputSelection.validateOutput(sources: sources, output: output) })
         } }
         let total = counts.values.reduce(0, +)
         print("input-selection: \(total) cases \(counts.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")), " +
-              "legacy Swift digest \(legacyDigest.value), core digest \(coreDigest.value), mismatches \(kindMismatches.sorted { $0.key < $1.key })")
-        let value = coreDigest.value
+              "digest \(digest.value), live-check mismatches \(kindMismatches.sorted { $0.key < $1.key })")
+        let value = digest.value
         golden("input-selection", value)
         return value
     }

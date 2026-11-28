@@ -363,7 +363,7 @@ final class MacPlatformServices: NSObject {
         panel.beginSheetModal(for:window) { [weak self] response in
             guard let self = self, response == .OK, let output = panel.url else { return }
             do {
-                try NativeBatch.validateOutput(sources:self.model.sources,output:output)
+                try CoreInputSelection.validateOutput(sources:self.model.sources,output:output)
                 let request = try FileExportRequest.results(task.results)
                 let record = FileExportRecord(kind:"results",output:output.path,request:try JSONSerialization.data(withJSONObject:request,options:.sortedKeys))
                 self.runResultExport(task,record:record)

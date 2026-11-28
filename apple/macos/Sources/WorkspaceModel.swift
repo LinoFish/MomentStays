@@ -749,7 +749,7 @@ final class WorkspaceModel: ObservableObject {
         guard !merged.isEmpty else { return }
         guard merged != sources else { let message = "这些来源已在列表中"; notice = message; status = message; return }
         if let output = output, settings.outputConfirmed == true, !settings.destination.usesCache {
-            do { try NativeBatch.validateOutput(sources:merged,output:output) }
+            do { try CoreInputSelection.validateOutput(sources:merged,output:output) }
             catch { errorMessage = error.localizedDescription; return }
         }
         let wasEmpty = sources.isEmpty
@@ -785,7 +785,7 @@ final class WorkspaceModel: ObservableObject {
         guard !isBusy, !sharing, !isPreview else { return }
         do {
             let destination = NativeBatch.normalized(url)
-            try NativeBatch.validateOutput(sources: sources, output: destination)
+            try CoreInputSelection.validateOutput(sources: sources, output: destination)
             guard (try? destination.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
                 throw Failure("请选择一个输出文件夹")
             }
@@ -808,7 +808,7 @@ final class WorkspaceModel: ObservableObject {
         if destination != .photos {
             guard let folder = folder else { return }
             do {
-                try NativeBatch.validateOutput(sources:sources,output:folder)
+                try CoreInputSelection.validateOutput(sources:sources,output:folder)
                 guard try folder.resourceValues(forKeys:[.isDirectoryKey]).isDirectory == true else { throw Failure("请选择一个输出文件夹") }
             } catch { errorMessage = error.localizedDescription; return }
         }
@@ -960,7 +960,7 @@ final class WorkspaceModel: ObservableObject {
         invalidateCoverSelections(changed)
         if !changed.isDisjoint(with:Set(targets.map(\.id))) { cancelManualPreparation(); notice = "所选来源发生变化，请重新扫描并确认选择"; return }
         guard !targets.isEmpty else { cancelManualPreparation(); notice = "没有已选择且可转换的照片；未确认的手动项目保留在队列中"; return }
-        do { try NativeBatch.validateOutput(sources: sources, output: output) }
+        do { try CoreInputSelection.validateOutput(sources: sources, output: output) }
         catch { errorMessage = error.localizedDescription; return }
         followsConversionResults = following
         manualPreparation = false; pendingOutput = nil; manualPlan = nil
@@ -975,7 +975,7 @@ final class WorkspaceModel: ObservableObject {
         // Index once: per-target linear searches made starting a large batch quadratic on the main thread.
         let itemIndices = Dictionary(items.enumerated().map { ($0.element.id,$0.offset) },uniquingKeysWith:{ first,_ in first })
         let targetSet = Set(targets.map(\.id))
-        if let base = try? NativeBatch.selection(targets.map(\.source)).base {
+        if let base = try? CoreInputSelection.selection(targets.map(\.source)).base {
             rowIndices = Dictionary(targets.compactMap { item in
                 guard let index = itemIndices[item.id], let relative = try? NativeBatch.relative(item.source,root:base) else { return nil }
                 return (relative,index)
@@ -1373,7 +1373,7 @@ extension WorkspaceModel {
     }
     func setUnconvertedOutput(_ url: URL) {
         guard !isBusy, !sharing else { return }
-        do { try NativeBatch.validateOutput(sources:sources,output:url); unconvertedOutput = NativeBatch.normalized(url) }
+        do { try CoreInputSelection.validateOutput(sources:sources,output:url); unconvertedOutput = NativeBatch.normalized(url) }
         catch { errorMessage = error.localizedDescription }
     }
     func recordOriginalExport(_ data: Data?) {
