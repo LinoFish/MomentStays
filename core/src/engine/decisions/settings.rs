@@ -8,7 +8,9 @@
 //! the destinations a route offers and the kind of its primary action.
 //!
 //! Values travel as the Swift raw values (`to-apple`, `samsung`,
-//! `livephoto+candidates`, ...). Request modes: `conversion-settings-tables`
+//! `livephoto+candidates`, ...). Doubles (qualities, the photo-time epoch)
+//! travel as decimal strings in both directions (Swift `description`, Rust
+//! `Debug`/`parse`, both exact), because `JSONSerialization` rounds them. Request modes: `conversion-settings-tables`
 //! (defaults and choice facts, static) and `conversion-settings` (one
 //! settings value).
 use serde_json::{json, Map, Value};
@@ -116,9 +118,8 @@ pub struct Settings {
     pub album_title: String,
     pub vendor: String,
     pub container: String,
-    /// None for a value JSON cannot carry (NaN, infinity).
-    pub image_quality: Option<f64>,
-    pub gain_quality: Option<f64>,
+    pub image_quality: f64,
+    pub gain_quality: f64,
     pub preserve_jpeg: bool,
     pub legacy_hdr: bool,
     pub export_data_files: bool,
@@ -146,8 +147,8 @@ impl Default for Settings {
             album_title: DEFAULT_ALBUM.into(),
             vendor: "google".into(),
             container: "jpeg".into(),
-            image_quality: Some(DEFAULT_QUALITY),
-            gain_quality: Some(DEFAULT_QUALITY),
+            image_quality: DEFAULT_QUALITY,
+            gain_quality: DEFAULT_QUALITY,
             preserve_jpeg: true,
             legacy_hdr: false,
             export_data_files: false,
@@ -171,6 +172,25 @@ fn text(v: &Value, key: &str, default: &str) -> String {
     v[key].as_str().unwrap_or(default).to_string()
 }
 
+/// A double sent as a decimal string (or, from other callers, a number).
+fn double(v: &Value) -> Option<f64> {
+    match v {
+        Value::String(s) => s.parse().ok(),
+        _ => v.as_f64(),
+    }
+}
+
+/// A double as a decimal string that Swift `Double(_:)` reads back exactly.
+pub fn double_text(value: f64) -> String {
+    if value.is_nan() {
+        "nan".into()
+    } else if value.is_infinite() {
+        if value > 0.0 { "inf" } else { "-inf" }.into()
+    } else {
+        format!("{value:?}")
+    }
+}
+
 impl Settings {
     pub fn from_json(v: &Value) -> Settings {
         let d = Settings::default();
@@ -180,8 +200,8 @@ impl Settings {
             album_title: text(v, "album_title", &d.album_title),
             vendor: text(v, "vendor", &d.vendor),
             container: text(v, "container", &d.container),
-            image_quality: v["image_quality"].as_f64(),
-            gain_quality: v["gain_quality"].as_f64(),
+            image_quality: double(&v["image_quality"]).unwrap_or(d.image_quality),
+            gain_quality: double(&v["gain_quality"]).unwrap_or(d.gain_quality),
             preserve_jpeg: v["preserve_jpeg"].as_bool().unwrap_or(d.preserve_jpeg),
             legacy_hdr: v["legacy_hdr"].as_bool().unwrap_or(d.legacy_hdr),
             export_data_files: v["export_data_files"]
@@ -196,7 +216,7 @@ impl Settings {
             photo_time_repair: v["photo_time_repair"].as_bool(),
             photo_time_synthetic: v["photo_time_synthetic"].as_bool(),
             photo_time_zone: v["photo_time_zone"].as_str().map(str::to_string),
-            photo_time_reference: v["photo_time_reference"].as_f64(),
+            photo_time_reference: double(&v["photo_time_reference"]),
             candidate_delivery: v["candidate_delivery"].as_str().map(str::to_string),
             has_cover_selections: v["has_cover_selections"].as_bool().unwrap_or(false),
         }
@@ -234,15 +254,19 @@ impl Settings {
         if self.export_mode == "livephoto+candidates" || self.has_cover_selections {
             self.track = "primary".into();
         }
-        // Swift `trimmingCharacters(in: .whitespacesAndNewlines)`.
-        if self.album_title.chars().all(swift_whitespace_or_newline) {
+        if self.album_title_blank() {
             self.album_title = DEFAULT_ALBUM.into();
         }
         if !supports_heic(&self.vendor) {
             self.container = "jpeg".into();
         }
-        self.image_quality = Some(clamp_quality(self.image_quality));
-        self.gain_quality = Some(clamp_quality(self.gain_quality));
+        self.image_quality = clamp_quality(self.image_quality);
+        self.gain_quality = clamp_quality(self.gain_quality);
+    }
+
+    /// Swift `albumTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty`.
+    pub fn album_title_blank(&self) -> bool {
+        self.album_title.chars().all(swift_whitespace_or_newline)
     }
 
     /// The destinations this route offers, in menu order.
@@ -280,7 +304,7 @@ impl Settings {
             "policy": "phototime-1",
             "synthetic": self.photo_time_synthetic.unwrap_or(false),
             "zone": self.photo_time_zone.as_deref().unwrap_or(current_zone),
-            "epoch": self.photo_time_reference.unwrap_or(0.0),
+            "epoch": double_text(self.photo_time_reference.unwrap_or(0.0)),
             "file_times": self.exif_file_times.unwrap_or(false),
         }))
     }
@@ -340,15 +364,17 @@ impl Settings {
         }
     }
 
+    /// The scalar fields; the album title is not echoed back (`album_title_blank`
+    /// says whether it becomes the default), qualities as decimal strings.
     pub fn json(&self) -> Value {
         json!({
             "direction": self.direction,
             "destination": self.destination,
-            "album_title": self.album_title,
+            "album_title_blank": self.album_title_blank(),
             "vendor": self.vendor,
             "container": self.container,
-            "image_quality": self.image_quality,
-            "gain_quality": self.gain_quality,
+            "image_quality": double_text(self.image_quality),
+            "gain_quality": double_text(self.gain_quality),
             "preserve_jpeg": self.preserve_jpeg,
             "legacy_hdr": self.legacy_hdr,
             "export_data_files": self.export_data_files,
@@ -361,10 +387,11 @@ impl Settings {
     }
 }
 
-fn clamp_quality(value: Option<f64>) -> f64 {
-    let v = match value {
-        Some(v) if v.is_finite() => v,
-        _ => DEFAULT_QUALITY,
+fn clamp_quality(value: f64) -> f64 {
+    let v = if value.is_finite() {
+        value
+    } else {
+        DEFAULT_QUALITY
     };
     // Swift `min(1, max(0.01, v))`.
     let lower = if 0.01 > v { 0.01 } else { v };
@@ -376,7 +403,8 @@ fn clamp_quality(value: Option<f64>) -> f64 {
 }
 
 /// Foundation `CharacterSet.whitespacesAndNewlines`: Unicode General
-/// Category Z*, U+0009–U+000D and U+0085.
+/// Category Z*, U+0009–U+000D, U+0085 and U+200B (Foundation still counts
+/// the zero width space; U+180E and U+FEFF are not in it).
 pub fn swift_whitespace_or_newline(c: char) -> bool {
     matches!(
         c,
@@ -385,7 +413,7 @@ pub fn swift_whitespace_or_newline(c: char) -> bool {
             | '\u{85}'
             | '\u{A0}'
             | '\u{1680}'
-            | '\u{2000}'..='\u{200A}'
+            | '\u{2000}'..='\u{200B}'
             | '\u{2028}'
             | '\u{2029}'
             | '\u{202F}'
@@ -487,8 +515,10 @@ pub fn tables_json() -> Value {
             current.insert(format!("{d}/{v}"), json!(current_preset(d, v)));
         }
     }
+    let mut defaults = Settings::default().json();
+    defaults["album_title"] = json!(DEFAULT_ALBUM);
     json!({
-        "defaults": Settings::default().json(),
+        "defaults": defaults,
         "directions": directions,
         "vendors": vendors,
         "destinations": destinations,
@@ -601,10 +631,33 @@ mod tests {
 
     #[test]
     fn qualities_clamp() {
-        assert_eq!(clamp_quality(None), 0.95);
-        assert_eq!(clamp_quality(Some(0.0)), 0.01);
-        assert_eq!(clamp_quality(Some(7.0)), 1.0);
-        assert_eq!(clamp_quality(Some(0.5)), 0.5);
+        assert_eq!(clamp_quality(f64::NAN), 0.95);
+        assert_eq!(clamp_quality(f64::NEG_INFINITY), 0.95);
+        assert_eq!(clamp_quality(0.0), 0.01);
+        assert_eq!(clamp_quality(7.0), 1.0);
+        assert_eq!(clamp_quality(0.5), 0.5);
+        for text in [
+            "0.9500000000000001",
+            "0.7777777777777777",
+            "5e-324",
+            "-0.0",
+            "1.0",
+            "0.01",
+            "1e300",
+        ] {
+            let v: f64 = text.parse().unwrap();
+            assert_eq!(
+                double_text(v).parse::<f64>().unwrap().to_bits(),
+                v.to_bits(),
+                "{text}"
+            );
+        }
+        assert_eq!(double(&json!("inf")), Some(f64::INFINITY));
+        assert_eq!(double(&json!("-inf")), Some(f64::NEG_INFINITY));
+        assert!(double(&json!("nan")).unwrap().is_nan());
+        assert!(
+            swift_whitespace_or_newline('\u{200B}') && !swift_whitespace_or_newline('\u{FEFF}')
+        );
     }
 
     #[test]

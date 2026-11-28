@@ -184,10 +184,10 @@ struct ConversionSettings: Equatable, Codable {
         let n = CoreConversionSettings.decide(self).normalized
         destination = CoreConversionSettings.choice(n["destination"])
         track = CoreConversionSettings.choice(n["track"])
-        albumTitle = n["album_title"] as! String
+        if n["album_title_blank"] as! Bool { albumTitle = CoreConversionSettings.defaultValue("album_title") }
         container = CoreConversionSettings.choice(n["container"])
-        imageQuality = (n["image_quality"] as! NSNumber).doubleValue
-        gainQuality = (n["gain_quality"] as! NSNumber).doubleValue
+        imageQuality = CoreConversionSettings.double(n["image_quality"])
+        gainQuality = CoreConversionSettings.double(n["gain_quality"])
     }
 
     var options: ConversionOptions {
@@ -202,7 +202,10 @@ struct ConversionSettings: Equatable, Codable {
         result.repairAuxiliaryDuration = d["repair_auxiliary_duration"] as! Bool
         result.exportDataFiles = d["export_data_files"] as! Bool
         result.exifFileTimes = d["exif_file_times"] as! Bool
-        result.photoTime = d["photo_time"] as? [String:Any]
+        if var photoTime = d["photo_time"] as? [String:Any] {
+            photoTime["epoch"] = CoreConversionSettings.double(photoTime["epoch"])
+            result.photoTime = photoTime
+        }
         result.candidateDelivery = d["candidate_delivery"] as! String
         if let android = d["android"] as? [String:Any] {
             // The qualities are the stored values, passed through unchanged.
@@ -284,8 +287,14 @@ enum CoreConversionSettings {
     }
     static func defaultChoice<T: SettingsChoice>(_ key: String) -> T { choice(tables.defaults[key]) }
     static func defaultValue<T>(_ key: String) -> T {
-        if T.self == Double.self { return (tables.defaults[key] as! NSNumber).doubleValue as! T }
+        if T.self == Double.self { return double(tables.defaults[key]) as! T }
         return tables.defaults[key] as! T
+    }
+    /// Doubles travel as decimal strings: `JSONSerialization` rounds them, `description` and
+    /// `Double(_:)` are exact (also for nan and ±inf).
+    static func double(_ value: Any?) -> Double {
+        guard let text = value as? String, let number = Double(text) else { fatalError("Rust core: not a decimal string \(String(describing: value))") }
+        return number
     }
 
     struct Decision {
@@ -297,8 +306,7 @@ enum CoreConversionSettings {
         let action: String
     }
     static func request(_ s: ConversionSettings) -> [String:Any] {
-        // JSON cannot carry NaN or infinity; the core reads null as "not a usable value".
-        func number(_ value: Double) -> Any { value.isFinite ? value : NSNull() }
+        func number(_ value: Double) -> String { value.description }
         var v: [String:Any] = ["direction": s.direction.rawValue, "destination": s.destination.rawValue, "album_title": s.albumTitle,
             "vendor": s.vendor.rawValue, "container": s.container.rawValue, "image_quality": number(s.imageQuality),
             "gain_quality": number(s.gainQuality), "preserve_jpeg": s.preserveJPEG, "legacy_hdr": s.legacyHDR,
