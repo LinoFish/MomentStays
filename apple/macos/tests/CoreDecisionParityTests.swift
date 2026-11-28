@@ -509,7 +509,7 @@ struct CoreDecisionParityTests {
         let normalizedCandidates = inputs + corpus.outputs + corpus.movies +
             ["/private/var", "/private/tmp", "/tmp", "/var/automount/x", "/private/var/automount/x", "/private/etc/hosts", "/etc",
              "/private/nonexistent", "/Users/../private/var", "/", "/.."].flatMap { [URL(fileURLWithPath: $0, isDirectory: true), URL(fileURLWithPath: $0, isDirectory: false)] }
-        let normalizedCore = try RustCore.engine(["mode":"normalized-paths","inputs":normalizedCandidates.map { CoreInputSelection.json($0) }])["paths"] as? [[String:Any]] ?? []
+        let normalizedCore = (try? RustCore.engine(["mode":"normalized-paths","inputs":normalizedCandidates.map { CoreInputSelection.json($0) }]))?["paths"] as? [[String:Any]] ?? []
         for (index, url) in normalizedCandidates.enumerated() {
             let legacy = NativeBatch.normalized(url)
             let core = index < normalizedCore.count ? normalizedCore[index] : [:]
@@ -519,13 +519,13 @@ struct CoreDecisionParityTests {
         // Finder ordering
         let names = corpus.names
         let legacyOrder = names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-        let coreOrder = try RustCore.engine(["mode":"standard-order","names":names])["names"] as? [String] ?? []
+        let coreOrder = (try? RustCore.engine(["mode":"standard-order","names":names]))?["names"] as? [String] ?? []
         check("order", "\(names.count) names", legacy: legacyOrder.joined(separator: "|"), core: coreOrder.joined(separator: "|"))
         for i in 0..<names.count { for j in (i + 1)..<names.count {
             let a = names[i], b = names[j]
             // A stable sort keeps an equal pair in place, so "=" reads as "<".
             let legacy = a.localizedStandardCompare(b) == .orderedDescending ? ">" : "<"
-            let pair = try RustCore.engine(["mode":"standard-order","names":[a, b]])["names"] as? [String] ?? []
+            let pair = (try? RustCore.engine(["mode":"standard-order","names":[a, b]]))?["names"] as? [String] ?? []
             check("compare", a.debugDescription + " " + b.debugDescription, legacy: legacy, core: pair == [a, b] ? "<" : ">")
         } }
         // files

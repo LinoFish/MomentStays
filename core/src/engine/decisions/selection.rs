@@ -159,6 +159,11 @@ fn lower_extension(path: &str) -> String {
         .collect()
 }
 
+/// `s` up to and including the character that starts at byte `i`.
+fn through(s: &str, i: usize) -> &str {
+    &s[..i + s[i..].chars().next().map_or(0, char::len_utf8)]
+}
+
 /// swift-foundation `String.lastPathComponent`.
 pub fn last_path_component(s: &str) -> &str {
     if s.len() <= 1 {
@@ -171,9 +176,10 @@ pub fn last_path_component(s: &str) -> &str {
     let Some(non_slash) = s[..last].rfind(|c| c != '/') else {
         return "/";
     };
+    let upto = through(s, non_slash);
     match s[..non_slash].rfind('/') {
-        Some(prev) => &s[prev + 1..=non_slash],
-        None => &s[..=non_slash],
+        Some(prev) => &upto[prev + 1..],
+        None => upto,
     }
 }
 
@@ -182,7 +188,7 @@ pub fn dropping_trailing_slashes(s: &str) -> String {
         return String::new();
     }
     match s.rfind(|c| c != '/') {
-        Some(i) => s[..=i].to_string(),
+        Some(i) => through(s, i).to_string(),
         None => "/".into(),
     }
 }
@@ -215,13 +221,13 @@ fn deleting_last(s: &str) -> String {
         return "/".into();
     };
     if last != s.len() - 1 {
-        return s[..=non_slash].to_string();
+        return through(s, non_slash).to_string();
     }
     let Some(prev) = s[..non_slash].rfind('/') else {
         return String::new();
     };
     match s[..prev].rfind(|c| c != '/') {
-        Some(p) => s[..=p].to_string(),
+        Some(p) => through(s, p).to_string(),
         None => "/".into(),
     }
 }
@@ -920,6 +926,10 @@ mod tests {
             ("/a/x.tar.gz", "gz"),
             ("/a/x.jpg/", "jpg"),
             ("x", ""),
+            ("/a/\u{301}lead.jpg", "jpg"),
+            ("/a/e\u{301}/", ""),
+            ("/a/照片.HEIC", "HEIC"),
+            ("/a/x.jpg\u{200e}", ""),
         ] {
             assert_eq!(path_extension(p), e, "{p}");
         }
@@ -1005,6 +1015,16 @@ mod tests {
             deleting_last_path_component(&Url::new("/a", true)),
             Url::new("/", true)
         );
+        assert_eq!(
+            deleting_last_path_component(&Url::new("/a\u{301}/b\u{301}", true)),
+            Url::new("/a\u{301}", true)
+        );
+        assert_eq!(
+            deleting_last_path_component(&Url::new("/照片/e\u{301}.jpg", false)),
+            Url::new("/照片", true)
+        );
+        assert_eq!(dropping_trailing_slashes("/é//"), "/é");
+        assert_eq!(last_path_component("/a/é/"), "é");
     }
 
     #[test]
