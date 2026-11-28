@@ -624,10 +624,15 @@ pub(crate) fn standardizing_path(
 /// `URL.standardizedFileURL.resolvingSymlinksInPath()` given the
 /// platform's symlink resolution (`_resolvingSymlinksInPath`) and
 /// `FileManager.fileExists(atPath:)`.
+///
+/// Foundation rebuilds the URL from the file system: the result is a
+/// directory URL exactly when its path names an existing directory,
+/// whatever the input URL said.
 pub(crate) fn foundation_normalized(
     url: &Url,
     resolve: &dyn Fn(&str) -> Option<String>,
     exists: &dyn Fn(&str) -> bool,
+    is_dir: &dyn Fn(&str) -> bool,
 ) -> Url {
     let with_hint = |p: String, dir: bool| -> Url {
         if p.is_empty() {
@@ -648,10 +653,15 @@ pub(crate) fn foundation_normalized(
     if let Some(r) = resolve(&result) {
         result = r;
     }
-    with_hint(
+    let resolved = with_hint(
         standardizing_path(&result, resolve, exists),
         standardized.dir,
-    )
+    );
+    let dir = is_dir(&resolved.path);
+    Url {
+        path: resolved.path,
+        dir,
+    }
 }
 
 // MARK: Portable facts
@@ -732,7 +742,8 @@ impl Fs for PortableFs {
                 .map(|c| c.to_string_lossy().into_owned())
         };
         let exists = |p: &str| std::path::Path::new(p).exists();
-        foundation_normalized(url, &resolve, &exists)
+        let is_dir = |p: &str| std::path::Path::new(p).is_dir();
+        foundation_normalized(url, &resolve, &exists, &is_dir)
     }
 }
 
@@ -894,7 +905,8 @@ mod tests {
             crate::engine::paths::standard_compare(a, b)
         }
         fn normalized(&self, url: &Url) -> Url {
-            foundation_normalized(url, &|_| None, &|_| false)
+            let is_dir = |p: &str| self.nodes.get(p).is_some_and(|f| f.is_dir);
+            foundation_normalized(url, &|_| None, &|_| false, &is_dir)
         }
     }
 
@@ -950,26 +962,16 @@ mod tests {
         .unwrap();
         assert_eq!(base, Url::new("/a", true));
         assert_eq!(entries.len(), 2);
-        // A directory URL without its trailing slash is a different URL:
-        // the ascent climbs one level further, as Swift's did.
-        let (base, _) = selection(
-            &fs,
-            &[Url::new("/a/b/IMG_10.jpg", false), Url::new("/a/b", false)],
-        )
-        .unwrap();
-        assert_eq!(base, Url::new("/a", true));
-        let (base, _) = selection(
-            &fs,
-            &[Url::new("/a/b", false), Url::new("/a/b/IMG_10.jpg", false)],
-        )
-        .unwrap();
-        assert_eq!(base, Url::new("/a", true));
-        let (base, _) = selection(
-            &fs,
-            &[Url::new("/a/b", true), Url::new("/a/b/IMG_10.jpg", false)],
-        )
-        .unwrap();
-        assert_eq!(base, Url::new("/a/b", true));
+        // Normalizing rebuilds a URL from the file system, so a folder given
+        // without its trailing slash still meets the base folder.
+        for inputs in [
+            [Url::new("/a/b/IMG_10.jpg", false), Url::new("/a/b", false)],
+            [Url::new("/a/b", false), Url::new("/a/b/IMG_10.jpg", false)],
+            [Url::new("/a/b", true), Url::new("/a/b/IMG_10.jpg", false)],
+        ] {
+            let (base, _) = selection(&fs, &inputs).unwrap();
+            assert_eq!(base, Url::new("/a/b", true));
+        }
     }
 
     #[test]
@@ -988,8 +990,7 @@ mod tests {
         assert!(validate_output(&fs, &s, &Url::new("/a/b/out", true)).is_err());
         assert!(validate_output(&fs, &s, &Url::new("/a/bb", true)).is_ok());
         assert!(validate_output(&fs, &s, &Url::new("/a", true)).is_ok());
-        // Same folder, file-style URL: Swift's URL inequality let it pass.
-        assert!(validate_output(&fs, &s, &Url::new("/a/b", false)).is_ok());
+        assert!(validate_output(&fs, &s, &Url::new("/a/b", false)).is_err());
         // A name starting with a combining mark is not inside the prefix.
         assert!(validate_output(&fs, &s, &Url::new("/a/b/\u{301}x", true)).is_ok());
     }

@@ -73,6 +73,7 @@ extern "C" {
         locale: Ref,
     ) -> isize;
     fn CFLocaleCopyCurrent() -> Ref;
+    fn CFStringCompare(a: Ref, b: Ref, options: usize) -> isize;
     fn CFURLCreateWithFileSystemPath(a: Ref, path: Ref, style: isize, dir: u8) -> Ref;
     fn CFURLCopyFileSystemPath(url: Ref, style: isize) -> Ref;
     fn CFURLCopyResourcePropertyForKey(url: Ref, key: Ref, value: *mut Ref, error: *mut Ref) -> u8;
@@ -191,12 +192,18 @@ fn full_path(path: &str) -> Option<String> {
     String::from_utf8(buf.path[..end].to_vec()).ok()
 }
 
-fn exists(path: &str) -> bool {
-    let Ok(c) = CString::new(path) else {
-        return false;
-    };
+fn stat(path: &str) -> Option<libc::stat> {
+    let c = CString::new(path).ok()?;
     let mut st: libc::stat = unsafe { std::mem::zeroed() };
-    unsafe { libc::stat(c.as_ptr(), &mut st) == 0 }
+    (unsafe { libc::stat(c.as_ptr(), &mut st) } == 0).then_some(st)
+}
+
+fn exists(path: &str) -> bool {
+    stat(path).is_some()
+}
+
+fn is_dir(path: &str) -> bool {
+    stat(path).is_some_and(|st| st.st_mode & libc::S_IFMT == libc::S_IFDIR)
 }
 
 pub struct AppleFs;
@@ -281,7 +288,7 @@ impl Fs for AppleFs {
     }
 
     fn normalized(&self, url: &Url) -> Url {
-        foundation_normalized(url, &full_path, &exists)
+        foundation_normalized(url, &full_path, &exists, &is_dir)
     }
 
     fn extends_cluster(&self, c: char) -> bool {
@@ -298,15 +305,17 @@ unsafe fn compare_cf(a: Ref, b: Ref, locale: Ref) -> Ordering {
         location: 0,
         length: CFStringGetLength(a),
     };
-    match CFStringCompareWithOptionsAndLocale(
+    let order = |r: isize| r.cmp(&0);
+    match order(CFStringCompareWithOptionsAndLocale(
         a,
         b,
         range,
         CASE_INSENSITIVE | NUMERICALLY | WIDTH_INSENSITIVE | FORCED_ORDERING,
         locale,
-    ) {
-        r if r < 0 => Ordering::Less,
-        0 => Ordering::Equal,
-        _ => Ordering::Greater,
+    )) {
+        // NSString's forced ordering of canonically equivalent strings
+        // (NFC vs NFD) falls back to their UTF-16 code units.
+        Ordering::Equal => order(CFStringCompare(a, b, 0)),
+        o => o,
     }
 }

@@ -30,7 +30,7 @@ struct CoreDecisionParityTests {
     static var examples: [String] = []
     static func mismatch(_ area: String, _ text: String) {
         mismatches[area, default: 0] += 1
-        if mismatches[area]! <= (area == "filename-time" || area == "input-selection" ? 300 : 25) { examples.append(area + ": " + text) }
+        if mismatches[area]! <= (area == "filename-time" ? 300 : area == "input-selection" ? 1500 : 25) { examples.append(area + ": " + text) }
     }
 
     struct Rng {
@@ -497,11 +497,14 @@ struct CoreDecisionParityTests {
             for url in corpus.locked { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
         }
         let legacyDigest = Digest(), coreDigest = Digest()
-        var counts: [String: Int] = [:]
+        var counts: [String: Int] = [:], kindMismatches: [String: Int] = [:]
         func check(_ kind: String, _ label: String, legacy: String, core: String) {
             counts[kind, default: 0] += 1
             legacyDigest.add(kind + "|" + label + "|" + legacy); coreDigest.add(kind + "|" + label + "|" + core)
-            if legacy != core { mismatch("input-selection", "\(kind) \(label): swift \(legacy) core \(core)") }
+            if legacy != core {
+                kindMismatches[kind, default: 0] += 1
+                mismatch("input-selection", "\(kind) \(label): swift \(legacy) core \(core)")
+            }
         }
         let inputs = corpus.inputs
         func label(_ urls: [URL]) -> String { urls.map { showURL($0, corpus) }.joined(separator: " + ") }
@@ -568,7 +571,7 @@ struct CoreDecisionParityTests {
         } }
         let total = counts.values.reduce(0, +)
         print("input-selection: \(total) cases \(counts.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")), " +
-              "legacy Swift digest \(legacyDigest.value), core digest \(coreDigest.value)")
+              "legacy Swift digest \(legacyDigest.value), core digest \(coreDigest.value), mismatches \(kindMismatches.sorted { $0.key < $1.key })")
         let value = coreDigest.value
         golden("input-selection", value)
         return value
