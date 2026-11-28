@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Draft metainfo (stub). Screenshots, releases and content rating are
+     filled in before the first Flathub submission. -->
+<component type="desktop-application">
+  <id>com.linofish.MomentStays</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>MomentStays</name>
+  <name xml:lang="zh-CN">留刻</name>
+  <name xml:lang="zh-TW">留刻</name>
+  <summary>Convert Android Motion Photos and Apple Live Photos</summary>
+  <summary xml:lang="zh-CN">在安卓动态照片与苹果实况照片之间转换</summary>
+  <summary xml:lang="zh-TW">在 Android 動態照片與 Apple 原況照片之間轉換</summary>
+  <developer id="com.linofish">
+    <name>Lino</name>
+  </developer>
+  <description>
+    <p>MomentStays converts Android Motion Photos to Apple Live Photos and Apple Live Photos to Android Motion Photos, keeping the video stream and the cover moment. Source files are only read.</p>
+    <p>Supported static HDR photos are exported as stills. Bursts are experimental: Android to Apple only, JPEG only, for Google, Samsung and known Huawei/Honor formats. Private HDR conversion is experimental and off by default.</p>
+  </description>
+  <launchable type="desktop-id">com.linofish.MomentStays.desktop</launchable>
+  <url type="homepage">https://momentstays.linofish.com</url>
+  <url type="bugtracker">https://github.com/LinoFish/MomentStays/issues</url>
+  <url type="vcs-browser">https://github.com/LinoFish/MomentStays</url>
+  <categories>
+    <category>Graphics</category>
+    <category>Photography</category>
+  </categories>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <branding>
+    <color type="primary" scheme_preference="light">#F0A43C</color>
+    <color type="primary" scheme_preference="dark">#2A3442</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <!-- TODO: first Flatpak release entry (build number per AGENTS.md). -->
+  </releases>
+</component>

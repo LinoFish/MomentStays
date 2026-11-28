@@ -1,0 +1,1108 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: momentstays\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/main.rs:20 src/ui/window.rs:75 src/ui/window.rs:829
+msgid "MomentStays"
+msgstr ""
+
+#: src/model/claims.rs:14
+msgid "Motion photos; local static HDR; HONOR/Huawei JPEG bursts. Google/Samsung bursts are experimental. Private HDR supports only specific profiles."
+msgstr ""
+
+#: src/model/claims.rs:19
+msgid "; local static HDR supports verified types only; burst conversion is unsupported."
+msgstr ""
+
+#: src/model/claims.rs:21
+msgid "Only the verified routes below are supported. Available Live Photo, HDR, and burst actions depend on inspection and preview. Private HDR is experimental and off by default. Arbitrary Android-to-Android transfers are unsupported."
+msgstr ""
+
+#: src/model/claims.rs:24
+msgid "Conversion changes the format or metadata of output copies. Keep source photos archived and backed up. Source files remain read-only."
+msgstr ""
+
+#: src/model/claims.rs:27
+msgid "This build has no Linux codec backend: static HDR checks, burst checks and image re-encoding are unavailable."
+msgstr ""
+
+#: src/model/flow.rs:35
+msgid "Conversion Direction"
+msgstr ""
+
+#: src/model/flow.rs:36 src/model/flow.rs:291
+msgid "Import Photos"
+msgstr ""
+
+#: src/model/flow.rs:37 src/model/flow.rs:292
+msgid "Choose Features"
+msgstr ""
+
+#: src/model/flow.rs:38
+msgid "Export Preview"
+msgstr ""
+
+#: src/model/flow.rs:39
+msgid "Results"
+msgstr ""
+
+#: src/model/flow.rs:44
+msgid "Choose source and target to determine import scope"
+msgstr ""
+
+#: src/model/flow.rs:45
+msgid "Add photos and choose this run's scope"
+msgstr ""
+
+#: src/model/flow.rs:46
+msgid "Choose the photo features to process in this run"
+msgstr ""
+
+#: src/model/flow.rs:47
+msgid "Inspect planned output and choose a destination"
+msgstr ""
+
+#: src/model/flow.rs:48
+msgid "View progress and per-photo results"
+msgstr ""
+
+#: src/model/flow.rs:136
+msgid "Current"
+msgstr ""
+
+#: src/model/flow.rs:137
+msgid "View"
+msgstr ""
+
+#: src/model/flow.rs:138
+msgid "Upcoming"
+msgstr ""
+
+#: src/model/flow.rs:281 src/ui/window.rs:463
+msgid "Stopping"
+msgstr ""
+
+#: src/model/flow.rs:283
+msgid "Stop"
+msgstr ""
+
+#: src/model/flow.rs:293
+msgid "Preview Export"
+msgstr ""
+
+#: src/model/flow.rs:296
+msgid "Choose Output Location…"
+msgstr ""
+
+#: src/model/flow.rs:298
+#, python-brace-format
+msgid "Export {count} Unchanged Photos"
+msgstr ""
+
+#: src/model/flow.rs:300
+#, python-brace-format
+msgid "Run on {count} Photos"
+msgstr ""
+
+#: src/model/flow.rs:303
+msgid "Back to Import Photos"
+msgstr ""
+
+#: src/model/flow.rs:318
+msgid "Waiting for a safe stop"
+msgstr ""
+
+#: src/model/flow.rs:320
+msgid "The task is frozen. Earlier steps can be browsed read-only"
+msgstr ""
+
+#: src/model/flow.rs:326
+msgid "0 selected. Select photos to continue"
+msgstr ""
+
+#: src/model/flow.rs:331
+msgid "Direction selected. Import photos next"
+msgstr ""
+
+#: src/model/flow.rs:333
+msgid "Choose a direction card on the left"
+msgstr ""
+
+#: src/model/flow.rs:338
+msgid "Recognizing sources; please wait"
+msgstr ""
+
+#: src/model/flow.rs:340
+msgid "Add photos, then select this run's scope"
+msgstr ""
+
+#: src/model/flow.rs:343
+#, python-brace-format
+msgid "This run: {count} photos. Filtering does not change selection"
+msgstr ""
+
+#: src/model/flow.rs:350
+msgid "Fill missing dates only; keep the original photo format"
+msgstr ""
+
+#: src/model/flow.rs:352
+msgid "Choose this run's features here; change direction in step 1"
+msgstr ""
+
+#: src/model/flow.rs:357
+msgid "Choose this run's output location"
+msgstr ""
+
+#: src/model/flow.rs:361 src/ui/run.rs:76
+msgid "Choose an unchanged-export folder"
+msgstr ""
+
+#: src/model/flow.rs:363
+msgid "Run the ready scope. Estimates do not guarantee success"
+msgstr ""
+
+#: src/model/flow.rs:366
+msgid "Keep this run's results and return to photos"
+msgstr ""
+
+#: src/model/plan.rs:146
+msgid "Only some members are selected. Select the whole group or explicitly export independent photos"
+msgstr ""
+
+#: src/model/plan.rs:159
+msgid "Select a representative frame"
+msgstr ""
+
+#: src/model/plan.rs:239
+msgid "The selected Live Photo auxiliary-output options cannot currently be combined with static HDR. Adjust those options or process separately"
+msgstr ""
+
+#: src/model/plan.rs:252
+msgid "Target JPEG requires HDR reconstruction. HDR cannot be safely preserved while its action is off; change the format or selected features"
+msgstr ""
+
+#: src/model/plan.rs:257
+msgid "HDR-only processing cannot safely preserve the original burst container yet. Enable burst conversion or export unchanged resources"
+msgstr ""
+
+#: src/model/plan.rs:259
+msgid "Burst conversion is not selected; original burst resources are preserved"
+msgstr ""
+
+#: src/model/plan.rs:265
+msgid "HDR-only processing cannot safely preserve this motion container yet. Enable Live Photo conversion or export unchanged resources"
+msgstr ""
+
+#: src/model/plan.rs:267
+msgid "Live Photo conversion is not selected; original motion resources are preserved"
+msgstr ""
+
+#: src/model/plan.rs:272
+msgid "HDR conversion is not selected; original HDR resources are preserved"
+msgstr ""
+
+#: src/model/plan.rs:280
+msgid "A custom cover cannot preserve unselected HDR. Restore the original cover or change the selected features"
+msgstr ""
+
+#: src/model/plan.rs:343
+msgid "Will not convert: "
+msgstr ""
+
+#: src/model/plan.rs:348
+msgid "Partly executable: HDR cannot be converted"
+msgstr ""
+
+#: src/model/plan.rs:350
+msgid "May fail; execution-time verification required"
+msgstr ""
+
+#: src/model/plan.rs:356
+msgid "Expected to Run"
+msgstr ""
+
+#: src/model/plan.rs:359
+msgid "Date already present; no repair needed"
+msgstr ""
+
+#: src/model/plan.rs:362
+msgid "Planned unchanged export"
+msgstr ""
+
+#: src/model/plan.rs:364 src/ui/inspector.rs:234 src/ui/queue.rs:744
+msgid "Not converted in this run"
+msgstr ""
+
+#: src/model/plan.rs:371
+msgid "Plan to export complete original resources; required resources still need readability checks."
+msgstr ""
+
+#: src/model/plan.rs:373
+msgid "No converted output will be generated. See the plan for the reason."
+msgstr ""
+
+#: src/model/plan.rs:377
+msgid "Planned output: date-repaired still copy in the original format"
+msgstr ""
+
+#: src/model/plan.rs:379
+msgid "Planned output: target motion format and required paired resources"
+msgstr ""
+
+#: src/model/plan.rs:381
+msgid "Planned output: selected burst members and group resources"
+msgstr ""
+
+#: src/model/plan.rs:383
+msgid "Planned output: one static HDR image, without Live Photo video"
+msgstr ""
+
+#: src/model/plan.rs:402
+msgid "Export selected photos independently without writing burst markers"
+msgstr ""
+
+#: src/model/plan.rs:404
+msgid "Convert burst markers; preserve existing indices and all selected frames. Missing frames are allowed; the original total is not inferred"
+msgstr ""
+
+#: src/model/plan.rs:410
+msgid "PhotoTime fills only missing capture dates in output copies, preserving image encoding and other features. Without a reliable date or explicit synthetic-time option, no capture date is written."
+msgstr ""
+
+#: src/model/plan.rs:417
+msgid "Capture-date rewriting cannot safely rebuild this target motion container yet. Disable date repair or choose another route; it will not be silently flattened into a still image."
+msgstr ""
+
+#: src/model/plan.rs:421
+msgid "Cannot convert with the current settings. Unchanged export may be available; target compatibility is not guaranteed"
+msgstr ""
+
+#: src/model/plan.rs:427
+msgid "Static HDR: process as one image, without video, cover time, or Live Photo pairing"
+msgstr ""
+
+#: src/model/plan.rs:434
+msgid "Convert motion photos into Apple paired resources"
+msgstr ""
+
+#: src/model/plan.rs:436
+msgid "Convert Live Photos into the target motion format"
+msgstr ""
+
+#: src/model/plan.rs:439
+msgid "Preserve motion, audio, and a trusted cover"
+msgstr ""
+
+#: src/model/plan.rs:443
+msgid "HDR follows available capabilities. Private HDR conversion is experimental; unsupported HDR is reported and ignored without blocking other supported actions"
+msgstr ""
+
+#: src/model/plan.rs:445
+msgid "HDR follows the standard compatibility path. Private HDR conversion is off or does not apply to this output"
+msgstr ""
+
+#: src/model/plan.rs:453
+msgid "The custom high-resolution cover is JPEG and does not preserve the original cover's HDR"
+msgstr ""
+
+#: src/ui/burst.rs:30
+msgid "Trusted HONOR JPEG → Apple only. Missing frames are allowed; existing frame indices are preserved. No frames or video are synthesized. Filenames cannot establish the camera's original total; only currently available members are checked."
+msgstr ""
+
+#: src/ui/burst.rs:52
+#, python-brace-format
+msgid "{label} · {frames} frames · {selected} selected"
+msgstr ""
+
+#: src/ui/burst.rs:96 src/ui/burst.rs:103
+#, python-brace-format
+msgid "Frame {index}"
+msgstr ""
+
+#: src/ui/burst.rs:99
+msgid "Original COVER"
+msgstr ""
+
+#: src/ui/burst.rs:113 src/ui/queue.rs:827
+msgid "Select this photo"
+msgstr ""
+
+#: src/ui/burst.rs:127
+#, python-brace-format
+msgid "Set frame {index} as representative"
+msgstr ""
+
+#: src/ui/burst.rs:149
+msgid "Export selected photos independently (no burst markers)"
+msgstr ""
+
+#: src/ui/burst.rs:190
+msgid "Burst Conversion Plan"
+msgstr ""
+
+#: src/ui/burst.rs:195 src/ui/cover.rs:72
+msgid "Done"
+msgstr ""
+
+#: src/ui/burst.rs:197
+msgid "Save selection and return to workspace"
+msgstr ""
+
+#: src/ui/cover.rs:67
+msgid "Choose Cover"
+msgstr ""
+
+#: src/ui/cover.rs:86
+msgid "Reading high-resolution cover…"
+msgstr ""
+
+#: src/ui/cover.rs:119 src/ui/cover.rs:126
+msgid "No other high-resolution covers found"
+msgstr ""
+
+#: src/ui/cover.rs:145
+msgid "Source cover"
+msgstr ""
+
+#: src/ui/cover.rs:161
+#, python-brace-format
+msgid "Cover {seconds} s"
+msgstr ""
+
+#: src/ui/cover.rs:204
+msgid "Changing the cover does not affect the motion video. New covers are JPEG and do not preserve the original cover's HDR."
+msgstr ""
+
+#: src/ui/direction.rs:17
+msgid "Apple photos"
+msgstr ""
+
+#: src/ui/direction.rs:18 src/ui/direction.rs:27
+msgid "Google / General"
+msgstr ""
+
+#: src/ui/direction.rs:20
+msgid "Google → HONOR"
+msgstr ""
+
+#: src/ui/direction.rs:21
+msgid "HONOR → Google"
+msgstr ""
+
+#: src/ui/direction.rs:28
+msgid "Xiaomi"
+msgstr ""
+
+#: src/ui/direction.rs:29
+msgid "Samsung"
+msgstr ""
+
+#: src/ui/direction.rs:30
+msgid "Huawei"
+msgstr ""
+
+#: src/ui/direction.rs:31
+msgid "HONOR (Fallback)"
+msgstr ""
+
+#: src/ui/direction.rs:40
+msgid "Supported photos → Apple (Live / HDR / Burst)"
+msgstr ""
+
+#: src/ui/direction.rs:41
+msgid "Apple Live Photos → "
+msgstr ""
+
+#: src/ui/direction.rs:42
+msgid "Google → HONOR (JPEG)"
+msgstr ""
+
+#: src/ui/direction.rs:43
+msgid "HONOR → Google (JPEG)"
+msgstr ""
+
+#: src/ui/direction.rs:50
+msgid "Verified Google Motion Photo JPEG → HONOR only. HEIC, Photos library sources, and bursts are unsupported."
+msgstr ""
+
+#: src/ui/direction.rs:51
+msgid "Recognized HONOR Motion Photo JPEG → Google only. HEIC, Photos library sources, and bursts are unsupported."
+msgstr ""
+
+#: src/ui/direction.rs:54
+msgid "Apple Live Photos · "
+msgstr ""
+
+#: src/ui/direction.rs:89
+msgid "Android to Apple"
+msgstr ""
+
+#: src/ui/direction.rs:90
+msgid "Apple to Android"
+msgstr ""
+
+#: src/ui/direction.rs:91
+msgid "Android to Android"
+msgstr ""
+
+#: src/ui/flow.rs:49 src/ui/window.rs:109
+msgid "Workflow"
+msgstr ""
+
+#: src/ui/flow.rs:61
+msgid "Complete workflow in five steps"
+msgstr ""
+
+#: src/ui/flow.rs:88
+msgid "Back"
+msgstr ""
+
+#: src/ui/flow.rs:89
+msgid "Go back one step, keeping the current selection and settings"
+msgstr ""
+
+#: src/ui/flow.rs:218
+#, python-brace-format
+msgid "Step {step} of {count}"
+msgstr ""
+
+#: src/ui/flow.rs:240
+#, python-brace-format
+msgid "View {step}, keeping the current selection and settings"
+msgstr ""
+
+#: src/ui/flow.rs:245
+#, python-brace-format
+msgid "Finish the earlier steps to open {step}"
+msgstr ""
+
+#: src/ui/flow.rs:439
+msgid "Choose a source and target on the left. Import options depend on this direction; choose processing features after importing."
+msgstr ""
+
+#: src/ui/flow.rs:445
+msgid "Changing direction reuses valid inspection data and rechecks eligibility. Sources and selections are retained; incompatible items show a reason."
+msgstr ""
+
+#: src/ui/flow.rs:471
+msgid "Sources"
+msgstr ""
+
+#: src/ui/flow.rs:475
+msgid "Rescan Sources"
+msgstr ""
+
+#: src/ui/flow.rs:477
+msgid "Clear Sources and List"
+msgstr ""
+
+#: src/ui/flow.rs:483
+msgid "Rescan or clear sources"
+msgstr ""
+
+#: src/ui/flow.rs:487
+msgid "Source Actions"
+msgstr ""
+
+#: src/ui/flow.rs:511
+msgid "Add folders of photos; subfolders are included."
+msgstr ""
+
+#: src/ui/flow.rs:520
+msgid "Clear All Sources"
+msgstr ""
+
+#: src/ui/flow.rs:524
+msgid "Clear this run's list only; never delete source files"
+msgstr ""
+
+#: src/ui/flow.rs:535
+#, python-brace-format
+msgid "{sources} sources · {photos} photos"
+msgstr ""
+
+#: src/ui/flow.rs:547
+msgid "All Sources"
+msgstr ""
+
+#: src/ui/flow.rs:569 src/ui/flow.rs:571
+msgid "Watch for Changes"
+msgstr ""
+
+#: src/ui/flow.rs:582
+msgid "Remove Folder"
+msgstr ""
+
+#: src/ui/flow.rs:700 src/ui/queue.rs:924
+msgid "Live Photo"
+msgstr ""
+
+#: src/ui/flow.rs:709
+msgid "Format, Video, and Cover Options"
+msgstr ""
+
+#: src/ui/flow.rs:732 src/ui/queue.rs:915 src/ui/queue.rs:917
+msgid "Burst"
+msgstr ""
+
+#: src/ui/flow.rs:741
+msgid "Choose Burst Members and Representative…"
+msgstr ""
+
+#: src/ui/flow.rs:753
+msgid "Export Unchanged Photos"
+msgstr ""
+
+#: src/ui/flow.rs:765
+msgid "Export complete, unchanged source resources. Choose the location in Export Preview."
+msgstr ""
+
+#: src/ui/flow.rs:772
+msgid "Photo Dates"
+msgstr ""
+
+#: src/ui/flow.rs:773
+msgid "Enable only when photo dates appear out of order in Photos. Source files are not modified."
+msgstr ""
+
+#: src/ui/flow.rs:789
+msgid "Fill missing capture dates (PhotoTime)"
+msgstr ""
+
+#: src/ui/flow.rs:790
+msgid "Recognize a date or Unix timestamp from the original filename. Fill missing dates only in output copies; existing nonempty dates stay unchanged."
+msgstr ""
+
+#: src/ui/flow.rs:805
+msgid "Generate synthetic ordering dates when recognition fails"
+msgstr ""
+
+#: src/ui/flow.rs:808
+msgid "Synthetic dates are not actual capture dates. They follow natural filename order at one-second intervals. Time zone: "
+msgstr ""
+
+#: src/ui/flow.rs:814
+msgid "If a motion container or HDR resource cannot be fully verified, it is not published or split into a still; see Export Preview for the reason."
+msgstr ""
+
+#: src/ui/flow.rs:818
+msgid "Set output file dates from EXIF"
+msgstr ""
+
+#: src/ui/flow.rs:819
+msgid "Independently set creation and modification dates; off by default. After repair, read actual EXIF dates. Without usable EXIF, keep source file dates."
+msgstr ""
+
+#: src/ui/flow.rs:830
+msgid "HDR (experimental, off by default)"
+msgstr ""
+
+#: src/ui/flow.rs:831
+msgid "Only supported HDR profiles are attempted. Unsupported items are listed in preview; the original device's HDR appearance is not guaranteed."
+msgstr ""
+
+#: src/ui/flow.rs:856
+msgid "Output content"
+msgstr ""
+
+#: src/ui/flow.rs:867
+msgid "Main photo live, other covers still"
+msgstr ""
+
+#: src/ui/flow.rs:871
+msgid "Export Every Cover as a Live Photo"
+msgstr ""
+
+#: src/ui/flow.rs:876
+msgid "High-resolution Cover Output"
+msgstr ""
+
+#: src/ui/flow.rs:898
+msgid "Video Source"
+msgstr ""
+
+#: src/ui/flow.rs:912
+msgid "A high-resolution cover is selected; the motion video is required."
+msgstr ""
+
+#: src/ui/flow.rs:931
+msgid "Use Choose Cover beside a photo to select a high-resolution candidate. New covers are JPEG and do not preserve the original cover's HDR."
+msgstr ""
+
+#: src/ui/flow.rs:941
+msgid "Target Format"
+msgstr ""
+
+#: src/ui/flow.rs:948
+msgid "Return to step 1, Conversion Direction, to change the route or target brand."
+msgstr ""
+
+#: src/ui/flow.rs:952
+msgid "Google / General is recommended for newer HONOR devices. HONOR format is a fallback."
+msgstr ""
+
+#: src/ui/flow.rs:955
+msgid "Newer HONOR devices have been verified with the Google format exported by MomentStays. This does not imply support for Google Camera originals."
+msgstr ""
+
+#: src/ui/flow.rs:963
+msgid "Photo Format"
+msgstr ""
+
+#: src/ui/flow.rs:971
+msgid "This vendor supports JPEG only."
+msgstr ""
+
+#: src/ui/flow.rs:977
+msgid "Preserve original JPEG encoding"
+msgstr ""
+
+#: src/ui/flow.rs:985
+msgid "Main image quality"
+msgstr ""
+
+#: src/ui/flow.rs:986
+msgid "Gain-map quality"
+msgstr ""
+
+#: src/ui/flow.rs:1004
+msgid "JPEG preservation avoids recompression. HEIC-to-JPEG uses main image quality; gain-map quality applies only when re-encoding."
+msgstr ""
+
+#: src/ui/flow.rs:1005
+msgid "HDR uses Ultra HDR. SDR stays unchanged."
+msgstr ""
+
+#: src/ui/flow.rs:1010
+msgid "Preserve original HEIC encoding"
+msgstr ""
+
+#: src/ui/flow.rs:1014
+msgid "No quality adjustment is needed. Check compatibility and HDR display on the target phone."
+msgstr ""
+
+#: src/ui/flow.rs:1042
+msgid "Choose Folder…"
+msgstr ""
+
+#: src/ui/flow.rs:1051
+msgid "Output Location"
+msgstr ""
+
+#: src/ui/flow.rs:1055
+msgid "Folder"
+msgstr ""
+
+#: src/ui/flow.rs:1057
+msgid "Not selected"
+msgstr ""
+
+#: src/ui/flow.rs:1065
+msgid "Export to the Same Location"
+msgstr ""
+
+#: src/ui/flow.rs:1069
+msgid "Export to a Different Location"
+msgstr ""
+
+#: src/ui/flow.rs:1074
+msgid "Unchanged-export location"
+msgstr ""
+
+#: src/ui/flow.rs:1086
+msgid "Export Unchanged"
+msgstr ""
+
+#: src/ui/flow.rs:1088
+msgid "Choose a different folder for unchanged resources"
+msgstr ""
+
+#: src/ui/flow.rs:1092
+msgid "Use this run's output location, with a separate folder for original resources. Sources are not overwritten, and unchanged exports do not count as conversions."
+msgstr ""
+
+#: src/ui/flow.rs:1097
+msgid "When a Result Exists"
+msgstr ""
+
+#: src/ui/flow.rs:1114
+msgid "Existing Output"
+msgstr ""
+
+#: src/ui/flow.rs:1121
+msgid "Verify and Reuse checks sources, scope, settings, and output files, and continues without reprocessing when they match."
+msgstr ""
+
+#: src/ui/flow.rs:1126
+msgid "Write Report Files"
+msgstr ""
+
+#: src/ui/flow.rs:1127
+msgid "Save the manifest and JSON report next to the results."
+msgstr ""
+
+#: src/ui/flow.rs:1154 src/ui/window.rs:467
+#, python-brace-format
+msgid "Processed {done} / {total}"
+msgstr ""
+
+#: src/ui/flow.rs:1176
+#, python-brace-format
+msgid "Converted {converted} · Unchanged {copied} · Existing {resumed} · Skipped {skipped} · Failed {failed}"
+msgstr ""
+
+#: src/ui/flow.rs:1190
+#, python-brace-format
+msgid "Unchanged export: new {copied} · reused {resumed} · skipped {skipped} · failed {failed}"
+msgstr ""
+
+#: src/ui/flow.rs:1203 src/ui/window.rs:45
+msgid "Open Output Folder"
+msgstr ""
+
+#: src/ui/flow.rs:1209
+msgid "View Full Report"
+msgstr ""
+
+#: src/ui/flow.rs:1215
+msgid "File generation and unchanged exports are recorded separately; the report in the output folder lists every photo."
+msgstr ""
+
+#: src/ui/inspector.rs:50 src/ui/inspector.rs:121 src/ui/queue.rs:148 src/ui/queue.rs:242
+msgid "Photo Inspector"
+msgstr ""
+
+#: src/ui/inspector.rs:66 src/ui/queue.rs:817
+msgid "Choose Cover…"
+msgstr ""
+
+#: src/ui/inspector.rs:71
+msgid "Source and Resources"
+msgstr ""
+
+#: src/ui/inspector.rs:77
+msgid "Previewing does not change global selection. Conversion and unchanged export create separate copies; sources stay unchanged."
+msgstr ""
+
+#: src/ui/inspector.rs:123
+msgid "Add sources, then open a photo preview to inspect features and the plan."
+msgstr ""
+
+#: src/ui/inspector.rs:225
+msgid "Result"
+msgstr ""
+
+#: src/ui/inspector.rs:239
+msgid "Planned Output"
+msgstr ""
+
+#: src/ui/inspector.rs:250
+msgid "Features and This Run's Plan"
+msgstr ""
+
+#: src/ui/inspector.rs:258
+#, python-brace-format
+msgid "Original burst index: {index}; the camera's original total is unknown."
+msgstr ""
+
+#: src/ui/inspector.rs:266
+msgid "Still image: no video, motion cover, or Live Photo pair is generated."
+msgstr ""
+
+#: src/ui/inspector.rs:274
+#, python-brace-format
+msgid "High-resolution cover selected: candidate {index}"
+msgstr ""
+
+#: src/ui/queue.rs:98
+msgid "Clear Feature Filters"
+msgstr ""
+
+#: src/ui/queue.rs:104 src/ui/queue.rs:532
+msgid "Filter"
+msgstr ""
+
+#: src/ui/queue.rs:107
+msgid "Filter by photo features. Multiple choices show photos matching all selected features without changing task scope"
+msgstr ""
+
+#: src/ui/queue.rs:113
+msgid "Inspect Burst Groups"
+msgstr ""
+
+#: src/ui/queue.rs:115 src/ui/window.rs:797
+msgid "Search Photos"
+msgstr ""
+
+#: src/ui/queue.rs:119 src/ui/queue.rs:127
+msgid "Search filenames, sources, or devices"
+msgstr ""
+
+#: src/ui/queue.rs:145
+msgid "Show or hide the photo inspector (Ctrl+Alt+P)"
+msgstr ""
+
+#: src/ui/queue.rs:151
+msgid "Switch to List"
+msgstr ""
+
+#: src/ui/queue.rs:155
+msgid "Select Filtered Photos"
+msgstr ""
+
+#: src/ui/queue.rs:158
+msgid "Deselect All"
+msgstr ""
+
+#: src/ui/queue.rs:160
+msgid "Restore Default Processing Scope"
+msgstr ""
+
+#: src/ui/queue.rs:166
+msgid "Clear Filters and View All"
+msgstr ""
+
+#: src/ui/queue.rs:173
+msgid "Selection and filtering actions"
+msgstr ""
+
+#: src/ui/queue.rs:217
+msgid "Add Photos"
+msgstr ""
+
+#: src/ui/queue.rs:218
+msgid "Add files, folders, or Photos library items, or drop them into the photo area"
+msgstr ""
+
+#: src/ui/queue.rs:224 src/ui/window.rs:476
+msgid "Recognizing photos"
+msgstr ""
+
+#: src/ui/queue.rs:229
+msgid "No Matching Photos"
+msgstr ""
+
+#: src/ui/queue.rs:230
+msgid "Try another filter or search."
+msgstr ""
+
+#: src/ui/queue.rs:240
+msgid "Back to Photo List"
+msgstr ""
+
+#: src/ui/queue.rs:473
+msgid "The scan stopped unexpectedly."
+msgstr ""
+
+#: src/ui/queue.rs:534
+#, python-brace-format
+msgid "Filter {count}"
+msgstr ""
+
+#: src/ui/queue.rs:546
+#, python-brace-format
+msgid "Inspect burst groups: {groups} groups · {frames} frames"
+msgstr ""
+
+#: src/ui/queue.rs:648
+msgid "All"
+msgstr ""
+
+#: src/ui/queue.rs:702
+msgid "Filter the view only, without changing this run's scope"
+msgstr ""
+
+#: src/ui/queue.rs:754
+msgid "Will Not Convert"
+msgstr ""
+
+#: src/ui/queue.rs:906
+msgid "Cover: "
+msgstr ""
+
+#: src/ui/queue.rs:932 src/ui/queue.rs:934
+msgid "Missing Date"
+msgstr ""
+
+#: src/ui/queue.rs:961
+msgid "Current preview"
+msgstr ""
+
+#: src/ui/run.rs:32
+msgid "_Select"
+msgstr ""
+
+#: src/ui/run.rs:42 src/ui/sources.rs:27
+msgid "This folder cannot be opened as a local folder."
+msgstr ""
+
+#: src/ui/run.rs:46 src/ui/run.rs:172
+msgid "Choose an output folder outside the source folders."
+msgstr ""
+
+#: src/ui/run.rs:61
+msgid "Choose Output Folder"
+msgstr ""
+
+#: src/ui/run.rs:235
+msgid "The conversion stopped unexpectedly."
+msgstr ""
+
+#: src/ui/run.rs:295
+#, python-brace-format
+msgid "Results are in “{folder}”."
+msgstr ""
+
+#: src/ui/sources.rs:19 src/ui/window.rs:796
+msgid "Add Source Folder"
+msgstr ""
+
+#: src/ui/sources.rs:20
+msgid "_Add"
+msgstr ""
+
+#: src/ui/sources.rs:39
+msgid "Folders inside the new folder were merged into it."
+msgstr ""
+
+#: src/ui/sources.rs:45
+#, python-brace-format
+msgid "Already included in “{folder}”."
+msgstr ""
+
+#: src/ui/sources.rs:138
+#, python-brace-format
+msgid "Cannot watch “{folder}”: {error}"
+msgstr ""
+
+#: src/ui/window.rs:49
+msgid "Processing Report…"
+msgstr ""
+
+#: src/ui/window.rs:54
+msgid "_Export Settings"
+msgstr ""
+
+#: src/ui/window.rs:55
+msgid "_Keyboard Shortcuts"
+msgstr ""
+
+#: src/ui/window.rs:56
+msgid "_About MomentStays"
+msgstr ""
+
+#: src/ui/window.rs:99
+msgid "Export, share, reveal outputs, reports, and recent results without converting again"
+msgstr ""
+
+#: src/ui/window.rs:104
+msgid "Results and Delivery"
+msgstr ""
+
+#: src/ui/window.rs:153
+msgid "Task progress"
+msgstr ""
+
+#: src/ui/window.rs:186
+msgid "Restore Default Scope"
+msgstr ""
+
+#: src/ui/window.rs:194
+msgid "Preview Export…"
+msgstr ""
+
+#: src/ui/window.rs:324
+msgid "Cannot Complete Operation"
+msgstr ""
+
+#: src/ui/window.rs:325
+msgid "OK"
+msgstr ""
+
+#: src/ui/window.rs:481
+msgid "Finished; some photos need attention"
+msgstr ""
+
+#: src/ui/window.rs:535
+msgid "Show Reason"
+msgstr ""
+
+#: src/ui/window.rs:537
+msgid "View Report"
+msgstr ""
+
+#: src/ui/window.rs:551
+#, python-brace-format
+msgid "{count} photos expected to run. Click a photo for output resources and reasons. Estimates do not guarantee success."
+msgstr ""
+
+#: src/ui/window.rs:558
+msgid "File generation and unchanged exports are recorded separately. Click a photo for its actual result and reason."
+msgstr ""
+
+#: src/ui/window.rs:572
+#, python-brace-format
+msgid "Export estimate · {count} photos · Source thumbnails"
+msgstr ""
+
+#: src/ui/window.rs:576
+#, python-brace-format
+msgid "Results · {count} photos · Source thumbnails"
+msgstr ""
+
+#: src/ui/window.rs:579
+msgid "Scope: all pending photos"
+msgstr ""
+
+#: src/ui/window.rs:582
+#, python-brace-format
+msgid "{count} selected"
+msgstr ""
+
+#: src/ui/window.rs:588
+#, python-brace-format
+msgid " · {count} selected items hidden"
+msgstr ""
+
+#: src/ui/window.rs:596
+msgid "Click a photo to inspect it. Use the check mark or Ctrl-click to include it. Filtering and preview do not change the processing scope"
+msgstr ""
+
+#: src/ui/window.rs:604
+#, python-brace-format
+msgid "Showing {shown} / {total}"
+msgstr ""
+
+#: src/ui/window.rs:793
+msgid "General"
+msgstr ""
+
+#: src/ui/window.rs:798
+msgid "Next Step"
+msgstr ""
+
+#: src/ui/window.rs:801
+msgid "Show or Hide the Photo Inspector"
+msgstr ""
+
+#: src/ui/window.rs:803
+msgid "Export Settings"
+msgstr ""
+
+#: src/ui/window.rs:804
+msgid "Keyboard Shortcuts"
+msgstr ""
+
+#: src/ui/window.rs:805
+msgid "Quit"
+msgstr ""
+
+#: src/ui/window.rs:837
+msgid "Convert Android Motion Photos and Apple Live Photos, keeping the moment."
+msgstr ""
+
+#: src/ui/window.rs:840
+msgid "translator-credits"
+msgstr ""
