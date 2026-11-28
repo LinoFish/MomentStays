@@ -7,6 +7,8 @@
 #[cfg(target_vendor = "apple")]
 mod apple;
 #[cfg(target_vendor = "apple")]
+pub(crate) mod apple_fs;
+#[cfg(target_vendor = "apple")]
 pub use apple::SystemNative;
 
 #[cfg(all(feature = "linux-native", target_os = "linux"))]

@@ -4,10 +4,11 @@ import CryptoKit
 
 // Parity of the Swift decisions with the shared Rust core (core/src/engine/decisions):
 // filename capture time, action blocking reason, queue state, Live Photo still
-// selection and per-track sample facts. Every corpus is deterministic, and each decision prints a
-// SHA-256 digest of its results. A decision whose Swift implementation was removed
-// is checked against the digest the removed Swift code produced on the same corpus
-// (recorded by this test in CI before the switch).
+// selection, input selection / output validation and per-track sample facts. Every
+// corpus is deterministic, and each decision prints a SHA-256 digest of its results.
+// A decision whose Swift implementation was removed is checked against the digest the
+// removed Swift code produced on the same corpus (recorded by this test in CI before
+// the switch).
 //   action-blocking-reason, live-selection, filename-time: legacy Swift digests from
 //   run 46057504970 (filename-time legacy == core per case in run 46059778452).
 //   queue-state: legacy Swift digest from run 46066645615 (legacy == core on all
@@ -29,7 +30,7 @@ struct CoreDecisionParityTests {
     static var examples: [String] = []
     static func mismatch(_ area: String, _ text: String) {
         mismatches[area, default: 0] += 1
-        if mismatches[area]! <= (area == "filename-time" ? 300 : 25) { examples.append(area + ": " + text) }
+        if mismatches[area]! <= (area == "filename-time" || area == "input-selection" ? 300 : 25) { examples.append(area + ": " + text) }
     }
 
     struct Rng {
@@ -361,6 +362,218 @@ struct CoreDecisionParityTests {
         return digest.value
     }
 
+    // MARK: input-selection
+
+    /// The file system the input selection reads, under the parity root (a
+    /// temporary folder reached through the /var → /private/var firmlink):
+    /// nested folders; every photo extension spelling and its near misses;
+    /// hidden entries (dot names and the hidden flag, files and folders);
+    /// packages (by extension, upper-case extension, Finder bundle bit) and a
+    /// folder named like a photo; symlinks to a file, a folder, nowhere, and a
+    /// loop; hard links; a FIFO; an unreadable folder and an unreadable photo;
+    /// names that differ only in case or Unicode normalization (one file on
+    /// APFS); names starting with a combining mark; CJK, fullwidth, emoji,
+    /// bidi-mark and ligature names; empty and photo-less folders.
+    struct SelectionCorpus {
+        var root: URL
+        var inputs: [URL] = []
+        var movies: [URL] = []
+        var outputs: [URL] = []
+        var names: [String] = []
+        var locked: [URL] = []
+    }
+
+    static func selectionCorpus(root: URL) throws -> SelectionCorpus {
+        let fm = FileManager.default
+        let sel = root.appendingPathComponent("sel", isDirectory: true)
+        var corpus = SelectionCorpus(root: sel)
+        func url(_ rel: String) -> URL { URL(fileURLWithPath: sel.path + "/" + rel) }
+        func folder(_ rel: String) throws { try fm.createDirectory(atPath: sel.path + "/" + rel, withIntermediateDirectories: true) }
+        func touch(_ rel: String) throws {
+            let path = sel.path + "/" + rel
+            try fm.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            if !fm.createFile(atPath: path, contents: Data("x".utf8)) { throw Failure("cannot create \(rel)") }
+        }
+        func hide(_ rel: String) throws {
+            var values = URLResourceValues(); values.isHidden = true
+            var target = url(rel); try target.setResourceValues(values)
+        }
+        let names = ["IMG_1.jpg", "IMG_2.JPG", "IMG_10.jpeg", "IMG_010.JPEG", "img_3.heic", "IMG_4.HEIC", "IMG_5.heif", "IMG_6.HeIf",
+                     "IMG 7.jpg", "IMG-8.jpg", "IMG_9.jpg.png", "IMG_11.png", "IMG_12.mov", "IMG_13.mp4", "notes.txt", "noext", "a.",
+                     "..jpg", "...jpg", "a..jpg", "a.jpg.", "a. jpg", "a.jp g", "a.jpg ", "a.tar.jpg", "\u{E9}.jpg", "e\u{301}2.jpg",
+                     "照片1.jpg", "照片10.jpg", "照片2.jpg", "ＩＭＧ１.jpg", "ＩＭＧ２.JPG", "📷.jpg", "\u{301}lead.jpg", "x\u{200F}.jpg",
+                     "a.jpg\u{200E}", "\u{C4}.jpg", "a\u{308}2.jpg", "Zebra.jpg", "apple.jpg", "_under.jpg", "-dash.jpg", "1.jpg", "01.jpg",
+                     "001.jpg", "2.jpg", "10.jpg", "a1b2.jpg", "a1b10.jpg", "A1B3.jpg", "\u{DF}.jpg", "ss.jpg", "\u{130}.jpg", "i.jpg",
+                     "\u{1C5}.jpg", "\u{FB01}.jpg", "fi.jpg", "x.jpg.jpg", "x.JPG.heic", "x.jpg~", "~x.jpg", "#x.jpg", "x%20y.jpg", "x:y.jpg"]
+        for name in names { try touch("A/" + name) }
+        try touch("A/sub/IMG_1.jpg"); try touch("A/sub/deep/x.jpg"); try touch("A/sub/deep/Y.HEIC")
+        try touch("A/.hidden/h.jpg"); try touch("A/.h.jpg"); try touch("A/flagged.jpg"); try hide("A/flagged.jpg")
+        try touch("A/flaggeddir/f.jpg"); try hide("A/flaggeddir")
+        for package in ["P.app", "Q.APP", "P.bundle", "P.photoslibrary", "P.rtfd", "P.lproj", "P.xcodeproj", "P.key", "P.pages",
+                        "P.framework", "P.plugin", "P.kext", "P.xcassets", "P.playground", "folder.jpg"] {
+            try touch("A/" + package + "/p.jpg")
+        }
+        try touch("A/bundlebit/b.jpg")
+        var info = [UInt8](repeating: 0, count: 32); info[8] = 0x20 // kHasBundle
+        _ = setxattr(url("A/bundlebit").path, "com.apple.FinderInfo", info, info.count, 0, 0)
+        try touch("A/\u{301}sub/m.jpg"); try touch("A/sub\u{301}/n.jpg")
+        try touch("B/b1.jpg"); try touch("B/b2.heic"); try touch("B/sub/b3.jpg")
+        try fm.createSymbolicLink(atPath: url("A/link.jpg").path, withDestinationPath: "IMG_1.jpg")
+        try fm.createSymbolicLink(atPath: url("A/abslink.jpg").path, withDestinationPath: url("B/b1.jpg").path)
+        try fm.createSymbolicLink(atPath: url("A/dirlink").path, withDestinationPath: url("B").path)
+        try fm.createSymbolicLink(atPath: url("A/dead.jpg").path, withDestinationPath: "nowhere.jpg")
+        try fm.createSymbolicLink(atPath: url("A/loop1.jpg").path, withDestinationPath: "loop2.jpg")
+        try fm.createSymbolicLink(atPath: url("A/loop2.jpg").path, withDestinationPath: "loop1.jpg")
+        try fm.linkItem(atPath: url("A/IMG_1.jpg").path, toPath: url("A/hard.jpg").path)
+        try fm.linkItem(atPath: url("A/IMG_2.JPG").path, toPath: url("B/hardB.jpg").path)
+        _ = mkfifo(url("A/pipe.jpg").path, 0o644)
+        try touch("NF/\u{E9}.jpg"); try touch("NF/e\u{301}.jpg")            // one file on APFS
+        try touch("NF/e\u{301}x.jpg"); try touch("CASE/Case.jpg"); try touch("CASE/case.JPG")
+        try touch("U/ok.jpg"); try touch("U/locked/x.jpg"); try touch("U/noread.jpg")
+        try touch("D/1/2/3/4/5/6/d.jpg"); try folder("E"); try touch("N/n.txt"); try touch("Ax/ax.jpg")
+        try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: url("U/noread.jpg").path)
+        try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: url("U/locked").path)
+        corpus.locked = [url("U/locked"), url("U/noread.jpg")]
+
+        let p = sel.path
+        func dirs(_ path: String) -> [URL] { [URL(fileURLWithPath: path, isDirectory: true), URL(fileURLWithPath: path, isDirectory: false)] }
+        var inputs: [URL] = []
+        for rel in ["A", "B", "D", "E", "N", "U", "U/locked", "Ax", "A/sub", "A/P.app", "A/folder.jpg", "A/dirlink", "A/.hidden",
+                    "A/flaggeddir", "A/\u{301}sub", "A/sub\u{301}", "NF", "CASE", "A/missingdir"] { inputs += dirs(p + "/" + rel) }
+        inputs += dirs(p)
+        for rel in ["A/IMG_1.jpg", "A/IMG_2.JPG", "A/link.jpg", "A/abslink.jpg", "A/dead.jpg", "A/loop1.jpg", "A/hard.jpg", "A/pipe.jpg",
+                    "A/notes.txt", "A/..jpg", "A/a.jpg.", "A/IMG_11.png", "A/P.app/p.jpg", "A/.h.jpg", "A/flagged.jpg", "A/\u{301}lead.jpg",
+                    "A/\u{301}sub/m.jpg", "B/b1.jpg", "B/hardB.jpg", "U/noread.jpg", "U/locked/x.jpg", "A/missing.jpg", "A/dirlink/b1.jpg",
+                    "A/sub/deep/Y.HEIC", "NF/\u{E9}.jpg", "NF/e\u{301}.jpg", "NF/e\u{301}x.jpg", "NF/\u{E9}x.jpg", "CASE/CASE.JPG",
+                    "A/IMG_12.mov"] {
+            inputs.append(URL(fileURLWithPath: p + "/" + rel))
+        }
+        for path in ["/private" + p + "/A/IMG_1.jpg", p + "/A/./IMG_1.jpg", p + "/A/sub/../IMG_1.jpg", p + "//A//IMG_1.jpg",
+                     p.replacingOccurrences(of: "/sel", with: "/SEL") + "/a/img_1.JPG", p + "/A/nothere/../IMG_2.JPG"] {
+            inputs.append(URL(fileURLWithPath: path))
+        }
+        inputs += dirs("/private" + p + "/B") + dirs(p + "/A/sub/..") + dirs(p.replacingOccurrences(of: "/sel", with: "/SEL") + "/b")
+        corpus.inputs = inputs
+        corpus.movies = [root.appendingPathComponent("pair/IMG_0001.mov"), root.appendingPathComponent("pair/other.MOV"),
+                         root.appendingPathComponent("duplicate/a.mov"), root.appendingPathComponent("missing-still/a.mov"),
+                         root.appendingPathComponent("upper-and-mp4/IMG_0002.mp4"), root.appendingPathComponent("symlink/a.mov"),
+                         root.appendingPathComponent("nothere/a.mov")]
+        var outputs: [URL] = []
+        for rel in ["A", "A/sub", "A/newout", "A/P.app", "B", "B/sub", "Ax", "A/\u{301}sub", "A/sub\u{301}", "A/dirlink", "E", "U/locked"] {
+            outputs += dirs(p + "/" + rel)
+        }
+        outputs += dirs(p) + dirs("/private" + p + "/A") + dirs(p + "/A/../A") + dirs(p.replacingOccurrences(of: "/sel", with: "/SEL") + "/a")
+        outputs += dirs("/") + dirs("/nonexistent/out") + dirs(root.path) + dirs(p + "/A/IMG_1.jpg")
+        corpus.outputs = outputs
+        corpus.names = names + ["IMG_1.jpg", "img_1.jpg", "IMG_01.jpg", "IMG_1.JPG", "IMG1.jpg", "IMG_1 .jpg", "IMG_1-.jpg", "IMG_1_.jpg",
+                                "IMG_1(1).jpg", "IMG_1 (2).jpg", "IMG_1 (10).jpg", "Ab", "aB", "ab", "AB", "a b", "a-b", "a_b", "a.b",
+                                "résumé", "resume", "Resume", "re\u{301}sume\u{301}", "１０", "10", "９", "9", "٣", "3", "三", "〇",
+                                "a\u{0}b", "", " ", "\t", "Ⅻ", "12", "½", "0.5", "x²", "x2", "Ω", "ω", "Ω", "ǆ", "dž", "ﬀ", "ff"]
+        return corpus
+    }
+
+    static func selectionText(_ text: String, _ corpus: SelectionCorpus) -> String {
+        let p = corpus.root.path
+        let parent = (p as NSString).deletingLastPathComponent
+        return text.replacingOccurrences(of: "/private" + p, with: "<private-sel>").replacingOccurrences(of: p, with: "<sel>")
+            .replacingOccurrences(of: "/private" + parent, with: "<private-root>").replacingOccurrences(of: parent, with: "<root>")
+            .replacingOccurrences(of: p.replacingOccurrences(of: "/sel", with: "/SEL"), with: "<SEL>")
+    }
+
+    static func showURL(_ url: URL, _ corpus: SelectionCorpus) -> String {
+        selectionText(url.path, corpus) + (url.hasDirectoryPath ? "/" : "")
+    }
+
+    static func selectionOutcome(_ corpus: SelectionCorpus, _ work: () throws -> (base: URL, entries: [URL])) -> String {
+        do {
+            let r = try work()
+            return "ok base=" + showURL(r.base, corpus) + " entries=" + r.entries.map { showURL($0, corpus) }.joined(separator: ",")
+        } catch { return "error:" + selectionText(error.localizedDescription, corpus) }
+    }
+
+    static func inputSelection(root: URL) throws -> String {
+        let corpus = try selectionCorpus(root: root)
+        defer {
+            for url in corpus.locked { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
+        }
+        let legacyDigest = Digest(), coreDigest = Digest()
+        var counts: [String: Int] = [:]
+        func check(_ kind: String, _ label: String, legacy: String, core: String) {
+            counts[kind, default: 0] += 1
+            legacyDigest.add(kind + "|" + label + "|" + legacy); coreDigest.add(kind + "|" + label + "|" + core)
+            if legacy != core { mismatch("input-selection", "\(kind) \(label): swift \(legacy) core \(core)") }
+        }
+        let inputs = corpus.inputs
+        func label(_ urls: [URL]) -> String { urls.map { showURL($0, corpus) }.joined(separator: " + ") }
+        // normalized (the core's own copy of NativeBatch.normalized, which the decisions use)
+        let normalizedCandidates = inputs + corpus.outputs + corpus.movies +
+            ["/private/var", "/private/tmp", "/tmp", "/var/automount/x", "/private/var/automount/x", "/private/etc/hosts", "/etc",
+             "/private/nonexistent", "/Users/../private/var", "/", "/.."].flatMap { [URL(fileURLWithPath: $0, isDirectory: true), URL(fileURLWithPath: $0, isDirectory: false)] }
+        let normalizedCore = try RustCore.engine(["mode":"normalized-paths","inputs":normalizedCandidates.map { CoreInputSelection.json($0) }])["paths"] as? [[String:Any]] ?? []
+        for (index, url) in normalizedCandidates.enumerated() {
+            let legacy = NativeBatch.normalized(url)
+            let core = index < normalizedCore.count ? normalizedCore[index] : [:]
+            let coreText = selectionText(core["path"] as? String ?? "<missing>", corpus) + ((core["dir"] as? Bool ?? false) ? "/" : "")
+            check("normalized", label([url]), legacy: showURL(legacy, corpus), core: coreText)
+        }
+        // Finder ordering
+        let names = corpus.names
+        let legacyOrder = names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        let coreOrder = try RustCore.engine(["mode":"standard-order","names":names])["names"] as? [String] ?? []
+        check("order", "\(names.count) names", legacy: legacyOrder.joined(separator: "|"), core: coreOrder.joined(separator: "|"))
+        for i in 0..<names.count { for j in (i + 1)..<names.count {
+            let a = names[i], b = names[j]
+            // A stable sort keeps an equal pair in place, so "=" reads as "<".
+            let legacy = a.localizedStandardCompare(b) == .orderedDescending ? ">" : "<"
+            let pair = try RustCore.engine(["mode":"standard-order","names":[a, b]])["names"] as? [String] ?? []
+            check("compare", a.debugDescription + " " + b.debugDescription, legacy: legacy, core: pair == [a, b] ? "<" : ">")
+        } }
+        // files
+        for url in inputs {
+            func run(_ work: () throws -> [URL]) -> String {
+                do { return "ok " + (try work()).map { showURL($0, corpus) }.joined(separator: ",") }
+                catch { return "error:" + selectionText(error.localizedDescription, corpus) }
+            }
+            check("files", label([url]), legacy: run { try NativeBatch.files(url) }, core: run { try CoreInputSelection.files(url) })
+        }
+        // selection: every input, every ordered pair, and random triples
+        var sets: [[URL]] = [[]] + inputs.map { [$0] }
+        for a in inputs { for b in inputs { sets.append([a, b]) } }
+        var rng = Rng(state: 0x5e1e_c710)
+        for _ in 0..<1500 { sets.append([rng.pick(inputs), rng.pick(inputs), rng.pick(inputs)]) }
+        for set in sets {
+            check("selection", label(set), legacy: selectionOutcome(corpus) { try NativeBatch.selection(set) },
+                  core: selectionOutcome(corpus) { try CoreInputSelection.selection(set) })
+        }
+        // Android export selection: movies stand for their stills
+        let androidPool = corpus.movies + [root.appendingPathComponent("pair"), root.appendingPathComponent("pair/IMG_0001.jpg"),
+                                           root.appendingPathComponent("pair/notes.txt")] + Array(inputs.prefix(12)) + Array(inputs.suffix(8))
+        var androidSets: [[URL]] = [[]] + androidPool.map { [$0] }
+        for a in androidPool { for b in androidPool { androidSets.append([a, b]) } }
+        for _ in 0..<300 { androidSets.append([rng.pick(androidPool), rng.pick(androidPool), rng.pick(androidPool)]) }
+        for set in androidSets {
+            check("android-selection", label(set), legacy: selectionOutcome(corpus) { try AndroidExport.selection(set) },
+                  core: selectionOutcome(corpus) { try CoreInputSelection.selection(set, android: true) })
+        }
+        // output validation: every input and 300 random pairs, against every output
+        var sourceSets: [[URL]] = [[]] + inputs.map { [$0] }
+        for _ in 0..<300 { sourceSets.append([rng.pick(inputs), rng.pick(inputs)]) }
+        for sources in sourceSets { for output in corpus.outputs {
+            func run(_ work: () throws -> Void) -> String {
+                do { try work(); return "ok" } catch { return "error:" + selectionText(error.localizedDescription, corpus) }
+            }
+            check("validate-output", label(sources) + " -> " + showURL(output, corpus),
+                  legacy: run { try NativeBatch.validateOutput(sources: sources, output: output) },
+                  core: run { try CoreInputSelection.validateOutput(sources: sources, output: output) })
+        } }
+        let total = counts.values.reduce(0, +)
+        print("input-selection: \(total) cases \(counts.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")), " +
+              "legacy Swift digest \(legacyDigest.value), core digest \(coreDigest.value)")
+        let value = coreDigest.value
+        golden("input-selection", value)
+        return value
+    }
+
     // MARK: track-info (reported; parity decides whether the preview may switch)
 
     static func trackParity(root: URL, repository: URL) throws -> (cases: Int, equal: Int) {
@@ -464,6 +677,7 @@ struct CoreDecisionParityTests {
             digests["filename-time"] = filenameTime()
             digests["action-blocking-reason"] = try blockingReason()
             digests["live-selection"] = try liveSelection(root: root)
+            digests["input-selection"] = try inputSelection(root: root)
             digests["queue-state"] = try queueState()
             let tracks = try trackParity(root: root, repository: repository)
             for line in examples { print("MISMATCH " + line) }
@@ -472,7 +686,7 @@ struct CoreDecisionParityTests {
             print("SUMMARY " + String(decoding: data, as: UTF8.self))
             let failed = mismatches.filter { $0.value > 0 }
             if !failed.isEmpty { fputs("FAIL: core decision parity mismatches \(failed)\n", stderr); exit(1) }
-            print("PASS core decision parity (filename-time, action-blocking-reason, live-selection, queue-state)")
+            print("PASS core decision parity (filename-time, action-blocking-reason, live-selection, input-selection, queue-state)")
         } catch {
             fputs("FAIL: \(error.localizedDescription)\n", stderr); exit(1)
         }

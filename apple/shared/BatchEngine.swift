@@ -318,6 +318,29 @@ enum NativeBatch {
 }
 
 
+/// Input selection and output validation decided by the shared Rust core
+/// (core/src/engine/decisions/selection.rs: request modes `input-files`,
+/// `input-selection`, `validate-output`). A URL travels as its path plus
+/// `hasDirectoryPath`, which Swift URL equality depends on.
+enum CoreInputSelection {
+    static func json(_ url: URL) -> [String:Any] { ["path":url.path,"dir":url.hasDirectoryPath] }
+    static func files(_ source: URL) throws -> [URL] {
+        let v = try RustCore.engine(["mode":"input-files","input":json(source)])
+        guard let files = v["files"] as? [String] else { throw Failure("Rust engine: invalid input files") }
+        return files.map { URL(fileURLWithPath:$0,isDirectory:false) }
+    }
+    static func selection(_ sources: [URL], android: Bool = false) throws -> (base: URL, entries: [URL]) {
+        let v = try RustCore.engine(["mode":"input-selection","inputs":sources.map { json($0) },"android":android])
+        guard let base = v["base"] as? [String:Any], let path = base["path"] as? String,
+              let entries = v["entries"] as? [String] else { throw Failure("Rust engine: invalid input selection") }
+        return (URL(fileURLWithPath:path,isDirectory:base["dir"] as? Bool ?? true),
+                entries.map { URL(fileURLWithPath:$0,isDirectory:false) })
+    }
+    static func validateOutput(sources: [URL], output: URL) throws {
+        _ = try RustCore.engine(["mode":"validate-output","inputs":sources.map { json($0) },"output":json(output)])
+    }
+}
+
 extension SourceVersion {
     var manualSignature: String {
         let modifiedNS = Int64(modified.tv_sec) * 1_000_000_000 + Int64(modified.tv_nsec)

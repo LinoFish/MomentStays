@@ -4,7 +4,8 @@
 Builds apple/macos/tests/CoreDecisionParityTests.swift with the production
 Swift sources and the Rust bridge, then runs it on deterministic synthetic
 corpora (filename capture time, action blocking reason, queue state, Live Photo still
-selection, per-track sample facts). macOS only; no photo-library access.
+selection, input selection and output validation, per-track sample facts). macOS
+only; no photo-library access.
 
 Usage: python3 apple/macos/scripts/check_core_decisions.py [--skip-build]
 """

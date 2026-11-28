@@ -224,6 +224,26 @@ pub fn handle(
                 .unwrap_or_default();
             Ok(json!({ "states": states }))
         }
+        "input-files" => {
+            let fs = crate::engine::decisions::selection::system();
+            crate::engine::decisions::selection::files_request(fs, req)
+        }
+        "input-selection" => {
+            let fs = crate::engine::decisions::selection::system();
+            crate::engine::decisions::selection::selection_request(fs, req)
+        }
+        "validate-output" => {
+            let fs = crate::engine::decisions::selection::system();
+            crate::engine::decisions::selection::validate_request(fs, req)
+        }
+        "normalized-paths" => {
+            let fs = crate::engine::decisions::selection::system();
+            crate::engine::decisions::selection::normalized_request(fs, req)
+        }
+        "standard-order" => {
+            let fs = crate::engine::decisions::selection::system();
+            crate::engine::decisions::selection::order_request(fs, req)
+        }
         "live-selection" => Ok(json!({"still": crate::engine::paths::json(
             &crate::engine::decisions::live_selection(&first()?)?
         )})),
